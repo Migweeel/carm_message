@@ -17,9 +17,9 @@ import { z } from 'zod'
 const app = express()
 const prisma = new PrismaClient()
 const port = Number(process.env.PORT || 4000)
-const clientOrigin = process.env.CLIENT_ORIGIN || (process.env.NODE_ENV === 'production'
+const clientOrigin = process.env.NODE_ENV === 'production'
   ? 'https://carmmessage-production.up.railway.app'
-  : 'http://localhost:5173')
+  : process.env.CLIENT_ORIGIN || 'http://localhost:5173'
 const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'local-only-change-this-secret')
 if (!jwtSecret) throw new Error('Set JWT_SECRET before starting in production.')
 const lightfmServiceUrl = process.env.LIGHTFM_SERVICE_URL || 'http://127.0.0.1:8001'
