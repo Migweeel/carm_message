@@ -22,6 +22,11 @@
 .carmelights-popular-copy b{overflow:hidden;color:#3b2a1e;font:600 16px/1.3 var(--serif);text-overflow:ellipsis}
 .carmelights-popular-copy em{overflow:hidden;color:#918579;font-size:9px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}
 .carmelights-popular-open{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#f6eee2;color:#a67845}
+.carmelights-popular-card:last-child:nth-child(odd){grid-column:1/-1}
+.carmelights-popular-pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:13px;color:#897b6e;font-size:10px;font-weight:600}
+.carmelights-popular-pagination button{width:30px;height:30px;border:1px solid #e8d8c3;border-radius:50%;display:grid;place-items:center;background:#fffdfa;color:#8f6941;transition:background .2s,border-color .2s}
+.carmelights-popular-pagination button:hover:not(:disabled){border-color:#cba77b;background:#f8f0e2}
+.carmelights-popular-pagination button:disabled{opacity:.42;cursor:not-allowed}
 .carmelights-toolbar{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:25px 0 15px;padding-inline:5px}
 .carmelights-search{width:min(310px,100%);height:38px;padding:0 12px;border:1px solid #e8ded4;border-radius:22px;display:flex;align-items:center;gap:8px;background:#fff;color:#918579}
 .carmelights-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);font-size:11px}

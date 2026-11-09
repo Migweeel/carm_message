@@ -36,6 +36,7 @@ const managedContentKey = 'carmel-prototype-site-content'
 const managedContentEvent = 'carmel-site-content-updated'
 type ManagedMonastery = { id: string; name: string; city: string; description: string; projectTitle: string; projectDetails: string; image: string }
 type ManagedArticle = { id: string; title: string; author: string; body: string; image: string; category?: string }
+type PopularTeaching = ManagedArticle & { views: number }
 type ManagedSiteContent = { homeHeroImage: string; monasteries: ManagedMonastery[]; monasteriesVersion?: number; carmelife: ManagedArticle[]; carmelights: ManagedArticle[] }
 const monasteryCities = ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo', 'Bacolod', 'Cebu', 'Iloilo', 'Cagayan de Oro', 'Davao', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Zamboanga', 'Kuching']
 const monasteryAssetByCity: Record<string, string> = {
@@ -1047,6 +1048,10 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const trackingEnabled = useDiscernmentTrackingEnabled(member)
   const navigate = useNavigate()
   const [favorites, setFavorites] = useState<string[]>(() => member ? readMemberFavorites(member.email) : [])
+  const [popularTeachings, setPopularTeachings] = useState<PopularTeaching[]>([])
+  const [popularPage, setPopularPage] = useState(0)
+  const [popularTeachingsLoading, setPopularTeachingsLoading] = useState(true)
+  const [popularTeachingsError, setPopularTeachingsError] = useState('')
   const isLife = kind === 'life'
   const articles = isLife ? content.carmelife : content.carmelights
   const selected = articles.find((article) => article.id === selectedId)
@@ -1059,6 +1064,36 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       setFullView(false)
     }
   }, [articles, kind, location.search])
+  useEffect(() => {
+    if (isLife || kind === 'updates') return
+    let active = true
+    async function loadPopularTeachings() {
+      try {
+        const response = await fetch('/api/carmelights/most-viewed')
+        const result = await response.json() as { error?: string; teachings?: unknown }
+        if (!response.ok) throw new Error(result.error || 'Most-viewed teachings could not be loaded.')
+        if (!Array.isArray(result.teachings)) throw new Error('The most-viewed teachings response was invalid.')
+        const teachings = result.teachings.filter((teaching: unknown): teaching is PopularTeaching =>
+          Boolean(
+            teaching && typeof teaching === 'object' &&
+            'id' in teaching && typeof teaching.id === 'string' &&
+            'title' in teaching && typeof teaching.title === 'string' &&
+            'author' in teaching && typeof teaching.author === 'string' &&
+            'body' in teaching && typeof teaching.body === 'string' &&
+            'image' in teaching && typeof teaching.image === 'string' &&
+            'views' in teaching && typeof teaching.views === 'number',
+          ),
+        )
+        if (active) setPopularTeachings(teachings)
+      } catch (error) {
+        if (active) setPopularTeachingsError(error instanceof Error ? error.message : 'Most-viewed teachings could not be loaded.')
+      } finally {
+        if (active) setPopularTeachingsLoading(false)
+      }
+    }
+    void loadPopularTeachings()
+    return () => { active = false }
+  }, [isLife, kind])
   useEffect(() => {
     if (isLife || kind === 'updates' || !selectedId) return
     void fetch('/api/content/interactions', {
@@ -1089,10 +1124,8 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   function closeStory() { setSelectedId(null); setFullView(false) }
   if (!isLife) {
     const categories = ['All', 'Prayer', 'Trust', 'Love', 'Simplicity', 'The Cross']
-    const popularTeachings = [
-      { id: 'saint-john', views: 3 },
-      { id: 'saint-teresa', views: 1 },
-    ].map(({ id, views }) => ({ article: articles.find((article) => article.id === id), views })).filter((item) => item.article)
+    const popularPageCount = Math.ceil(popularTeachings.length / 2)
+    const visiblePopularTeachings = popularTeachings.slice(popularPage * 2, popularPage * 2 + 2)
     const visibleTeachings = articles.filter((article) => {
       const matchesCategory = teachingCategory === 'All' || (article.category || 'Prayer') === teachingCategory
       const searchableText = `${article.title} ${article.author} ${article.body} ${article.category || ''}`.toLowerCase()
@@ -1105,10 +1138,20 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
         <Link className="button button-outline carmelights-discernment" to="/discernment">Explore discernment <ArrowRight size={15} /></Link>
       </header>
       <section className="carmelights-most-viewed" aria-labelledby="most-viewed-title">
-        <div className="carmelights-most-viewed-heading"><span><Award size={15} /> Reader favorites</span><h2 id="most-viewed-title">Most viewed teachings</h2><p>The teachings drawing readers back to the wisdom of Carmel.</p></div>
-        <div className="carmelights-popular-list">{popularTeachings.map(({ article, views }, index) => article && <button type="button" className={`carmelights-popular-card ${index === 0 ? 'featured' : ''}`} key={article.id} onClick={() => setSelectedId(article.id)}>
-          <span className="carmelights-popular-rank">{index + 1}</span><img src={article.image || photo.chapel} alt="" /><span className="carmelights-popular-copy"><small>{article.category || 'Prayer'} · {views.toLocaleString()} {views === 1 ? 'view' : 'views'}</small><b>{article.title}</b><em>{article.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
-        </button>)}</div>
+        <div className="carmelights-most-viewed-heading"><span><Award size={15} /> Reader favorites</span><h2 id="most-viewed-title">Most viewed teachings</h2><p>Ranked by views over the last 30 days.</p></div>
+        {popularTeachingsError ? <p className="form-error" role="alert">{popularTeachingsError}</p> : popularTeachingsLoading ? <p role="status">Loading most-viewed teachings…</p> : popularTeachings.length ? <>
+          <div className="carmelights-popular-list">{visiblePopularTeachings.map((teaching, index) => {
+            const rank = popularPage * 2 + index + 1
+            return <button type="button" className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} onClick={() => setSelectedId(teaching.id)}>
+              <span className="carmelights-popular-rank">{rank}</span><img src={teaching.image || photo.chapel} alt="" /><span className="carmelights-popular-copy"><small>{teaching.category || 'Prayer'} · {teaching.views.toLocaleString()} {teaching.views === 1 ? 'view' : 'views'}</small><b>{teaching.title}</b><em>{teaching.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
+            </button>
+          })}</div>
+          {popularPageCount > 1 && <nav className="carmelights-popular-pagination" aria-label="Browse most-viewed teachings">
+            <button type="button" onClick={() => setPopularPage((page) => Math.max(0, page - 1))} disabled={popularPage === 0} aria-label="Show previous most-viewed teachings"><ChevronLeft size={17} /></button>
+            <span aria-live="polite">{popularPage * 2 + 1}–{Math.min(popularPage * 2 + 2, popularTeachings.length)} of {popularTeachings.length}</span>
+            <button type="button" onClick={() => setPopularPage((page) => Math.min(popularPageCount - 1, page + 1))} disabled={popularPage >= popularPageCount - 1} aria-label="Show more most-viewed teachings"><ChevronRight size={17} /></button>
+          </nav>}
+        </> : <p>No published teachings are available yet.</p>}
       </section>
       <div className="carmelights-toolbar">
         <label className="carmelights-search"><Search size={16} /><input type="search" value={teachingQuery} onChange={(event) => setTeachingQuery(event.target.value)} placeholder="Search saints and teachings" aria-label="Search saints and teachings" /></label>

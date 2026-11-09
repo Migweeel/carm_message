@@ -88,7 +88,7 @@ Signed-in members can find **Recommended for You** in their account navigation. 
 
 To build both applications, run `npm run build`.
 
-Password-reset emails and Xendit checkout return links use the public website origin. Production uses `https://carmmessage-production.up.railway.app` so local development URLs cannot leak into public links; local development uses `CLIENT_ORIGIN` or defaults to `http://localhost:5173`.
+Password-reset emails and Xendit checkout return links use the public website origin. On Railway, the server uses `PUBLIC_APP_URL` when set, otherwise it builds the HTTPS origin from `RAILWAY_PUBLIC_DOMAIN`; it falls back to `https://carmmessage-production.up.railway.app` for other production deployments. Production URLs must use HTTPS and cannot point to localhost. Local development uses `CLIENT_ORIGIN` or defaults to `http://localhost:5173`.
 
 ## Prototype access
 

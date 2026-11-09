@@ -17,8 +17,16 @@ import { z } from 'zod'
 const app = express()
 const prisma = new PrismaClient()
 const port = Number(process.env.PORT || 4000)
-const clientOrigin = process.env.NODE_ENV === 'production'
-  ? 'https://carmmessage-production.up.railway.app'
+const isRailwayDeployment = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PUBLIC_DOMAIN)
+const isProduction = process.env.NODE_ENV === 'production' || isRailwayDeployment
+const configuredProductionOrigin = process.env.PUBLIC_APP_URL
+  || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN.replace(/^https?:\/\//, '')}` : '')
+const productionOrigin = new URL(configuredProductionOrigin || 'https://carmmessage-production.up.railway.app')
+if (isProduction && (productionOrigin.protocol !== 'https:' || productionOrigin.hostname === 'localhost' || productionOrigin.hostname.endsWith('.localhost'))) {
+  throw new Error('Set PUBLIC_APP_URL to the public HTTPS website URL in production.')
+}
+const clientOrigin = isProduction
+  ? productionOrigin.origin
   : process.env.CLIENT_ORIGIN || 'http://localhost:5173'
 const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'local-only-change-this-secret')
 if (!jwtSecret) throw new Error('Set JWT_SECRET before starting in production.')
@@ -1374,6 +1382,33 @@ app.get('/api/monasteries', asyncRoute(async (_req, res) => {
 app.get('/api/updates', asyncRoute(async (_req, res) => {
   const updates = await prisma.update.findMany({ where: { publishedAt: { lte: new Date() } }, orderBy: { publishedAt: 'desc' } })
   res.json({ updates })
+}))
+app.get('/api/carmelights/most-viewed', asyncRoute(async (_req, res) => {
+  const content = await prisma.pageContent.findUnique({ where: { pageKey: 'SITE_MANAGED' }, select: { blocks: true } })
+  const blocks = content?.blocks
+  const entries = blocks && typeof blocks === 'object' && !Array.isArray(blocks) && Array.isArray(blocks.carmelights)
+    ? blocks.carmelights.filter((entry): entry is Prisma.JsonObject => Boolean(entry && typeof entry === 'object' && !Array.isArray(entry) && typeof entry.id === 'string'))
+    : []
+  const readingIds = entries.map((entry) => entry.id as string)
+  if (!readingIds.length) return res.json({ windowDays: 30, teachings: [] })
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const viewCounts = await prisma.contentInteraction.groupBy({
+    by: ['readingId'],
+    where: { readingId: { in: readingIds }, eventType: 'VIEW', createdAt: { gte: since } },
+    _count: { _all: true },
+  })
+  const viewsById = new Map(viewCounts.map(({ readingId, _count }) => [readingId, _count._all]))
+  const teachings = entries.map((entry) => ({
+    id: entry.id as string,
+    title: typeof entry.title === 'string' ? entry.title : 'Untitled teaching',
+    author: typeof entry.author === 'string' ? entry.author : '',
+    body: typeof entry.body === 'string' ? entry.body : '',
+    image: typeof entry.image === 'string' ? entry.image : '',
+    category: typeof entry.category === 'string' ? entry.category : 'Prayer',
+    views: viewsById.get(entry.id as string) || 0,
+  }))
+  teachings.sort((left, right) => right.views - left.views)
+  res.json({ windowDays: 30, teachings: teachings.slice(0, 5) })
 }))
 app.get('/api/content/:pageKey', asyncRoute(async (req, res) => {
   const content = await prisma.pageContent.findUnique({ where: { pageKey: routeParam(req, 'pageKey').toUpperCase() } })
