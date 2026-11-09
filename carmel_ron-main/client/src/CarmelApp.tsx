@@ -2467,6 +2467,37 @@ type DashboardData = {
   monthly: Array<{ month: string; amount: number; donations: number }>
   recentDonations: DashboardDonation[]
 }
+
+async function optimizeHomepageImage(file: File) {
+  const image = await createImageBitmap(file)
+  let blob: Blob
+  try {
+    const scale = Math.min(1, 1600 / image.width, 900 / image.height)
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(image.width * scale)
+    canvas.height = Math.round(image.height * scale)
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('The image could not be optimized in this browser.')
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((result) => {
+        if (result) resolve(result)
+        else reject(new Error('The optimized homepage image could not be created.'))
+      }, 'image/jpeg', 0.82)
+    })
+  } finally {
+    image.close()
+  }
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => typeof reader.result === 'string'
+      ? resolve(reader.result)
+      : reject(new Error('The optimized homepage image could not be read.'))
+    reader.onerror = () => reject(reader.error || new Error('The optimized homepage image could not be read.'))
+    reader.readAsDataURL(blob)
+  })
+}
+
 function DashboardPage() {
   const [mode, setMode] = useState('Both')
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
@@ -3023,11 +3054,20 @@ function ContentAdminPage() {
     if (!file) return
     if (file.size > 2_000_000) { setError('Choose an image smaller than 2 MB.'); return }
     setSuccess('')
+    if (target === 'home') {
+      void optimizeHomepageImage(file).then((value) => {
+        setImage(value)
+        setError('')
+      }).catch((reason: unknown) => {
+        console.error('Unable to optimize the homepage image.', reason)
+        setError(reason instanceof Error ? reason.message : 'The homepage image could not be optimized.')
+      })
+      return
+    }
     const reader = new FileReader()
     reader.onload = () => {
       const value = String(reader.result || '')
-      if (target === 'home') setImage(value)
-      else if (target === 'monastery') setMonastery((current) => ({ ...current, image: value }))
+      if (target === 'monastery') setMonastery((current) => ({ ...current, image: value }))
       else setArticle((current) => ({ ...current, image: value }))
       setError('')
     }
@@ -3223,7 +3263,7 @@ function ContentAdminPage() {
     </div> : <form className="admin-panel content-editor content-image-editor" onSubmit={saveHomeImage}>
       <div className="panel-heading"><div><h2>Replace the site background image</h2><p>This image is saved for every visitor on the home hero.</p></div></div>
       <label>Image URL<input value={image.startsWith('data:') ? '' : image} onChange={(event) => { setImage(event.target.value); setSuccess(''); setError('') }} placeholder="https://..." /></label>
-      <label className="content-image-picker">Or upload an image<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'home')} />{image && <img src={image} alt="Current background preview" />}</label>
+      <label className="content-image-picker">Or upload an image<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'home')} />{image && <img src={image} alt="Current background preview" />}<small>Uploaded backgrounds are optimized automatically for faster loading.</small></label>
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="button button-dark" type="submit" disabled={savingImage}>{savingImage ? 'Saving…' : 'Save background image'}</button>
     </form>}

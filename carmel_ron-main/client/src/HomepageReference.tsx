@@ -5,20 +5,22 @@ import { homeSectionCards, type HomeSectionKey } from './home-section-cards'
 import './homepage-reference.css'
 
 const cities = ['Angeles', 'Bacolod', 'Baguio', 'Cagayan de Oro', 'Castillejos', 'Cebu', 'Davao', 'Gumaca', 'Infanta']
-const heroImageCacheKey = 'carmel-home-hero-image-v1'
+const heroImageCacheKey = 'carmel-home-hero-image-v2'
+const heroImageFallback = '/assets/images/home-hero.jpg'
+const maxInlineHeroImageLength = 350_000
 
 function getCachedHeroImage() {
   try {
-    return localStorage.getItem(heroImageCacheKey) || '/assets/images/landingcarm.png'
+    return localStorage.getItem(heroImageCacheKey) || heroImageFallback
   } catch (error) {
     console.error('Unable to read the cached homepage image.', error)
-    return '/assets/images/landingcarm.png'
+    return heroImageFallback
   }
 }
 
 function cacheHeroImage(image: string | null) {
   try {
-    if (image) localStorage.setItem(heroImageCacheKey, image)
+    if (image && image.length <= maxInlineHeroImageLength) localStorage.setItem(heroImageCacheKey, image)
     else localStorage.removeItem(heroImageCacheKey)
   } catch (error) {
     console.error('Unable to cache the homepage image.', error)
@@ -41,7 +43,7 @@ export default function HomepageReference() {
         const response = await fetch('/api/content/HOME_HERO_IMAGE')
         if (response.status === 404) {
           if (active) {
-            setHeroImage('/assets/images/landingcarm.png')
+            setHeroImage(heroImageFallback)
             cacheHeroImage(null)
           }
           return
@@ -52,9 +54,12 @@ export default function HomepageReference() {
         const savedImage = blocks && typeof blocks === 'object' && !Array.isArray(blocks) && 'image' in blocks && typeof blocks.image === 'string' && blocks.image.trim()
           ? blocks.image
           : null
+        const displayImage = savedImage && (!savedImage.startsWith('data:image/') || savedImage.length <= maxInlineHeroImageLength)
+          ? savedImage
+          : null
         if (active) {
-          setHeroImage(savedImage || '/assets/images/landingcarm.png')
-          cacheHeroImage(savedImage)
+          setHeroImage(displayImage || heroImageFallback)
+          cacheHeroImage(displayImage)
         }
       } catch (error) {
         console.error('Unable to load the saved homepage image.', error)
@@ -102,7 +107,7 @@ export default function HomepageReference() {
 
   return <div className="reference-home">
     <section className="reference-hero" id="home">
-      <img src={heroImage} alt="Nuns gathered together in prayer" loading="eager" fetchPriority="high" decoding="async" />
+      <img src={heroImage} alt="Nuns gathered together in prayer" loading="eager" fetchPriority="high" decoding="sync" />
       <div className="reference-hero-overlay" />
       <div className="reference-hero-content">
         <p className="reference-kicker">A HOME FOR THE SEEKING HEART</p>

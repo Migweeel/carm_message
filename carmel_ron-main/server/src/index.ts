@@ -21,9 +21,18 @@ const homepageContentCache = new Map<string, {
   expiresAt: number
 }>()
 const homepageContentCacheTtlMs = 60_000
+const homepageInlineImageMaxChars = 350_000
 const port = Number(process.env.PORT || 4000)
 const isRailwayDeployment = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PUBLIC_DOMAIN)
 const isProduction = process.env.NODE_ENV === 'production' || isRailwayDeployment
+function homepageContentForResponse(pageKey: string, content: NonNullable<Awaited<ReturnType<typeof prisma.pageContent.findUnique>>>) {
+  if (pageKey !== 'HOME_HERO_IMAGE') return content
+  const blocks = content.blocks
+  if (!blocks || typeof blocks !== 'object' || Array.isArray(blocks)) return content
+  const image = 'image' in blocks ? blocks.image : null
+  if (typeof image !== 'string' || !image.startsWith('data:image/') || image.length <= homepageInlineImageMaxChars) return content
+  return { ...content, blocks: { ...blocks, image: '/assets/images/home-hero.jpg' } }
+}
 const configuredProductionOrigin = process.env.PUBLIC_APP_URL
   || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN.replace(/^https?:\/\//, '')}` : '')
 const productionOrigin = new URL(configuredProductionOrigin || 'https://carmmessage-production.up.railway.app')
@@ -1428,13 +1437,13 @@ app.get('/api/content/:pageKey', asyncRoute(async (req, res) => {
   const cached = cacheable ? homepageContentCache.get(pageKey) : undefined
   if (cached && cached.expiresAt > Date.now()) {
     if (!cached.content) return res.status(404).json({ error: 'Page content not found.' })
-    return res.json({ content: cached.content })
+    return res.json({ content: homepageContentForResponse(pageKey, cached.content) })
   }
   if (cached) homepageContentCache.delete(pageKey)
   const content = await prisma.pageContent.findUnique({ where: { pageKey } })
   if (cacheable && content) homepageContentCache.set(pageKey, { content, expiresAt: Date.now() + homepageContentCacheTtlMs })
   if (!content) return res.status(404).json({ error: 'Page content not found.' })
-  res.json({ content })
+  res.json({ content: homepageContentForResponse(pageKey, content) })
 }))
 const contentInteractionSchema = z.object({
   readingId: z.string().trim().min(1).max(100),
