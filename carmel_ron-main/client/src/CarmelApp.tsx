@@ -211,6 +211,25 @@ async function saveManagedContent(content: ManagedSiteContent) {
   localStorage.setItem(managedContentKey, JSON.stringify(result.content.blocks))
   window.dispatchEvent(new Event(managedContentEvent))
 }
+function cacheManagedContent(content: ManagedSiteContent) {
+  localStorage.setItem(managedContentKey, JSON.stringify(content))
+  window.dispatchEvent(new Event(managedContentEvent))
+}
+async function saveManagedContentRecord(
+  collection: 'monasteries' | 'carmelife' | 'carmelights',
+  id: string,
+  record: ManagedMonastery | ManagedArticle | null,
+) {
+  const response = await fetch(`/api/admin/content/SITE_MANAGED/${collection}/${encodeURIComponent(id)}`, {
+    method: record ? 'PUT' : 'DELETE',
+    credentials: 'include',
+    ...(record ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record) } : {}),
+  })
+  if (!response.ok) {
+    const result = await response.json()
+    throw new Error(result.error || 'Website content could not be saved.')
+  }
+}
 function useManagedContent() {
   const [content, setContent] = useState<ManagedSiteContent>(readManagedContent)
   useEffect(() => {
@@ -791,6 +810,17 @@ async function persistSiteUpdates(updates: SiteUpdate[]): Promise<SiteUpdate[]> 
   localStorage.setItem(prototypeUpdatesKey, JSON.stringify(savedUpdates))
   window.dispatchEvent(new Event('carmel-updates-updated'))
   return savedUpdates
+}
+async function persistSiteUpdateRecord(id: string, update: SiteUpdate | null) {
+  const response = await fetch(`/api/admin/content/SITE_UPDATES/${encodeURIComponent(id)}`, {
+    method: update ? 'PUT' : 'DELETE',
+    credentials: 'include',
+    ...(update ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(update) } : {}),
+  })
+  if (!response.ok) {
+    const result = await response.json()
+    throw new Error(result.error || 'Updates could not be saved.')
+  }
 }
 function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const [selectedArticle, setSelectedArticle] = useState<string | null>(null)
@@ -2431,15 +2461,37 @@ function UpdatesAdminPage() {
   }, [])
   async function saveUpdates(next: SiteUpdate[], confirmation: string) {
     if (!updatesReady) { setError('Saved updates are still loading. Please try again.'); return false }
+    let recordMutation: { id: string; update: SiteUpdate | null } | null = null
+    if (next.length === updates.length + 1) {
+      const added = next.find((item) => !updates.some((current) => current.id === item.id))
+      if (added) recordMutation = { id: added.id, update: added }
+    } else if (next.length === updates.length - 1) {
+      const removed = updates.find((item) => !next.some((current) => current.id === item.id))
+      if (removed) recordMutation = { id: removed.id, update: null }
+    } else if (next.length === updates.length) {
+      const changed = next.find((item) => {
+        const current = updates.find((candidate) => candidate.id === item.id)
+        return current && JSON.stringify(current) !== JSON.stringify(item)
+      })
+      if (changed) recordMutation = { id: changed.id, update: changed }
+    }
     setSaving(true)
     setError('')
-    setSuccess('')
+    setSuccess('Saving changes…')
+    setUpdates(next)
+    localStorage.setItem(prototypeUpdatesKey, JSON.stringify(next))
+    window.dispatchEvent(new Event('carmel-updates-updated'))
     try {
-      setUpdates(await persistSiteUpdates(next))
+      if (recordMutation) await persistSiteUpdateRecord(recordMutation.id, recordMutation.update)
+      else setUpdates(await persistSiteUpdates(next))
       setSuccess(confirmation)
       return true
     } catch (saveError) {
+      setUpdates(updates)
+      localStorage.setItem(prototypeUpdatesKey, JSON.stringify(updates))
+      window.dispatchEvent(new Event('carmel-updates-updated'))
       setError(saveError instanceof Error ? saveError.message : 'Updates could not be saved.')
+      setSuccess('')
       return false
     } finally {
       setSaving(false)
@@ -2661,6 +2713,7 @@ function ContentAdminPage() {
   const [editingArticle, setEditingArticle] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [savingManagedContent, setSavingManagedContent] = useState(false)
   const [pendingRemoval, setPendingRemoval] = useState<{ kind: 'monastery' | 'article'; id: string; label: string } | null>(null)
   const [savingImage, setSavingImage] = useState(false)
   const [savingSectionImage, setSavingSectionImage] = useState<HomeSectionKey | null>(null)
@@ -2933,54 +2986,94 @@ function ContentAdminPage() {
   }
   async function saveMonastery(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (savingManagedContent) return
     if (!contentReady) { setError('Saved website content is still loading. Please try again.'); return }
     setSuccess('')
     const record = { ...monastery, id: monastery.id || crypto.randomUUID(), image: monastery.image || photo.chapel }
     const monasteries = editingMonastery ? content.monasteries.map((item) => item.id === record.id ? record : item) : [record, ...content.monasteries]
+    const nextContent = { ...content, monasteries }
+    setSavingManagedContent(true)
+    setError('')
+    setSuccess('Saving changes…')
+    cacheManagedContent(nextContent)
     try {
-      await saveManagedContent({ ...content, monasteries })
+      await saveManagedContentRecord('monasteries', record.id, record)
       setMonastery({ id: '', name: '', city: '', description: '', projectTitle: '', projectDetails: '', image: '' })
       setEditingMonastery(false)
       setError('')
       setSuccess(editingMonastery ? 'Monastery details updated successfully.' : 'Monastery added successfully.')
     } catch (saveError) {
+      cacheManagedContent(content)
+      setSuccess('')
       setError(saveError instanceof Error ? saveError.message : 'The monastery could not be saved.')
+    } finally {
+      setSavingManagedContent(false)
     }
   }
   async function saveArticle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (savingManagedContent) return
     if (!contentReady) { setError('Saved website content is still loading. Please try again.'); return }
     setSuccess('')
     const record = { ...article, id: article.id || crypto.randomUUID(), image: article.image || (isLife ? photo.garden : photo.chapel) }
     const nextArticles = editingArticle ? articles.map((item) => item.id === record.id ? record : item) : [record, ...articles]
+    const nextContent = { ...content, [articleKey]: nextArticles }
+    setSavingManagedContent(true)
+    setError('')
+    setSuccess('Saving changes…')
+    cacheManagedContent(nextContent)
     try {
-      await saveManagedContent({ ...content, [articleKey]: nextArticles })
+      await saveManagedContentRecord(articleKey, record.id, record)
       setArticle({ id: '', title: '', author: '', body: '', image: '' })
       setEditingArticle(false)
       setError('')
       setSuccess(editingArticle ? 'Entry updated successfully.' : 'Entry published successfully.')
     } catch (saveError) {
+      cacheManagedContent(content)
+      setSuccess('')
       setError(saveError instanceof Error ? saveError.message : 'The entry could not be saved.')
+    } finally {
+      setSavingManagedContent(false)
     }
   }
   async function removeMonastery(id: string) {
+    if (savingManagedContent) return
     if (!contentReady) { setError('Saved website content is still loading. Please try again.'); return }
+    const nextContent = { ...content, monasteries: content.monasteries.filter((item) => item.id !== id) }
+    setSavingManagedContent(true)
+    setError('')
+    setSuccess('Saving changes…')
+    cacheManagedContent(nextContent)
     try {
-      await saveManagedContent({ ...content, monasteries: content.monasteries.filter((item) => item.id !== id) })
+      await saveManagedContentRecord('monasteries', id, null)
       setError('')
       setSuccess('Monastery removed successfully.')
     } catch (saveError) {
+      cacheManagedContent(content)
+      setSuccess('')
       setError(saveError instanceof Error ? saveError.message : 'The monastery could not be removed.')
+    } finally {
+      setSavingManagedContent(false)
     }
   }
   async function removeArticle(id: string) {
+    if (savingManagedContent) return
     if (!contentReady) { setError('Saved website content is still loading. Please try again.'); return }
+    const nextContent = { ...content, [articleKey]: articles.filter((item) => item.id !== id) }
+    setSavingManagedContent(true)
+    setError('')
+    setSuccess('Saving changes…')
+    cacheManagedContent(nextContent)
     try {
-      await saveManagedContent({ ...content, [articleKey]: articles.filter((item) => item.id !== id) })
+      await saveManagedContentRecord(articleKey, id, null)
       setError('')
       setSuccess('Entry removed successfully.')
     } catch (saveError) {
+      cacheManagedContent(content)
+      setSuccess('')
       setError(saveError instanceof Error ? saveError.message : 'The entry could not be removed.')
+    } finally {
+      setSavingManagedContent(false)
     }
   }
   const updateMonastery = (key: keyof ManagedMonastery, value: string) => { setSuccess(''); setMonastery((current) => ({ ...current, [key]: value })) }
@@ -3015,7 +3108,7 @@ function ContentAdminPage() {
         <label className="content-image-picker">Upload image<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'monastery')} />{monastery.image && <img src={monasteryImageFor(monastery)} alt="Monastery preview" />}<small>Uploaded monastery images are optimized automatically for faster loading.</small></label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="content-editor-actions">
-          <button className="button button-dark" type="submit">{editingMonastery ? 'Save changes' : 'Add monastery'}</button>
+          <button className="button button-dark" type="submit" disabled={savingManagedContent}>{savingManagedContent ? 'Saving…' : editingMonastery ? 'Save changes' : 'Add monastery'}</button>
           {editingMonastery && <button type="button" className="button button-outline" onClick={cancelMonasteryEdit}>Cancel</button>}
         </div>
       </form>
@@ -3040,7 +3133,7 @@ function ContentAdminPage() {
         <label className="content-image-picker">{isLife ? 'Upload story image' : 'Upload teaching image'}<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'article')} />{article.image && <img src={articleImageFor(article.image, '')} alt="Entry image preview" />}</label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="content-editor-actions">
-          <button className="button button-dark" type="submit">{editingArticle ? 'Save changes' : 'Publish entry'}</button>
+          <button className="button button-dark" type="submit" disabled={savingManagedContent}>{savingManagedContent ? 'Saving…' : editingArticle ? 'Save changes' : 'Publish entry'}</button>
           {editingArticle && <button type="button" className="button button-outline" onClick={cancelArticleEdit}>Cancel</button>}
         </div>
       </form>

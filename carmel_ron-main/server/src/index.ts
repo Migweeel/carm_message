@@ -22,6 +22,7 @@ const homepageContentCache = new Map<string, {
 }>()
 const homepageContentCacheTtlMs = 60_000
 const homepageInlineImageMaxChars = 350_000
+const homepageHeroImageFallback = '/assets/images/home-hero.jpg'
 const port = Number(process.env.PORT || 4000)
 const isRailwayDeployment = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PUBLIC_DOMAIN)
 const isProduction = process.env.NODE_ENV === 'production' || isRailwayDeployment
@@ -31,7 +32,7 @@ function homepageContentForResponse(pageKey: string, content: NonNullable<Awaite
   if (!blocks || typeof blocks !== 'object' || Array.isArray(blocks)) return content
   const image = 'image' in blocks ? blocks.image : null
   if (typeof image !== 'string' || !image.startsWith('data:image/') || image.length <= homepageInlineImageMaxChars) return content
-  return { ...content, blocks: { ...blocks, image: '/assets/images/home-hero.jpg' } }
+  return { ...content, blocks: { ...blocks, image: homepageHeroImageFallback } }
 }
 const configuredProductionOrigin = process.env.PUBLIC_APP_URL
   || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN.replace(/^https?:\/\//, '')}` : '')
@@ -1395,7 +1396,28 @@ app.get('/api/content/:pageKey', asyncRoute(async (req, res) => {
     return res.json({ content: homepageContentForResponse(pageKey, cached.content) })
   }
   if (cached) homepageContentCache.delete(pageKey)
-  const content = await prisma.pageContent.findUnique({ where: { pageKey } })
+  const content = pageKey === 'SITE_MANAGED'
+    ? (await prisma.$queryRaw<Array<{ id: string; pageKey: string; blocks: Prisma.JsonValue; updatedAt: Date }>>(Prisma.sql`
+        SELECT
+          "id",
+          "pageKey",
+          CASE
+            WHEN jsonb_typeof("blocks"->'homeHeroImage') = 'string'
+              AND length("blocks"->>'homeHeroImage') > ${homepageInlineImageMaxChars}
+            THEN jsonb_set(
+              "blocks",
+              ARRAY['homeHeroImage']::text[],
+              to_jsonb(${homepageHeroImageFallback}::text),
+              true
+            )
+            ELSE "blocks"
+          END AS "blocks",
+          "updatedAt"
+        FROM "PageContent"
+        WHERE "pageKey" = ${pageKey}
+        LIMIT 1
+      `))[0] ?? null
+    : await prisma.pageContent.findUnique({ where: { pageKey } })
   if (cacheable && content) homepageContentCache.set(pageKey, { content, expiresAt: Date.now() + homepageContentCacheTtlMs })
   if (!content) return res.status(404).json({ error: 'Page content not found.' })
   res.json({ content: homepageContentForResponse(pageKey, content) })
@@ -1491,7 +1513,10 @@ const managedArticleSchema = z.object({
   author: z.string().max(200),
   body: z.string().max(100_000),
   image: z.string().max(3_000_000),
+  category: z.string().max(100).optional(),
 })
+const managedContentCollectionSchema = z.enum(['monasteries', 'carmelife', 'carmelights'])
+const managedRecordIdSchema = z.string().min(1).max(100)
 const managedSiteContentSchema = z.object({
   homeHeroImage: z.string().max(3_000_000),
   monasteries: z.array(managedMonasterySchema).max(100),
@@ -1506,11 +1531,134 @@ const managedUpdatesSchema = z.array(z.object({
   image: z.string().max(3_000_000),
   body: z.string().max(100_000),
 })).max(500)
+const managedUpdateSchema = z.object({
+  id: z.string().min(1).max(100),
+  title: z.string().trim().min(1).max(200),
+  date: z.string().min(1).max(100),
+  category: z.string().min(1).max(100),
+  image: z.string().max(3_000_000),
+  body: z.string().max(100_000),
+})
+async function persistManagedContentRecord(
+  pageKey: 'SITE_MANAGED' | 'SITE_UPDATES',
+  collection: string,
+  id: string,
+  record: unknown | null,
+  actorId: string,
+) {
+  const recordJson = record === null ? null : JSON.stringify(record)
+  const incomingRecords = recordJson === null
+    ? Prisma.sql`'[]'::jsonb`
+    : Prisma.sql`jsonb_build_array(${recordJson}::jsonb)`
+  const currentRecords = pageKey === 'SITE_UPDATES'
+    ? Prisma.sql`CASE WHEN jsonb_typeof("PageContent"."blocks") = 'array' THEN "PageContent"."blocks" ELSE '[]'::jsonb END`
+    : Prisma.sql`CASE WHEN jsonb_typeof("PageContent"."blocks"->${collection}) = 'array' THEN "PageContent"."blocks"->${collection} ELSE '[]'::jsonb END`
+  const matchingRecord = Prisma.sql`EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(${currentRecords}) AS existing(entry)
+    WHERE entry->>'id' = ${id}
+  )`
+  const nextRecords = recordJson === null
+    ? Prisma.sql`COALESCE((
+        SELECT jsonb_agg(entry ORDER BY position)
+        FROM jsonb_array_elements(${currentRecords}) WITH ORDINALITY AS existing(entry, position)
+        WHERE entry->>'id' <> ${id}
+      ), '[]'::jsonb)`
+    : Prisma.sql`COALESCE((
+        SELECT jsonb_agg(
+          CASE WHEN entry->>'id' = ${id} THEN ${recordJson}::jsonb ELSE entry END
+          ORDER BY position
+        )
+        FROM jsonb_array_elements(${currentRecords}) WITH ORDINALITY AS existing(entry, position)
+      ), '[]'::jsonb) || CASE WHEN ${matchingRecord} THEN '[]'::jsonb ELSE ${incomingRecords} END`
+  const updatedBlocks = pageKey === 'SITE_UPDATES'
+    ? nextRecords
+    : Prisma.sql`jsonb_set(
+        CASE
+          WHEN jsonb_typeof(COALESCE("PageContent"."blocks", '{}'::jsonb)->'homeHeroImage') = 'string'
+            AND length(COALESCE("PageContent"."blocks", '{}'::jsonb)->>'homeHeroImage') > ${homepageInlineImageMaxChars}
+          THEN jsonb_set(
+            COALESCE("PageContent"."blocks", '{}'::jsonb),
+            ARRAY['homeHeroImage']::text[],
+            to_jsonb(${homepageHeroImageFallback}::text),
+            true
+          )
+          ELSE COALESCE("PageContent"."blocks", '{}'::jsonb)
+        END,
+        ARRAY[${collection}]::text[],
+        ${nextRecords},
+        true
+      )`
+  const initialBlocks = pageKey === 'SITE_UPDATES'
+    ? incomingRecords
+    : Prisma.sql`jsonb_build_object(
+        'homeHeroImage', ${homepageHeroImageFallback},
+        ${collection}, ${incomingRecords}
+      )`
+  await prisma.$executeRaw(Prisma.sql`
+    WITH changed AS (
+      INSERT INTO "PageContent" ("id", "pageKey", "blocks", "updatedAt")
+      VALUES (${randomUUID()}, ${pageKey}, ${initialBlocks}, NOW())
+      ON CONFLICT ("pageKey") DO UPDATE
+      SET "blocks" = ${updatedBlocks}, "updatedAt" = NOW()
+      RETURNING "id"
+    )
+    INSERT INTO "AuditLog" ("id", "userId", "action", "entity", "entityId", "meta", "createdAt")
+    SELECT
+      ${randomUUID()},
+      ${actorId},
+      'UPDATE_CONTENT',
+      'PageContent',
+      changed."id",
+      jsonb_build_object(
+        'pageKey', ${pageKey},
+        'collection', ${collection},
+        'operation', ${recordJson === null ? 'DELETE' : 'UPSERT'}
+      ),
+      NOW()
+    FROM changed
+  `)
+}
 const homeHeroImageSchema = z.object({ image: z.string().trim().min(1).max(3_000_000) })
 const homeSectionImageSchema = z.object({
   section: z.enum(['about', 'carmelife', 'carmelights', 'updates', 'monasteries', 'donations', 'contact']),
   image: z.string().trim().min(1).max(3_000_000),
 })
+app.put('/api/admin/content/SITE_MANAGED/:collection/:id', authenticate, asyncRoute(async (req, res) => {
+  if (!await authorizeStaffPermission(req, res, 'canManageDetails')) return
+  const parsedCollection = managedContentCollectionSchema.safeParse(routeParam(req, 'collection'))
+  const parsedId = managedRecordIdSchema.safeParse(routeParam(req, 'id'))
+  if (!parsedCollection.success || !parsedId.success) return res.status(400).json({ error: 'Choose a valid content record.' })
+  const schema = parsedCollection.data === 'monasteries' ? managedMonasterySchema : managedArticleSchema
+  const parsedRecord = validate(schema, req.body)
+  if (parsedRecord.error || parsedRecord.data!.id !== parsedId.data) return res.status(400).json({ error: 'Please check the content record before saving.' })
+  await persistManagedContentRecord('SITE_MANAGED', parsedCollection.data, parsedId.data, parsedRecord.data, req.auth!.id)
+  res.status(204).end()
+}))
+app.delete('/api/admin/content/SITE_MANAGED/:collection/:id', authenticate, asyncRoute(async (req, res) => {
+  if (!await authorizeStaffPermission(req, res, 'canManageDetails')) return
+  const parsedCollection = managedContentCollectionSchema.safeParse(routeParam(req, 'collection'))
+  const parsedId = managedRecordIdSchema.safeParse(routeParam(req, 'id'))
+  if (!parsedCollection.success || !parsedId.success) return res.status(400).json({ error: 'Choose a valid content record.' })
+  await persistManagedContentRecord('SITE_MANAGED', parsedCollection.data, parsedId.data, null, req.auth!.id)
+  res.status(204).end()
+}))
+app.put('/api/admin/content/SITE_UPDATES/:id', authenticate, asyncRoute(async (req, res) => {
+  if (!await authorizeStaffPermission(req, res, 'canManageUpdates')) return
+  const parsedId = managedRecordIdSchema.safeParse(routeParam(req, 'id'))
+  if (!parsedId.success) return res.status(400).json({ error: 'Choose a valid update.' })
+  const parsedRecord = validate(managedUpdateSchema, req.body)
+  if (parsedRecord.error || parsedRecord.data!.id !== parsedId.data) return res.status(400).json({ error: 'Please check the update before saving.' })
+  await persistManagedContentRecord('SITE_UPDATES', 'updates', parsedId.data, parsedRecord.data, req.auth!.id)
+  res.status(204).end()
+}))
+app.delete('/api/admin/content/SITE_UPDATES/:id', authenticate, asyncRoute(async (req, res) => {
+  if (!await authorizeStaffPermission(req, res, 'canManageUpdates')) return
+  const parsedId = managedRecordIdSchema.safeParse(routeParam(req, 'id'))
+  if (!parsedId.success) return res.status(400).json({ error: 'Choose a valid update.' })
+  await persistManagedContentRecord('SITE_UPDATES', 'updates', parsedId.data, null, req.auth!.id)
+  res.status(204).end()
+}))
 app.put('/api/admin/content/home-hero-image', authenticate, asyncRoute(async (req, res) => {
   if (!await authorizeStaffPermission(req, res, 'canManageDetails')) return
   const parsed = validate(homeHeroImageSchema, req.body)
