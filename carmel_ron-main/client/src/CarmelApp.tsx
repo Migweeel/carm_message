@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Plus, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Plus, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import attractedByTheVeilImage from './assets/attracted-by-the-veil.jpg'
 import vocationHeroImage from '../../assets/image_carmelife/vocation-to-carmel.png'
@@ -1105,9 +1105,9 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
         <Link className="button button-outline carmelights-discernment" to="/discernment">Explore discernment <ArrowRight size={15} /></Link>
       </header>
       <section className="carmelights-most-viewed" aria-labelledby="most-viewed-title">
-        <h2 id="most-viewed-title">Most viewed teachings</h2>
-        <div className="carmelights-popular-list">{popularTeachings.map(({ article, views }) => article && <button type="button" className="carmelights-popular-card" key={article.id} onClick={() => setSelectedId(article.id)}>
-          <span><small>{article.category || 'Prayer'}</small><b>{article.title}</b><em>{article.author} · {views} {views === 1 ? 'view' : 'views'}</em></span><ArrowRight size={15} />
+        <div className="carmelights-most-viewed-heading"><span><Award size={15} /> Reader favorites</span><h2 id="most-viewed-title">Most viewed teachings</h2><p>The teachings drawing readers back to the wisdom of Carmel.</p></div>
+        <div className="carmelights-popular-list">{popularTeachings.map(({ article, views }, index) => article && <button type="button" className={`carmelights-popular-card ${index === 0 ? 'featured' : ''}`} key={article.id} onClick={() => setSelectedId(article.id)}>
+          <span className="carmelights-popular-rank">{index + 1}</span><img src={article.image || photo.chapel} alt="" /><span className="carmelights-popular-copy"><small>{article.category || 'Prayer'} · {views.toLocaleString()} {views === 1 ? 'view' : 'views'}</small><b>{article.title}</b><em>{article.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
         </button>)}</div>
       </section>
       <div className="carmelights-toolbar">

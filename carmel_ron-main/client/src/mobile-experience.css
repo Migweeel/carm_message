@@ -758,20 +758,32 @@
   }
 
   .carmelights-most-viewed {
-    margin-inline: -4px;
+    margin-inline: 0;
+    padding: 18px;
   }
 
-  .carmelights-popular-list {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding: 0 4px 10px;
-    scroll-snap-type: x mandatory;
+  .carmelights-most-viewed .carmelights-popular-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    overflow: visible;
+    padding: 0;
   }
 
-  .carmelights-popular-card {
-    flex: 0 0 min(80vw, 300px);
-    scroll-snap-align: start;
-    border-radius: 9px;
+  .carmelights-most-viewed .carmelights-popular-card {
+    width: 100%;
+    min-height: 84px;
+    padding: 8px;
+    border-radius: 7px;
+  }
+
+  .carmelights-most-viewed .carmelights-popular-card > img {
+    width: 64px;
+    height: 64px;
+  }
+
+  .carmelights-most-viewed .carmelights-popular-copy b {
+    font-size: 14px;
   }
 
   .carmelights-toolbar {
