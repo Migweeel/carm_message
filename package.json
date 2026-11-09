@@ -1,4 +1,9 @@
 {
+  "private": true,
+  "scripts": {
+    "build": "cd carmel_ron-main/server && npm install --include=dev && cd ../client && npm install --include=dev && cd .. && npm run build",
+    "start": "cd carmel_ron-main/server && npm start"
+  },
   "dependencies": {
     "resend": "^6.37.0"
   }
