@@ -8,6 +8,7 @@ import helmet from 'helmet'
 import jwt from 'jsonwebtoken'
 import { Prisma, PrismaClient } from '@prisma/client'
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
+import { resolve } from 'node:path'
 import { TextReader, TextWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader, ZipWriter } from '@zip.js/zip.js'
 import { z } from 'zod'
 
@@ -2255,6 +2256,15 @@ app.get('/api/admin/audit', authenticate, allowRoles('ADMIN', 'FORMATOR'), async
   })
   res.json({ logs })
 }))
+
+const clientBuildDirectory = resolve(process.cwd(), '../client/dist')
+app.use(express.static(clientBuildDirectory))
+app.get('*', (req, res, next) => {
+  if (req.path === '/api' || req.path.startsWith('/api/')) return next()
+  res.sendFile(resolve(clientBuildDirectory, 'index.html'), (error) => {
+    if (error) next(error)
+  })
+})
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error(error)
