@@ -107,7 +107,14 @@ const backupEnumColumns: Record<string, Record<string, string>> = {
 }
 
 app.disable('x-powered-by')
-app.use(helmet())
+app.set('trust proxy', 1)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      imgSrc: ["'self'", 'data:', 'https://images.unsplash.com'],
+    },
+  },
+}))
 app.use(cors({ origin: clientOrigin, credentials: true }))
 app.use(express.json({ limit: '16mb' }))
 app.use(cookieParser())
