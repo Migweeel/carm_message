@@ -49,4 +49,11 @@
 .carmelights-prayer-prompt{margin-top:22px;padding:18px 20px;border-left:3px solid #c9a67a;background:#f7f2eb}
 .carmelights-prayer-prompt b{display:block;margin-bottom:6px;color:#a3794f;font-size:10px;letter-spacing:1.2px}
 .carmelights-prayer-prompt p{margin:0;color:#65594f;font:italic 17px/1.75 var(--serif)}
+.carmelights-reading-dialog-full-view{width:min(1120px,100%);max-height:calc(100vh - 24px);padding:clamp(36px,6vw,76px);border-radius:8px}
+.carmelights-reading-dialog-full-view h2{max-width:760px;font-size:clamp(34px,4vw,48px)}
+.carmelights-reading-dialog-full-view .carmelights-reading-author,.carmelights-reading-dialog-full-view .carmelights-reading-copy,.carmelights-reading-dialog-full-view .carmelights-prayer-prompt{max-width:760px}
+.carmelights-reading-dialog-full-view .carmelights-reading-copy{margin-top:30px}
+.carmelights-reading-dialog-full-view .carmelights-reading-copy p{font-size:19px;line-height:1.95}
+.carmelights-reading-dialog-full-view .carmelights-prayer-prompt{margin-top:30px}
 @media(max-width:560px){.carmelights-reading-backdrop{padding:16px}.carmelights-reading-dialog{max-height:calc(100vh - 32px);padding:34px 25px 28px;border-radius:8px}.carmelights-reading-dialog>.carmelights-category-tag{margin-bottom:13px}.carmelights-reading-close{top:14px;right:14px;width:40px;height:40px}.carmelights-reading-dialog h2{padding-right:20px;font-size:30px}.carmelights-reading-author{font-size:14px}.carmelights-reading-copy{margin-top:18px}.carmelights-reading-copy p{font-size:17px;line-height:1.8}.carmelights-prayer-prompt{padding:15px}.carmelights-prayer-prompt p{font-size:16px}}
+@media(max-width:560px){.carmelights-reading-dialog-full-view{max-height:calc(100vh - 32px);padding:34px 25px 28px}.carmelights-reading-dialog-full-view h2{font-size:30px}.carmelights-reading-dialog-full-view .carmelights-reading-copy{margin-top:18px}.carmelights-reading-dialog-full-view .carmelights-reading-copy p{font-size:17px;line-height:1.8}}

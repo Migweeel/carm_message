@@ -1122,7 +1122,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
         <button type="button" className="carmelights-read-link" onClick={() => setSelectedId(article.id)}><span><BookOpen size={14} />Read full teaching</span><ArrowRight size={14} /></button>
       </article>)}</div>
       {visibleTeachings.length === 0 && <p className="content-empty">No teachings match your search.</p>}
-      {selected && <div className="carmelights-reading-backdrop" role="presentation" onClick={closeStory}><article className="carmelights-reading-dialog" role="dialog" aria-modal="true" aria-label={selected.title} onClick={(event) => event.stopPropagation()}>
+      {selected && <div className={`carmelights-reading-backdrop ${fullView ? 'carmelights-reading-backdrop-full-view' : ''}`} role="presentation" onClick={closeStory}><article className={`carmelights-reading-dialog ${fullView ? 'carmelights-reading-dialog-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={selected.title} onClick={(event) => event.stopPropagation()}>
         <button className="carmelights-reading-close" type="button" onClick={closeStory} aria-label="Close teaching"><X size={20} /></button>
         <span className="carmelights-category-tag">{selected.category || 'Prayer'}</span>
         <span className="carmelights-reading-eyebrow">CARMELITE TEACHING</span>
@@ -1130,6 +1130,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
         <b className="carmelights-reading-author">{selected.author}</b>
         <div className="carmelights-reading-copy">{selected.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
         <aside className="carmelights-prayer-prompt"><b>A MOMENT FOR PRAYER</b><p>Take a quiet moment with this teaching. What word or idea would you like to carry with you today?</p></aside>
+        <button className="button button-outline story-full-view-toggle" type="button" onClick={() => setFullView(!fullView)}>{fullView ? 'Return to teaching preview' : 'Read in full view'} <Maximize2 size={15} /></button>
       </article></div>}
     </section>
   }
