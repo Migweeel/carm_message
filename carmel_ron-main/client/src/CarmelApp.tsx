@@ -41,29 +41,29 @@ type PopularTeaching = ManagedArticle & { views: number }
 type ManagedSiteContent = { homeHeroImage: string; monasteries: ManagedMonastery[]; monasteriesVersion?: number; carmelife: ManagedArticle[]; carmelights: ManagedArticle[] }
 const monasteryCities = ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo', 'Bacolod', 'Cebu', 'Iloilo', 'Cagayan de Oro', 'Davao', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Zamboanga', 'Kuching']
 const monasteryAssetByCity: Record<string, string> = {
-  Angeles: '/assets/image_monasteries/Angeles_Carmel.png',
-  Bacolod: '/assets/image_monasteries/BACOLOD_CARMEL.png',
-  Baguio: '/assets/image_monasteries/Baguio_Carmel.png',
-  'Cagayan de Oro': '/assets/image_monasteries/CAGAYAN_DE_ORO_CARMEL.png',
-  Castillejos: '/assets/image_monasteries/CASTILLEJOS_CARMEL.png',
-  Cebu: '/assets/image_monasteries/CEBU_CARMEL.png',
-  Davao: '/assets/image_monasteries/DAVAO_CARMEL.png',
-  Gumaca: '/assets/image_monasteries/GUMACA_CARMEL.png',
-  Infanta: '/assets/image_monasteries/INFANTA_CARMEL.png',
-  Iloilo: '/assets/image_monasteries/JARO_CARMEL.png',
-  Jolo: '/assets/image_monasteries/JOLO_CARMEL.png',
-  Kuching: '/assets/image_monasteries/KUCHING_CARMEL.png',
-  Laoag: '/assets/image_monasteries/LAOAG_CARMEL.png',
-  Lipa: '/assets/image_monasteries/LIPA_CARMEL.png',
-  Lucena: '/assets/image_monasteries/LUCENA_CARMEL.png',
-  Malaybalay: '/assets/image_monasteries/MALAYBALAY_CARMEL.png',
-  Mati: '/assets/image_monasteries/MATI_CARMEL.png',
-  Naga: '/assets/image_monasteries/NAGA_ARMEL.png',
-  Ozamis: '/assets/image_monasteries/OZAMIZ_CARMEL.png',
-  'Quezon City': '/assets/image_monasteries/QUEZON_CITY_CARMEL.png',
-  'San Fernando': '/assets/image_monasteries/SAN_FERNANDO_LA_UNION_CARMEL.png',
-  'San Pablo': '/assets/image_monasteries/SAN_PABLO_CARMEL.png',
-  Zamboanga: '/assets/image_monasteries/ZAMBOANGA_CARMEL.png',
+  Angeles: '/assets/image_monasteries/Angeles_Carmel.jpg',
+  Bacolod: '/assets/image_monasteries/BACOLOD_CARMEL.jpg',
+  Baguio: '/assets/image_monasteries/Baguio_Carmel.jpg',
+  'Cagayan de Oro': '/assets/image_monasteries/CAGAYAN_DE_ORO_CARMEL.jpg',
+  Castillejos: '/assets/image_monasteries/CASTILLEJOS_CARMEL.jpg',
+  Cebu: '/assets/image_monasteries/CEBU_CARMEL.jpg',
+  Davao: '/assets/image_monasteries/DAVAO_CARMEL.jpg',
+  Gumaca: '/assets/image_monasteries/GUMACA_CARMEL.jpg',
+  Infanta: '/assets/image_monasteries/INFANTA_CARMEL.jpg',
+  Iloilo: '/assets/image_monasteries/JARO_CARMEL.jpg',
+  Jolo: '/assets/image_monasteries/JOLO_CARMEL.jpg',
+  Kuching: '/assets/image_monasteries/KUCHING_CARMEL.jpg',
+  Laoag: '/assets/image_monasteries/LAOAG_CARMEL.jpg',
+  Lipa: '/assets/image_monasteries/LIPA_CARMEL.jpg',
+  Lucena: '/assets/image_monasteries/LUCENA_CARMEL.jpg',
+  Malaybalay: '/assets/image_monasteries/MALAYBALAY_CARMEL.jpg',
+  Mati: '/assets/image_monasteries/MATI_CARMEL.jpg',
+  Naga: '/assets/image_monasteries/NAGA_ARMEL.jpg',
+  Ozamis: '/assets/image_monasteries/OZAMIZ_CARMEL.jpg',
+  'Quezon City': '/assets/image_monasteries/QUEZON_CITY_CARMEL.jpg',
+  'San Fernando': '/assets/image_monasteries/SAN_FERNANDO_LA_UNION_CARMEL.jpg',
+  'San Pablo': '/assets/image_monasteries/SAN_PABLO_CARMEL.jpg',
+  Zamboanga: '/assets/image_monasteries/ZAMBOANGA_CARMEL.jpg',
 }
 const monasteryFacebookByCity: Record<string, string> = {
   Angeles: 'https://www.facebook.com/CarmeliteAngeles',
@@ -262,7 +262,17 @@ function normalizeDiscernmentStage(stage: string): DiscernmentStage {
   return 'EXPLORING'
 }
 function readMemberSession(): MemberAccount | null {
-  try { const account = JSON.parse(localStorage.getItem(memberSessionKey) || 'null') as MemberAccount | null; return account?.role === 'USER' ? account : null } catch { return null }
+  try {
+    for (const key of ['carmel-prototype-session', 'carmel-prototype-staff', 'carmel-prototype-users', 'carmel-prototype-admin-profile']) {
+      localStorage.removeItem(key)
+    }
+    const account = JSON.parse(localStorage.getItem(memberSessionKey) || 'null') as MemberAccount | null
+    if (account?.prototype) {
+      localStorage.removeItem(memberSessionKey)
+      return null
+    }
+    return account?.role === 'USER' ? account : null
+  } catch { return null }
 }
 function saveMemberSession(account: MemberAccount | null) {
   if (account) localStorage.setItem(memberSessionKey, JSON.stringify(account))
@@ -394,8 +404,6 @@ function DiscernmentSiteActivityTracker() {
 function memberDonationKey(email: string) { return `carmel-member-donations:${email.toLowerCase()}` }
 function memberFavoriteKey(email: string) { return `carmel-member-favorites:${email.toLowerCase()}` }
 function memberDiscernmentKey(email: string) { return `carmel-member-discernment:${email.toLowerCase()}` }
-function createLocalId(prefix: string) { return `${prefix}-${crypto.randomUUID()}` }
-function currentIsoTimestamp() { return new Date().toISOString() }
 function moveMemberData(oldEmail: string, newEmail: string) {
   if (oldEmail.toLowerCase() === newEmail.toLowerCase()) return
   const entries = [[memberDonationKey(oldEmail), memberDonationKey(newEmail)], [memberFavoriteKey(oldEmail), memberFavoriteKey(newEmail)], [memberDiscernmentKey(oldEmail), memberDiscernmentKey(newEmail)]]
@@ -694,11 +702,17 @@ function MonasteriesPage() {
     items: citiesInRegion.map((city) => monasteries.find((monastery) => monastery.city.toLowerCase() === city.toLowerCase())).filter((monastery): monastery is ManagedMonastery => Boolean(monastery)),
   })).filter((region) => region.items.length && (selectedRegion === 'all' || region.id === selectedRegion))
   const monasteryCount = visibleRegions.reduce((count, region) => count + region.items.length, 0)
-  const imageFor = (monastery: ManagedMonastery) => monastery.image && !monastery.image.includes('unsplash.com') ? monastery.image : monasteryAssetByCity[monastery.city] || photo.chapel
+  const imageFor = (monastery: ManagedMonastery) => {
+    const optimizedImage = monasteryAssetByCity[monastery.city] || photo.chapel
+    const legacyImage = optimizedImage.endsWith('.jpg') ? optimizedImage.slice(0, -4) + '.png' : ''
+    return !monastery.image || monastery.image.includes('unsplash.com') || monastery.image === legacyImage
+      ? optimizedImage
+      : monastery.image
+  }
   const facebookFor = (monastery: ManagedMonastery) => monasteryFacebookByCity[monastery.city]
   return <div className="monasteries-reference">
     <section className="monasteries-intro"><div className="monasteries-container"><p className="monasteries-kicker">FIND A COMMUNITY</p><h1>Our <em>Monasteries</em></h1><p className="monasteries-lead">{monasteryCount === 23 ? 'Twenty-three' : monasteryCount} communities, one contemplative family across Luzon, Visayas, and Mindanao. Find a Carmel near you.</p><blockquote className="monasteries-quote"><p>“How much has the apostolate been enriched by the prayers and sacrifices radiating from monasteries! And how great is the joy and prophecy proclaimed to the world by the silence of the cloister.”</p><cite>— Pope Francis, Vultum Dei Quaerere</cite></blockquote><div className="monasteries-filters"><label className="monasteries-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by city" aria-label="Search by city" /></label><label className="monasteries-region-filter"><span className="sr-only">Filter by region</span><select value={selectedRegion} onChange={(event) => setSelectedRegion(event.target.value)}><option value="all">All regions</option>{regions.map(([id, title]) => <option value={id} key={id}>{title.replace(' Monasteries', '')}</option>)}</select><ChevronDown size={14} aria-hidden="true" /></label></div></div></section>
-    {visibleRegions.map((region) => <section className="region-section" id={region.id} key={region.id}><div className="region-header"><h2>{region.title}</h2><hr /></div><div className="monasteries-reference-grid">{region.items.map((monastery) => <article className="monastery-reference-card" key={monastery.city}><img src={imageFor(monastery)} alt={`Carmelite community in ${monastery.city}`} loading="lazy" decoding="async" /><div className="monastery-card-content"><div className="card-title-block"><h3>{monastery.name}</h3><p>{monastery.description}</p></div><dl><div><dt><MapPin size={13} /></dt><dd>{monastery.city}, {monastery.city === 'Kuching' ? 'Malaysia' : 'Philippines'}</dd></div><div><dt><Mail size={13} /></dt><dd><a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a></dd></div></dl>{monastery.projectTitle && <div className="monastery-project"><b>{monastery.projectTitle}</b><p>{monastery.projectDetails}</p></div>}<div className="card-actions">{facebookFor(monastery) && <a className="btn-facebook" href={facebookFor(monastery)} target="_blank" rel="noopener noreferrer"><span className="facebook-mark" aria-hidden="true">f</span>Facebook</a>}<a className="link-directions" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${monastery.name} ${monastery.city}`)}`} target="_blank" rel="noopener noreferrer">Directions <ArrowRight size={13} /></a></div></div></article>)}</div></section>)}
+    {visibleRegions.map((region, regionIndex) => <section className="region-section" id={region.id} key={region.id}><div className="region-header"><h2>{region.title}</h2><hr /></div><div className="monasteries-reference-grid">{region.items.map((monastery, index) => <article className="monastery-reference-card" key={monastery.city}><img src={imageFor(monastery)} alt={`Carmelite community in ${monastery.city}`} loading={regionIndex === 0 && index < 3 ? 'eager' : 'lazy'} fetchPriority={regionIndex === 0 && index === 0 ? 'high' : 'auto'} decoding="async" /><div className="monastery-card-content"><div className="card-title-block"><h3>{monastery.name}</h3><p>{monastery.description}</p></div><dl><div><dt><MapPin size={13} /></dt><dd>{monastery.city}, {monastery.city === 'Kuching' ? 'Malaysia' : 'Philippines'}</dd></div><div><dt><Mail size={13} /></dt><dd><a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a></dd></div></dl>{monastery.projectTitle && <div className="monastery-project"><b>{monastery.projectTitle}</b><p>{monastery.projectDetails}</p></div>}<div className="card-actions">{facebookFor(monastery) && <a className="btn-facebook" href={facebookFor(monastery)} target="_blank" rel="noopener noreferrer"><span className="facebook-mark" aria-hidden="true">f</span>Facebook</a>}<a className="link-directions" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${monastery.name} ${monastery.city}`)}`} target="_blank" rel="noopener noreferrer">Directions <ArrowRight size={13} /></a></div></div></article>)}</div></section>)}
     {monasteries.length === 0 && <p className="content-empty monasteries-empty">No communities match your search.</p>}
   </div>
 }
@@ -1258,7 +1272,6 @@ function normalizePhilippinePhone(value: string) {
 const giftAmounts = [500, 1000, 2500, 5000]
 const giftLabels = ['Daily food & nutrition', 'Medicines & health care', 'Young sisters’ formation', 'Infirmary & monastery upkeep']
 const steps = ['Select amount', 'Payment method', 'Your details', 'Review & complete']
-const offlineDonationRecordsKey = 'carmel-offline-donation-records'
 function DonationsPage() {
   const [gift, setGiftState] = useState<Donation>(() => {
     try {
@@ -1356,45 +1369,7 @@ function DonationsPage() {
         localStorage.setItem(key, JSON.stringify([{ referenceCode: result.donation.referenceCode, amount, paymentMethod: result.donation.paymentMethod, status: result.donation.status, createdAt: result.donation.createdAt, fund: giftLabels[giftAmounts.indexOf(amount)] || 'Federation formation program' }, ...history]))
       }
     } catch (reason) {
-      try {
-        const health = await fetch('/api/health')
-        const service = health.ok ? await health.json() as { demoAuthEnabled?: boolean; xenditConfigured?: boolean } : null
-        if (!service?.demoAuthEnabled || service.xenditConfigured) throw reason
-        const referenceCode = `CARMEL-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`
-        const createdAt = new Date().toISOString()
-        const record: AdminDonationRecord = {
-          id: crypto.randomUUID(),
-          referenceCode,
-          amount,
-          type: 'ONE_TIME',
-          fund,
-          paymentMethod: gift.payment,
-          isManual: false,
-          isAnonymous: gift.anonymous,
-          donorName: gift.anonymous ? null : gift.name.trim(),
-          donorEmail: gift.anonymous ? gift.receipt ? gift.email.trim().toLowerCase() || null : null : gift.email.trim().toLowerCase(),
-          donorPhone: gift.anonymous ? gift.receipt ? gift.phone.trim() || null : null : gift.phone.trim() || null,
-          wantsReceipt: gift.receipt,
-          paymentReference: gift.reference.trim() || null,
-          status: gift.reference.trim().toLowerCase() === 'carmelites' ? 'COMPLETED' : gift.reference.trim() ? 'RECONCILING' : 'PENDING',
-          createdAt,
-          files: [],
-        }
-        const donations = (() => { try { return JSON.parse(localStorage.getItem(offlineDonationRecordsKey) || '[]') as AdminDonationRecord[] } catch { return [] } })()
-        localStorage.setItem(offlineDonationRecordsKey, JSON.stringify([record, ...donations]))
-        setReceiptCode(referenceCode)
-        setDonationStatus(record.status)
-        setReceiptEmailSent(false)
-        setVerificationNoticeOpen(record.status !== 'COMPLETED')
-        const member = readMemberSession()
-        if (member) {
-          const key = memberDonationKey(member.email)
-          const history = (() => { try { return JSON.parse(localStorage.getItem(key) || '[]') as MemberDonation[] } catch { return [] } })()
-          localStorage.setItem(key, JSON.stringify([{ referenceCode, amount, paymentMethod: gift.payment, status: record.status, createdAt, fund }, ...history]))
-        }
-      } catch (offlineError) {
-        setError(offlineError instanceof Error ? offlineError.message : 'The donation service is unavailable. Please try again.')
-      }
+      setError(reason instanceof Error ? reason.message : 'The donation service is unavailable. Please try again.')
     }
   }
   return <div className="donations-page"><section className="donation-heading"><span className="eyebrow">SHARE YOUR BLESSINGS</span><h1>Your generosity helps<br />formation <em>flourish.</em></h1><p>Your donation supports the formation program of the Federation. Thank you for your generosity.</p><blockquote>“Bring the whole tithe into the storehouse, that there may be food in my house. Test me in this, says the Lord Almighty...”<small>MALACHI 3:10</small></blockquote></section>
@@ -1409,68 +1384,36 @@ function DonationsPage() {
 }
 type StaffRole = 'ADMIN' | 'FORMATOR'
 type PrototypeStaff = { id: string; name: string; email: string; role: StaffRole; passwordHash?: string; isActive?: boolean; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
-type OfflineAuditEntry = { id: string; action: string; entity: string; entityId: string; createdAt: string; user: { id: string; name: string; email: string; role: StaffRole }; meta?: Record<string, unknown> }
-const offlineAuditKey = 'carmel-offline-audit-logs'
-function recordOfflineAudit(user: Pick<PrototypeStaff, 'id' | 'name' | 'email' | 'role'>, action: string, entity = 'Session', entityId = user.id, meta?: Record<string, unknown>) {
-  if (user.role !== 'ADMIN' && user.role !== 'FORMATOR') return
-  const entry: OfflineAuditEntry = {
-    id: crypto.randomUUID(),
-    action,
-    entity,
-    entityId,
-    createdAt: new Date().toISOString(),
-    user: { id: user.id, name: user.name, email: user.email, role: user.role },
-    ...(meta ? { meta } : {}),
-  }
-  const logs = (() => { try { return JSON.parse(localStorage.getItem(offlineAuditKey) || '[]') as OfflineAuditEntry[] } catch { return [] } })()
-  localStorage.setItem(offlineAuditKey, JSON.stringify([entry, ...logs].slice(0, 300)))
-}
 type FormatorPermissionKey = 'canManageUsers' | 'canManageDetails' | 'canManageUpdates'
 type PermissionAction = 'GRANT' | 'REVOKE'
 type PendingPermission = { staff: PrototypeStaff[]; memberName: string; labels: string[]; action: PermissionAction }
-const prototypeStaffKey = 'carmel-prototype-staff'
 const prototypeSessionKey = 'carmel-prototype-session'
 const prototypeUsersKey = 'carmel-prototype-users'
 const demoAdminProfileKey = 'carmel-prototype-admin-profile'
 const permissionRequestEvent = 'carmel-permission-requested'
 const staffUpdatedEvent = 'carmel-staff-updated'
-const demoAdminPassword = '12345678'
-const demoAdmin: PrototypeStaff = { id: 'prototype-admin', name: 'Demo Administrator', email: 'admin@carmel.test', role: 'ADMIN', passwordHash: '', canManageUsers: true, canManageDetails: true }
-function readDemoAdmin(): PrototypeStaff { try { return { ...demoAdmin, ...JSON.parse(localStorage.getItem(demoAdminProfileKey) || '{}') as Partial<PrototypeStaff> } } catch { return demoAdmin } }
+const prototypeStaffKey = 'carmel-prototype-staff'
 type PrototypeUser = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: 'USER'; isBlocked: boolean; isActive?: boolean; passwordHash?: string; createdAt?: string; privacyConsentAt?: string; privacyPolicyVersion?: string }
-const defaultPrototypeUsers: PrototypeUser[] = [{ id: 'visitor-1', name: 'Maria Santos', email: 'maria.santos@email.com', role: 'USER', isBlocked: false }, { id: 'visitor-2', name: 'Ana Reyes', email: 'ana.reyes@email.com', role: 'USER', isBlocked: false }]
-function readPrototypeUsers(): PrototypeUser[] { try { const stored = JSON.parse(localStorage.getItem(prototypeUsersKey) || 'null') as PrototypeUser[] | null; return stored || defaultPrototypeUsers } catch { return defaultPrototypeUsers } }
+function readPrototypeUsers(): PrototypeUser[] { localStorage.removeItem(prototypeUsersKey); return [] }
 
-function readPrototypeStaff(): PrototypeStaff[] {
-  try {
-    const staff = JSON.parse(localStorage.getItem(prototypeStaffKey) || '[]') as PrototypeStaff[]
-    let migrated = false
-    const updated = staff.map((member) => {
-      if (member.email.toLowerCase() === 'formator.demo@carmel.test' && typeof member.canManageUpdates !== 'boolean') {
-        migrated = true
-        return { ...member, canManageUpdates: true }
-      }
-      return member
-    })
-    if (migrated) localStorage.setItem(prototypeStaffKey, JSON.stringify(updated))
-    return updated
-  } catch { return [] }
-}
-function readPrototypeSession(): PrototypeStaff | null {
-  try {
-    const session = JSON.parse(localStorage.getItem(prototypeSessionKey) || 'null') as PrototypeStaff | null
-    if (session?.role === 'FORMATOR') return readPrototypeStaff().find((member) => member.id === session.id) || session
-    return session
-  } catch { return null }
-}
 async function hashPrototypePassword(password: string) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password))
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+function readPrototypeStaff(): PrototypeStaff[] {
+  localStorage.removeItem('carmel-prototype-staff')
+  localStorage.removeItem(demoAdminProfileKey)
+  return []
+}
+function readPrototypeSession(): PrototypeStaff | null {
+  localStorage.removeItem(prototypeSessionKey)
+  return null
+}
+
 type AuthApiResponse = {
   error?: string
-  user?: { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: string; demo?: boolean; discernmentTrackingEnabled?: boolean; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
+  user?: { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: string; discernmentTrackingEnabled?: boolean; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
 }
 async function readAuthResponse(response: Response): Promise<AuthApiResponse> {
   const retryAfter = Number(response.headers.get('Retry-After'))
@@ -1550,36 +1493,12 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       const password = String(form.get('password') || '')
       const expectedRole = role === 'admin' ? 'ADMIN' : 'FORMATOR'
       try {
-        const localDemoAdmin = readDemoAdmin()
-        if (email === localDemoAdmin.email.toLowerCase()) {
-          if (expectedRole !== 'ADMIN') throw new Error('Select Admin to sign in with this account.')
-          const passwordMatches = localDemoAdmin.passwordHash ? await hashPrototypePassword(password) === localDemoAdmin.passwordHash : password === demoAdminPassword
-          if (!passwordMatches) throw new Error('Email or password is incorrect.')
-          const response = await fetch('/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
-          const result = await readAuthResponse(response)
-          if (!response.ok || result.user?.role !== 'ADMIN') throw new Error(result.error || 'The database admin sign-in could not be verified.')
-          if (result.user.demo) recordOfflineAudit({ id: result.user.id, name: result.user.name || localDemoAdmin.name, email: result.user.email || email, role: 'ADMIN' }, 'LOGIN')
-          localStorage.removeItem(prototypeSessionKey)
-          navigate('/admin', { replace: true })
-          return
-        }
-        const localStaff = readPrototypeStaff().find((staff) => staff.email.toLowerCase() === email)
-        if (localStaff) {
-          if (localStaff.isActive === false) throw new Error('This staff account is inactive.')
-          if (await hashPrototypePassword(password) !== localStaff.passwordHash) throw new Error('Email or password is incorrect.')
-          if (localStaff.role !== expectedRole) throw new Error(`Select ${localStaff.role === 'FORMATOR' ? 'Formator' : 'Admin'} to sign in with this account.`)
-          localStorage.setItem(prototypeSessionKey, JSON.stringify(localStaff))
-          recordOfflineAudit(localStaff, 'LOGIN')
-          navigate('/admin', { replace: true })
-          return
-        }
         const response = await fetch('/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
         const result = await readAuthResponse(response)
         if (!response.ok) throw new Error(result.error || 'Unable to sign in.')
         const authenticatedUser = result.user
         if (!authenticatedUser || !['ADMIN', 'FORMATOR'].includes(authenticatedUser.role)) throw new Error('This account does not have administration access.')
         if (authenticatedUser.role !== expectedRole) throw new Error(`Select ${authenticatedUser.role === 'FORMATOR' ? 'Formator' : 'Admin'} to sign in with this account.`)
-        if (authenticatedUser.demo) recordOfflineAudit({ id: authenticatedUser.id, name: authenticatedUser.name, email: authenticatedUser.email, role: authenticatedUser.role as StaffRole }, 'LOGIN')
         navigate('/admin', { replace: true })
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : 'Unable to connect to the sign-in service.')
@@ -1603,52 +1522,12 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const address = String(form.get('address') || '').trim()
     const password = String(form.get('password') || '')
     try {
-      const localAccount = readPrototypeUsers().find((person) => person.email.toLowerCase() === email && person.passwordHash)
-      if (!isSignup && localAccount) {
-        if (localAccount.isBlocked) throw new Error('This account is currently unavailable. Contact the Federation office for help.')
-        if (await hashPrototypePassword(password) !== localAccount.passwordHash) throw new Error('Email or password is incorrect.')
-        saveMemberSession({ id: localAccount.id, name: localAccount.name, email: localAccount.email, gender: localAccount.gender || 'ANONYMOUS', phone: localAccount.phone, address: localAccount.address, role: 'USER', prototype: true })
-        navigate('/account', { replace: true })
-        return
-      }
-      let useLocalPrototype = false
-      try {
-        const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password, privacyConsent: form.get('privacyConsent') === 'on' } : { email, password }) })
-        const result = await readAuthResponse(response)
-        if (response.ok && result.user?.role === 'USER') {
-          const demoMember = result.user.demo === true
-          if (demoMember) {
-            const users = readPrototypeUsers()
-            const demoUser: PrototypeUser = {
-              id: result.user.id,
-              name: result.user.name,
-              email: result.user.email,
-              gender: result.user.gender || gender,
-              phone: result.user.phone,
-              address: result.user.address,
-              role: 'USER',
-              isBlocked: false,
-              passwordHash: await hashPrototypePassword(password),
-              createdAt: new Date().toISOString(),
-            }
-            localStorage.setItem(prototypeUsersKey, JSON.stringify(users.some((user) => user.id === demoUser.id)
-              ? users.map((user) => user.id === demoUser.id ? { ...user, ...demoUser } : user)
-              : [demoUser, ...users]))
-          }
-          saveMemberSession({ id: result.user.id, name: result.user.name, email: result.user.email, gender: result.user.gender || gender, phone: result.user.phone, address: result.user.address, role: 'USER', discernmentTrackingEnabled: result.user.discernmentTrackingEnabled === true, ...(demoMember ? { prototype: true } : {}) })
-          navigate('/account', { replace: true })
-          return
-        }
-        if (!response.ok && response.status >= 500 && !isSignup) useLocalPrototype = true
-        else if (!response.ok) throw new Error(result.error || 'Unable to continue.')
-        else throw new Error('Staff accounts use the Federation staff sign-in page.')
-      } catch (reason) {
-        if (reason instanceof TypeError && !isSignup) useLocalPrototype = true
-        else if (reason instanceof TypeError) throw new Error('Account registration is unavailable because the database service could not be reached. Please try again later.')
-        else throw reason
-      }
-      if (useLocalPrototype) throw new Error('Email or password is incorrect. Create a member account first if you are new here.')
-      throw new Error('Unable to connect to the account service.')
+      const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password, privacyConsent: form.get('privacyConsent') === 'on' } : { email, password }) })
+      const result = await readAuthResponse(response)
+      if (!response.ok) throw new Error(result.error || 'Unable to continue.')
+      if (!result.user || result.user.role !== 'USER') throw new Error('Staff accounts use the Federation staff sign-in page.')
+      saveMemberSession({ id: result.user.id, name: result.user.name, email: result.user.email, gender: result.user.gender || gender, phone: result.user.phone, address: result.user.address, role: 'USER', discernmentTrackingEnabled: result.user.discernmentTrackingEnabled === true })
+      navigate('/account', { replace: true })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to connect to the account service.')
     } finally {
@@ -1666,7 +1545,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         <legend>Staff account type</legend>
         <div className="auth-role-options">
           <label><input type="radio" name="accountType" value="staff" checked={accountType === 'staff'} onChange={() => { setAccountType('staff'); setLoginEmail(''); setLoginPassword('') }} /><span>Staff / Formator</span></label>
-          <label><input type="radio" name="accountType" value="admin" checked={accountType === 'admin'} onChange={() => { setAccountType('admin'); const admin = readDemoAdmin(); setLoginEmail(admin.email); setLoginPassword(admin.passwordHash ? '' : demoAdminPassword) }} /><span>Administrator</span></label>
+          <label><input type="radio" name="accountType" value="admin" checked={accountType === 'admin'} onChange={() => { setAccountType('admin'); setLoginEmail(''); setLoginPassword('') }} /><span>Administrator</span></label>
         </div>
       </fieldset>}
       {isSignup && <>
@@ -1675,7 +1554,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         <label>Contact number<input name="phone" type="tel" required minLength={7} maxLength={30} autoComplete="tel" placeholder="e.g. +63 912 345 6789" /></label>
         <label>Address<textarea name="address" required minLength={5} maxLength={300} rows={2} autoComplete="street-address" placeholder="Your complete address" /></label>
       </>}
-      <label>Email address<input name="email" type={isSignup ? 'email' : 'text'} inputMode="email" required autoComplete="email" placeholder={isSignup ? 'name@example.com' : 'name@example.com or demo@offline'} value={isSignup ? undefined : loginEmail} onChange={isSignup ? undefined : (event) => setLoginEmail(event.target.value)} /></label>
+      <label>Email address<input name="email" type="email" required autoComplete="email" placeholder="name@example.com" value={isSignup ? undefined : loginEmail} onChange={isSignup ? undefined : (event) => setLoginEmail(event.target.value)} /></label>
       <label>Password<span className="auth-password-field"><input name="password" type={showPassword ? 'text' : 'password'} required minLength={isSignup ? 10 : 1} maxLength={128} autoComplete={isSignup ? 'new-password' : 'current-password'} placeholder={isSignup ? 'At least 10 characters' : 'Enter your password'} value={isSignup ? undefined : loginPassword} onChange={isSignup ? undefined : (event) => setLoginPassword(event.target.value)} /><button className="auth-password-toggle" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></span></label>
       {isSignup && <label>Confirm password<span className="auth-password-field"><input name="confirmPassword" type={showConfirmPassword ? 'text' : 'password'} required minLength={10} maxLength={128} autoComplete="new-password" placeholder="Re-enter your password" /><button className="auth-password-toggle" type="button" aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'} aria-pressed={showConfirmPassword} onClick={() => setShowConfirmPassword(!showConfirmPassword)}>{showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></span></label>}
       {isSignup && <div className="auth-signup-consent">
@@ -1801,19 +1680,10 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
     const normalizedAddress = address.trim()
     try {
       if (name.trim().length < 2 || !normalizedEmail.includes('@') || normalizedPhone.length < 7 || normalizedPhone.length > 30 || normalizedAddress.length < 5 || normalizedAddress.length > 300) throw new Error('Enter a valid name, email, contact number, and address.')
-      let updated: MemberAccount
-      if (member.prototype) {
-        const users = readPrototypeUsers()
-        if (users.some((user) => user.id !== member.id && user.email.toLowerCase() === normalizedEmail)) throw new Error('An account with this email already exists.')
-        const nextUsers = users.map((user) => user.id === member.id ? { ...user, name: name.trim(), email: normalizedEmail, gender, phone: normalizedPhone, address: normalizedAddress } : user)
-        localStorage.setItem(prototypeUsersKey, JSON.stringify(nextUsers))
-        updated = { ...member, name: name.trim(), email: normalizedEmail, gender, phone: normalizedPhone, address: normalizedAddress }
-      } else {
-        const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), email: normalizedEmail, gender, phone: normalizedPhone, address: normalizedAddress }) })
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || 'Unable to update your profile.')
-        updated = { ...member, name: result.user.name, email: result.user.email, gender: result.user.gender, phone: result.user.phone, address: result.user.address }
-      }
+      const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), email: normalizedEmail, gender, phone: normalizedPhone, address: normalizedAddress }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Unable to update your profile.')
+      const updated: MemberAccount = { ...member, name: result.user.name, email: result.user.email, gender: result.user.gender, phone: result.user.phone, address: result.user.address }
       moveMemberData(member.email, updated.email)
       saveMemberSession(updated)
       onUpdated(updated)
@@ -1974,50 +1844,31 @@ function MemberSecurityView({ member }: { member: MemberAccount }) {
     setSaved(false)
     try {
       if (newPassword.length < 10) throw new Error('Your new password must have at least 10 characters.')
-      if (member.prototype) {
-        const users = readPrototypeUsers()
-        const account = users.find((user) => user.id === member.id)
-        if (!account?.passwordHash || await hashPrototypePassword(currentPassword) !== account.passwordHash) throw new Error('Your current password is incorrect.')
-        const passwordHash = await hashPrototypePassword(newPassword)
-        localStorage.setItem(prototypeUsersKey, JSON.stringify(users.map((user) => user.id === member.id ? { ...user, passwordHash } : user)))
-      } else {
-        const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: member.name, email: member.email, currentPassword, newPassword }) })
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || 'Unable to update your password.')
-      }
+      const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: member.name, email: member.email, currentPassword, newPassword }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Unable to update your password.')
       setCurrentPassword('')
       setNewPassword('')
       setSaved(true)
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to update your password.') }
   }
-  return <div className="member-security-layout"><form className="member-account-form" onSubmit={updatePassword}><div className="member-section-heading"><span className="eyebrow">ACCOUNT SECURITY</span><h2>Change password</h2><p>Use at least 10 characters for your new password.</p></div><label>Current password<input required type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label>New password<input required minLength={10} type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>{error && <p className="form-error" role="alert">{error}</p>}{saved && <p className="member-success form-success" role="status" aria-live="polite">Password updated successfully.</p>}<button className="button button-dark" type="submit">Update password</button></form><section className="member-privacy-note"><ShieldCheck size={20} /><div><h3>Privacy</h3><p>Your profile, discernment notes, favorites, and prototype messages are saved in this browser. Database-backed account details use the Federation account service.</p></div></section></div>
+  return <div className="member-security-layout"><form className="member-account-form" onSubmit={updatePassword}><div className="member-section-heading"><span className="eyebrow">ACCOUNT SECURITY</span><h2>Change password</h2><p>Use at least 10 characters for your new password.</p></div><label>Current password<input required type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label>New password<input required minLength={10} type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>{error && <p className="form-error" role="alert">{error}</p>}{saved && <p className="member-success form-success" role="status" aria-live="polite">Password updated successfully.</p>}<button className="button button-dark" type="submit">Update password</button></form><section className="member-privacy-note"><ShieldCheck size={20} /><div><h3>Privacy</h3><p>Your account profile and credentials are managed by the Federation account service. Favorites and other preferences are saved in this browser.</p></div></section></div>
 }
 
 function MemberMessagesView({ member }: { member: MemberAccount }) {
   type StaffContact = { id: string; name: string; role: 'ADMIN' | 'FORMATOR' }
-  const demoStaff: StaffContact[] = [
-    { id: 'local-demo-admin', name: 'Demo Administrator', role: 'ADMIN' },
-    { id: 'local-demo-formator', name: 'Demo Formator', role: 'FORMATOR' },
-  ]
-  const storageKey = `carmel-member-conversations:${member.email.toLowerCase()}`
-  const [staff, setStaff] = useState<StaffContact[]>(member.prototype ? demoStaff : [])
-  const [conversations, setConversations] = useState<ApiConversation[]>(() => {
-    if (!member.prototype) return []
-    try { return JSON.parse(localStorage.getItem(storageKey) || '[]') as ApiConversation[] } catch { return [] }
-  })
+  const [staff, setStaff] = useState<StaffContact[]>([])
+  const [conversations, setConversations] = useState<ApiConversation[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [recipientId, setRecipientId] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const [query, setQuery] = useState('')
   const [draft, setDraft] = useState('')
-  const [loading, setLoading] = useState(!member.prototype)
+  const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
     let active = true
-    if (member.prototype) {
-      return () => { active = false }
-    }
     async function refreshConversations() {
       try {
         const response = await fetch('/api/account/conversations', { credentials: 'include' })
@@ -2045,7 +1896,7 @@ function MemberMessagesView({ member }: { member: MemberAccount }) {
     void refreshConversations()
     const timer = window.setInterval(() => void refreshConversations(), 10000)
     return () => { active = false; window.clearInterval(timer) }
-  }, [member.id, member.prototype, storageKey])
+  }, [member.id])
   const selected = conversations.find((conversation) => conversation.id === selectedId) || null
   const matching = conversations.filter((conversation) => {
     const recipient = conversation.staffRecipient?.name || 'Federation office'
@@ -2058,10 +1909,6 @@ function MemberMessagesView({ member }: { member: MemberAccount }) {
     setSelectedId('')
     setRecipientId((current) => current || staff[0]?.id || '')
   }
-  function saveLocalConversations(next: ApiConversation[]) {
-    localStorage.setItem(storageKey, JSON.stringify(next))
-    setConversations(next)
-  }
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const body = draft.trim()
@@ -2070,38 +1917,7 @@ function MemberMessagesView({ member }: { member: MemberAccount }) {
     setError('')
     try {
       let updated: ApiConversation
-      if (member.prototype) {
-        const recipient = staff.find((contact) => contact.id === (isComposing ? recipientId : selected?.staffRecipient?.id))
-        const message: ApiConversationMessage = {
-          id: createLocalId('local-message'),
-          senderId: member.id,
-          senderType: 'VISITOR',
-          body,
-          createdAt: currentIsoTimestamp(),
-          sender: { id: member.id, name: member.name, role: 'USER' },
-        }
-        if (isComposing) {
-          if (!recipient) throw new Error('Choose a staff member before sending your message.')
-          updated = {
-            id: createLocalId('local-conversation'),
-            userId: member.id,
-            name: member.name,
-            email: member.email,
-            subject: `Message to ${recipient.name}`,
-            category: 'DISCERNER',
-            isRead: false,
-            lastMessageAt: message.createdAt,
-            user: { id: member.id, role: 'USER', isActive: true },
-            staffRecipient: recipient,
-            messages: [message],
-          }
-          saveLocalConversations([updated, ...conversations])
-        } else {
-          if (!selected) return
-          updated = { ...selected, isRead: false, lastMessageAt: message.createdAt, messages: [...selected.messages, message] }
-          saveLocalConversations(conversations.map((conversation) => conversation.id === updated.id ? updated : conversation))
-        }
-      } else if (isComposing) {
+      if (isComposing) {
         const response = await fetch('/api/account/conversations', {
           method: 'POST',
           credentials: 'include',
@@ -2248,11 +2064,6 @@ function MemberAccountPage() {
   }, [])
   useEffect(() => {
     const local = readMemberSession()
-    if (local?.prototype) {
-      const record = readPrototypeUsers().find((user) => user.id === local.id)
-      if (!record || record.isBlocked) { saveMemberSession(null); setMember(null) }
-      return
-    }
     let active = true
     fetch('/api/auth/me', { credentials: 'include' }).then(async (response) => {
       const result = await readAuthResponse(response)
@@ -2380,7 +2191,6 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
   const [profilePending, setProfilePending] = useState(false)
   useEffect(() => { const timer = setInterval(() => setClock(new Date()), 60000); return () => clearInterval(timer) }, [])
   function signOut() {
-    if (user.id.startsWith('local-demo-') || readPrototypeStaff().some((staff) => staff.id === user.id)) recordOfflineAudit(user, 'LOGOUT')
     localStorage.removeItem(prototypeSessionKey)
     navigator.sendBeacon('/api/auth/logout')
     navigate('/staff/login', { replace: true })
@@ -2394,32 +2204,10 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
     const email = profileEmail.trim().toLowerCase()
     try {
       if (name.length < 2) throw new Error('Enter a name with at least two characters.')
-      const staff = readPrototypeStaff()
-      const prototypeMember = staff.find((member) => member.id === user.id)
-      const isDemoAdmin = user.id === demoAdmin.id
-      if (prototypeMember || isDemoAdmin) {
-        if (staff.some((member) => member.id !== user.id && member.email.toLowerCase() === email) || (isDemoAdmin && staff.some((member) => member.email.toLowerCase() === email)) || (!isDemoAdmin && email === readDemoAdmin().email.toLowerCase())) throw new Error('An account with this email already exists.')
-        const oldPasswordHash = isDemoAdmin ? readDemoAdmin().passwordHash : prototypeMember?.passwordHash || ''
-        if (newPassword) {
-          const currentPasswordMatches = oldPasswordHash ? await hashPrototypePassword(currentPassword) === oldPasswordHash : isDemoAdmin && currentPassword === demoAdminPassword
-          if (!currentPasswordMatches) throw new Error('Your current password is incorrect.')
-        }
-        const updated: PrototypeStaff = { ...user, name, email, passwordHash: newPassword ? await hashPrototypePassword(newPassword) : oldPasswordHash }
-        if (isDemoAdmin) localStorage.setItem(demoAdminProfileKey, JSON.stringify(updated))
-        else localStorage.setItem(prototypeStaffKey, JSON.stringify(staff.map((member) => member.id === user.id ? updated : member)))
-        localStorage.setItem(prototypeSessionKey, JSON.stringify(updated))
-        recordOfflineAudit(updated, 'UPDATE_PROFILE', 'Staff account', user.id, {
-          nameChanged: user.name !== name,
-          emailChanged: user.email !== email,
-          passwordChanged: Boolean(newPassword),
-        })
-        onUserUpdated(updated)
-      } else {
-        const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, ...(currentPassword ? { currentPassword } : {}), ...(newPassword ? { newPassword } : {}) }) })
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || 'Unable to update your account.')
-        onUserUpdated({ ...user, ...result.user, passwordHash: user.passwordHash })
-      }
+      const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, ...(currentPassword ? { currentPassword } : {}), ...(newPassword ? { newPassword } : {}) }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Unable to update your account.')
+      onUserUpdated({ ...user, ...result.user, passwordHash: user.passwordHash })
       setEditingProfile(false)
     } catch (reason) {
       setProfileError(reason instanceof Error ? reason.message : 'Unable to update your account.')
@@ -2468,7 +2256,7 @@ type DashboardData = {
   recentDonations: DashboardDonation[]
 }
 
-async function optimizeHomepageImage(file: File) {
+async function optimizeUploadedImage(file: File) {
   const image = await createImageBitmap(file)
   let blob: Blob
   try {
@@ -2482,7 +2270,7 @@ async function optimizeHomepageImage(file: File) {
     blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((result) => {
         if (result) resolve(result)
-        else reject(new Error('The optimized homepage image could not be created.'))
+        else reject(new Error('The optimized image could not be created.'))
       }, 'image/jpeg', 0.82)
     })
   } finally {
@@ -2492,8 +2280,8 @@ async function optimizeHomepageImage(file: File) {
     const reader = new FileReader()
     reader.onload = () => typeof reader.result === 'string'
       ? resolve(reader.result)
-      : reject(new Error('The optimized homepage image could not be read.'))
-    reader.onerror = () => reject(reader.error || new Error('The optimized homepage image could not be read.'))
+      : reject(new Error('The optimized image could not be read.'))
+    reader.onerror = () => reject(reader.error || new Error('The optimized image could not be read.'))
     reader.readAsDataURL(blob)
   })
 }
@@ -3054,21 +2842,21 @@ function ContentAdminPage() {
     if (!file) return
     if (file.size > 2_000_000) { setError('Choose an image smaller than 2 MB.'); return }
     setSuccess('')
-    if (target === 'home') {
-      void optimizeHomepageImage(file).then((value) => {
-        setImage(value)
+    if (target === 'home' || target === 'monastery') {
+      void optimizeUploadedImage(file).then((value) => {
+        if (target === 'home') setImage(value)
+        else setMonastery((current) => ({ ...current, image: value }))
         setError('')
       }).catch((reason: unknown) => {
-        console.error('Unable to optimize the homepage image.', reason)
-        setError(reason instanceof Error ? reason.message : 'The homepage image could not be optimized.')
+        console.error(`Unable to optimize the ${target} image.`, reason)
+        setError(reason instanceof Error ? reason.message : `The ${target} image could not be optimized.`)
       })
       return
     }
     const reader = new FileReader()
     reader.onload = () => {
       const value = String(reader.result || '')
-      if (target === 'monastery') setMonastery((current) => ({ ...current, image: value }))
-      else setArticle((current) => ({ ...current, image: value }))
+      setArticle((current) => ({ ...current, image: value }))
       setError('')
     }
     reader.readAsDataURL(file)
@@ -3218,7 +3006,7 @@ function ContentAdminPage() {
         <label>Church or construction project<input value={monastery.projectTitle} onChange={(event) => updateMonastery('projectTitle', event.target.value)} placeholder="For example: New chapel construction" /></label>
         <label>Project details<textarea rows={3} value={monastery.projectDetails} onChange={(event) => updateMonastery('projectDetails', event.target.value)} placeholder="Share a progress note or details for visitors" /></label>
         <label>Image URL<input value={monastery.image.startsWith('data:') ? '' : monastery.image} onChange={(event) => updateMonastery('image', event.target.value)} placeholder="https://..." /></label>
-        <label className="content-image-picker">Upload image<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'monastery')} />{monastery.image && <img src={monastery.image} alt="Monastery preview" />}</label>
+        <label className="content-image-picker">Upload image<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'monastery')} />{monastery.image && <img src={monastery.image} alt="Monastery preview" />}<small>Uploaded monastery images are optimized automatically for faster loading.</small></label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="content-editor-actions">
           <button className="button button-dark" type="submit">{editingMonastery ? 'Save changes' : 'Add monastery'}</button>
@@ -3341,11 +3129,10 @@ type AdminDonationRecord = {
 type DonationProof = { fileUrl: string; fileName: string; type: string }
 const donationPaymentLabels: Record<AdminDonationRecord['paymentMethod'], string> = { GCASH: 'GCash', MAYA: 'Maya', BANK: 'Bank transfer', CARD: 'Card' }
 
-function DonationAdminPage({ user }: { user: PrototypeStaff }) {
+function DonationAdminPage() {
   const location = useLocation()
   const requestedView = new URLSearchParams(location.search).get('view')
   const view = requestedView === 'files' || requestedView === 'verification' ? requestedView : 'logs'
-  const offline = user.id.startsWith('local-demo-')
   const [donations, setDonations] = useState<AdminDonationRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -3369,14 +3156,9 @@ function DonationAdminPage({ user }: { user: PrototypeStaff }) {
     let active = true
     async function loadDonations() {
       try {
-        if (offline) {
-          const stored = JSON.parse(localStorage.getItem(offlineDonationRecordsKey) || '[]') as AdminDonationRecord[]
-          if (active) setDonations(stored)
-        } else {
-          const response = await fetch('/api/admin/donations', { credentials: 'include' })
-          const result = await readApiResponse<{ donations: AdminDonationRecord[] }>(response, 'Loading donation transactions')
-          if (active) setDonations(result.donations)
-        }
+        const response = await fetch('/api/admin/donations', { credentials: 'include' })
+        const result = await readApiResponse<{ donations: AdminDonationRecord[] }>(response, 'Loading donation transactions')
+        if (active) setDonations(result.donations)
         if (active) setError('')
       } catch (reason) {
         if (active) setError(reason instanceof Error ? reason.message : 'Donation transactions could not be loaded.')
@@ -3386,7 +3168,7 @@ function DonationAdminPage({ user }: { user: PrototypeStaff }) {
     }
     void loadDonations()
     return () => { active = false }
-  }, [offline])
+  }, [])
 
   async function selectProof(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -3423,12 +3205,7 @@ function DonationAdminPage({ user }: { user: PrototypeStaff }) {
       setError('Enter the donor name or mark this donation as anonymous.')
       return
     }
-    if (offline && proof && proof.fileUrl.length > 2_000_000) {
-      setError('For offline demo storage, choose a proof file smaller than 1.5 MB.')
-      return
-    }
     setSaving(true)
-    const createdAt = new Date().toISOString()
     const record = {
       amount: Number(amount),
       fund: fund.trim(),
@@ -3442,53 +3219,27 @@ function DonationAdminPage({ user }: { user: PrototypeStaff }) {
       proof,
     }
     try {
-      let donation: AdminDonationRecord
-      if (offline) {
-        donation = {
-          id: crypto.randomUUID(),
-          referenceCode: `CARMEL-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`,
+      const response = await fetch('/api/admin/donations', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           amount: record.amount,
-          type: record.type,
           fund: record.fund,
           paymentMethod: record.paymentMethod,
+          type: record.type,
           isManual: true,
           isAnonymous: record.anonymous,
-          donorName: record.donorName || null,
-          donorEmail: record.donorEmail || null,
-          donorPhone: record.donorPhone || null,
-          wantsReceipt: false,
-          paymentReference: record.reference || null,
-          status: 'COMPLETED',
-          createdAt,
-          files: proof ? [{ id: crypto.randomUUID(), fileUrl: proof.fileUrl, fileName: proof.fileName, type: proof.type, createdAt }] : [],
-        }
-        const nextDonations = [donation, ...donations]
-        localStorage.setItem(offlineDonationRecordsKey, JSON.stringify(nextDonations))
-        setDonations(nextDonations)
-        recordOfflineAudit(user, 'RECORD_DONATION', 'Donation', donation.id, { referenceCode: donation.referenceCode, amount: donation.amount })
-      } else {
-        const response = await fetch('/api/admin/donations', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: record.amount,
-            fund: record.fund,
-            paymentMethod: record.paymentMethod,
-            type: record.type,
-            isManual: true,
-            isAnonymous: record.anonymous,
-            donorName: record.donorName || undefined,
-            donorEmail: record.donorEmail || undefined,
-            donorPhone: record.donorPhone || undefined,
-            paymentReference: record.reference || undefined,
-            proof: proof ? { fileUrl: proof.fileUrl, fileName: proof.fileName, type: proof.type } : undefined,
-          }),
-        })
-        const result = await readApiResponse<{ donation: AdminDonationRecord }>(response, 'Recording donation')
-        donation = result.donation
-        setDonations((current) => [donation, ...current])
-      }
+          donorName: record.donorName || undefined,
+          donorEmail: record.donorEmail || undefined,
+          donorPhone: record.donorPhone || undefined,
+          paymentReference: record.reference || undefined,
+          proof: proof ? { fileUrl: proof.fileUrl, fileName: proof.fileName, type: proof.type } : undefined,
+        }),
+      })
+      const result = await readApiResponse<{ donation: AdminDonationRecord }>(response, 'Recording donation')
+      const donation = result.donation
+      setDonations((current) => [donation, ...current])
       setAmount('')
       setFund('Federation formation program')
       setPaymentMethod('GCASH')
@@ -3514,23 +3265,15 @@ function DonationAdminPage({ user }: { user: PrototypeStaff }) {
     setSuccess('')
     setUpdatingStatus(true)
     try {
-      let updated: AdminDonationRecord
-      if (offline) {
-        updated = { ...selectedDonation, status }
-        const nextDonations = donations.map((donation) => donation.id === updated.id ? updated : donation)
-        localStorage.setItem(offlineDonationRecordsKey, JSON.stringify(nextDonations))
-        setDonations(nextDonations)
-      } else {
-        const response = await fetch(`/api/admin/donations/${encodeURIComponent(selectedDonation.id)}/status`, {
-          method: 'PATCH',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-        })
-        const result = await readApiResponse<{ donation: AdminDonationRecord }>(response, status === 'VERIFIED' ? 'Verifying donation' : 'Rejecting payment claim')
-        updated = result.donation
-        setDonations((current) => current.map((donation) => donation.id === updated.id ? { ...donation, ...updated } : donation))
-      }
+      const response = await fetch(`/api/admin/donations/${encodeURIComponent(selectedDonation.id)}/status`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      const result = await readApiResponse<{ donation: AdminDonationRecord }>(response, status === 'VERIFIED' ? 'Verifying donation' : 'Rejecting payment claim')
+      const updated = result.donation
+      setDonations((current) => current.map((donation) => donation.id === updated.id ? { ...donation, ...updated } : donation))
       setSelectedDonation(updated)
       setConfirmReject(false)
       setSuccess(status === 'VERIFIED' ? `Donation ${updated.referenceCode} has been verified.` : `Payment claim ${updated.referenceCode} was rejected. The donation was not counted as received.`)
@@ -3591,6 +3334,7 @@ function DonationAdminPage({ user }: { user: PrototypeStaff }) {
 
 function SystemBackupPage() {
   const [backupFile, setBackupFile] = useState<File | null>(null)
+  const [exportPassword, setExportPassword] = useState('')
   const [importPassword, setImportPassword] = useState('')
   const [busy, setBusy] = useState<'export' | 'import' | null>(null)
   const [error, setError] = useState('')
@@ -3605,6 +3349,7 @@ function SystemBackupPage() {
       const response = await fetch('/api/admin/system-backup/export', {
         method: 'POST',
         credentials: 'include',
+        headers: { 'X-System-Backup-Password': exportPassword },
       })
       if (!response.ok) {
         const result = await response.json() as { error?: string }
@@ -3667,8 +3412,9 @@ function SystemBackupPage() {
       <article className="admin-panel system-backup-card">
         <div className="panel-heading"><div><h2>Export backup</h2><p>Download an encrypted copy of application data.</p></div><Download size={19} /></div>
         <p className="system-backup-description">The export includes accounts, content, donation records and proof files, messages, reading interactions, and audit history. An export timestamp is included and recorded in the Admin audit log.</p>
-        <p className="system-backup-warning">The downloaded ZIP is encrypted with AES-256. Use a ZIP app that supports AES encryption (such as 7-Zip) and the configured backup password to open it. The browser saves the archive in your configured download folder.</p>
+        <p className="system-backup-warning">The downloaded ZIP is encrypted with AES-256. Choose a unique password with at least 16 characters, keep it somewhere safe, and use it in a ZIP app that supports AES encryption (such as 7-Zip). The password is not saved by the app.</p>
         <form className="system-backup-form" onSubmit={(event) => void exportBackup(event)}>
+          <label>New backup password<input type="password" value={exportPassword} onChange={(event) => setExportPassword(event.target.value)} minLength={16} maxLength={128} autoComplete="new-password" required /></label>
           <button className="button button-dark" type="submit" disabled={busy !== null}>{busy === 'export' ? 'Exporting…' : 'Export encrypted backup'} <Download size={15} /></button>
         </form>
       </article>
@@ -3732,19 +3478,13 @@ function AuditLogsPage({ user }: { user: PrototypeStaff }) {
   const [logs, setLogs] = useState<AuditRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const offline = user.id.startsWith('local-demo-') || readPrototypeStaff().some((staff) => staff.id === user.id)
   useEffect(() => {
     let active = true
     async function loadLogs() {
       try {
-        if (offline) {
-          const localLogs = JSON.parse(localStorage.getItem(offlineAuditKey) || '[]') as OfflineAuditEntry[]
-          if (active) setLogs(localLogs.filter((log) => (log.user.role === 'ADMIN' || log.user.role === 'FORMATOR') && (user.role === 'ADMIN' || log.entity !== 'Donation')))
-        } else {
-          const response = await fetch('/api/admin/audit', { credentials: 'include' })
-          const result = await readApiResponse<{ logs: AuditRecord[] }>(response, 'Loading audit activity')
-          if (active) setLogs(result.logs)
-        }
+        const response = await fetch('/api/admin/audit', { credentials: 'include' })
+        const result = await readApiResponse<{ logs: AuditRecord[] }>(response, 'Loading audit activity')
+        if (active) setLogs(result.logs)
         if (active) setError('')
       } catch (reason) {
         if (active) setError(reason instanceof Error ? reason.message : 'Audit activity could not be loaded.')
@@ -3754,7 +3494,7 @@ function AuditLogsPage({ user }: { user: PrototypeStaff }) {
     }
     void loadLogs()
     return () => { active = false }
-  }, [offline, user.role])
+  }, [])
   return <>
     <div className="admin-title-row"><div><span className="eyebrow">STAFF ACCOUNTABILITY</span><h1>Audit logs</h1><p>{user.role === 'ADMIN' ? 'Staff activity and donation records, newest first.' : 'Admin and Formator sign-ins and administrative changes, newest first.'}</p></div></div>
     {error && <p className="form-error" role="alert">{error}</p>}
@@ -4365,18 +4105,7 @@ function FormatorUsersPage() {
 function RoleAwareUsersPage({ user }: { user: PrototypeStaff }) { return user.role === 'ADMIN' ? <ManageUsersPage /> : <FormatorUsersPage /> }
 
 type AdminDiscerner = { userId: string; name: string; email: string; monastery: string; stage: DiscernmentStage; updatedAt: string; trackingEnabled: boolean; metrics: DiscernmentMetrics | null }
-function readPrototypeDiscerners(): AdminDiscerner[] {
-  return readPrototypeUsers().flatMap((member) => {
-    try {
-      const stored = localStorage.getItem(memberDiscernmentKey(member.email))
-      if (!stored) return []
-      const details = JSON.parse(stored) as MemberDiscernment
-      return [{ userId: member.id, name: member.name, email: member.email, monastery: details.monastery || '', stage: normalizeDiscernmentStage(details.stage), updatedAt: details.updatedAt || '', trackingEnabled: false, metrics: null }]
-    } catch { return [] }
-  })
-}
-function AdminDiscernmentListPage({ user }: { user: PrototypeStaff }) {
-  const isPrototype = user.id === demoAdmin.id || readPrototypeStaff().some((staff) => staff.id === user.id)
+function AdminDiscernmentListPage() {
   const [records, setRecords] = useState<AdminDiscerner[]>([])
   const [query, setQuery] = useState('')
   const [pendingUserId, setPendingUserId] = useState('')
@@ -4386,11 +4115,6 @@ function AdminDiscernmentListPage({ user }: { user: PrototypeStaff }) {
   useEffect(() => {
     let active = true
     const load = () => {
-      if (isPrototype) {
-        setRecords(readPrototypeDiscerners())
-        setLoading(false)
-        return
-      }
       fetch('/api/admin/discernment', { credentials: 'include' }).then(async (response) => {
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Unable to load discerners.')
@@ -4410,28 +4134,16 @@ function AdminDiscernmentListPage({ user }: { user: PrototypeStaff }) {
       }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Unable to load discerners.') }).finally(() => { if (active) setLoading(false) })
     }
     load()
-    if (isPrototype) {
-      window.addEventListener('storage', load)
-      window.addEventListener(discernmentUpdatedEvent, load)
-      return () => { active = false; window.removeEventListener('storage', load); window.removeEventListener(discernmentUpdatedEvent, load) }
-    }
     return () => { active = false }
-  }, [isPrototype])
+  }, [])
   async function updateStage(record: AdminDiscerner, stage: DiscernmentStage) {
     setPendingUserId(record.userId)
     setError('')
     try {
-      let updatedAt = new Date().toISOString()
-      if (isPrototype) {
-        const stored = localStorage.getItem(memberDiscernmentKey(record.email))
-        const details = stored ? JSON.parse(stored) as MemberDiscernment : { monastery: '', stage: 'EXPLORING' as DiscernmentStage, note: '' }
-        localStorage.setItem(memberDiscernmentKey(record.email), JSON.stringify({ ...details, stage, updatedAt }))
-      } else {
-        const response = await fetch(`/api/admin/discernment/${encodeURIComponent(record.userId)}/stage`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage }) })
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || 'Unable to update this stage.')
-        updatedAt = result.discernment.updatedAt
-      }
+      const response = await fetch(`/api/admin/discernment/${encodeURIComponent(record.userId)}/stage`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Unable to update this stage.')
+      const updatedAt = result.discernment.updatedAt
       setRecords((current) => current.map((item) => item.userId === record.userId ? { ...item, stage, updatedAt } : item))
       window.dispatchEvent(new Event(discernmentUpdatedEvent))
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to update this stage.') }
@@ -4475,7 +4187,7 @@ function AdminDiscernmentListPage({ user }: { user: PrototypeStaff }) {
   </main>
 }
 
-function AdminDiscernmentPage({ user }: { user: PrototypeStaff }) {
+function AdminDiscernmentPage() {
   const location = useLocation()
   const section = new URLSearchParams(location.search).get('section') || 'progress'
   return <>
@@ -4483,7 +4195,7 @@ function AdminDiscernmentPage({ user }: { user: PrototypeStaff }) {
       <Link className={section === 'progress' ? 'active' : ''} to="/admin/discerners">Progress &amp; analytics</Link>
       <Link className={section === 'milestones' ? 'active' : ''} to="/admin/discerners?section=milestones">Milestone settings</Link>
     </nav>
-    {section === 'milestones' ? <DiscernmentCriteriaAdminPage /> : <AdminDiscernmentListPage user={user} />}
+    {section === 'milestones' ? <DiscernmentCriteriaAdminPage /> : <AdminDiscernmentListPage />}
   </>
 }
 
@@ -4493,12 +4205,7 @@ function AdminPage() {
   const [sessionError, setSessionError] = useState('')
   const [retrySessionCheck, setRetrySessionCheck] = useState(0)
   useEffect(() => {
-    const prototypeUser = readPrototypeSession()
-    if (prototypeUser && ['ADMIN', 'FORMATOR'].includes(prototypeUser.role)) {
-      setUser(prototypeUser)
-      setChecking(false)
-      return
-    }
+    readPrototypeSession()
     let active = true
     setChecking(true)
     setSessionError('')
@@ -4524,7 +4231,7 @@ function AdminPage() {
   if (!user && sessionError) return <div className="admin-loading" role="alert"><p>{sessionError}</p><button className="button button-dark" type="button" onClick={() => setRetrySessionCheck((attempt) => attempt + 1)}>Retry session check</button><Link className="button button-outline" to="/staff/login">Return to sign in</Link></div>
   if (!user) return <Navigate to="/staff/login" replace />
   void MessagesPage
-  return <AdminShell user={user} onUserUpdated={setUser}><Routes><Route index element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /><Route path="messages" element={<DirectMessagesPage user={user} />} /><Route path="updates" element={user.role === 'ADMIN' || user.canManageUpdates ? <UpdatesAdminPage /> : <Navigate to="/admin" replace />} /><Route path="users" element={user.role === 'ADMIN' || user.canManageUsers ? <RoleAwareUsersPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="discerners" element={user.role === 'ADMIN' ? <AdminDiscernmentPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="donations" element={user.role === 'ADMIN' ? <DonationAdminPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="content" element={user.role === 'ADMIN' || user.canManageDetails ? <GenericAdmin title="Manage details" /> : <Navigate to="/admin" replace />} /><Route path="system-backup" element={user.role === 'ADMIN' ? <SystemBackupPage /> : <Navigate to="/admin" replace />} /><Route path="audit" element={user.role === 'ADMIN' || user.role === 'FORMATOR' ? <AuditLogsPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="*" element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /></Routes></AdminShell>
+  return <AdminShell user={user} onUserUpdated={setUser}><Routes><Route index element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /><Route path="messages" element={<DirectMessagesPage user={user} />} /><Route path="updates" element={user.role === 'ADMIN' || user.canManageUpdates ? <UpdatesAdminPage /> : <Navigate to="/admin" replace />} /><Route path="users" element={user.role === 'ADMIN' || user.canManageUsers ? <RoleAwareUsersPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="discerners" element={user.role === 'ADMIN' ? <AdminDiscernmentPage /> : <Navigate to="/admin" replace />} /><Route path="donations" element={user.role === 'ADMIN' ? <DonationAdminPage /> : <Navigate to="/admin" replace />} /><Route path="content" element={user.role === 'ADMIN' || user.canManageDetails ? <GenericAdmin title="Manage details" /> : <Navigate to="/admin" replace />} /><Route path="system-backup" element={user.role === 'ADMIN' ? <SystemBackupPage /> : <Navigate to="/admin" replace />} /><Route path="audit" element={user.role === 'ADMIN' || user.role === 'FORMATOR' ? <AuditLogsPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="*" element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /></Routes></AdminShell>
 }
 function AppRoutes() {
   return <Routes>
