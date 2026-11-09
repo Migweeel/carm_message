@@ -8,7 +8,9 @@ import helmet from 'helmet'
 import jwt from 'jsonwebtoken'
 import { Prisma, PrismaClient } from '@prisma/client'
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
-import { resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { TextReader, TextWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader, ZipWriter } from '@zip.js/zip.js'
 import { z } from 'zod'
 
@@ -2257,7 +2259,17 @@ app.get('/api/admin/audit', authenticate, allowRoles('ADMIN', 'FORMATOR'), async
   res.json({ logs })
 }))
 
-const clientBuildDirectory = resolve(process.cwd(), '../client/dist')
+const moduleDirectory = dirname(fileURLToPath(import.meta.url))
+const clientBuildDirectoryCandidates = [
+  resolve(moduleDirectory, '../../../client/dist'),
+  resolve(moduleDirectory, '../../client/dist'),
+  resolve(process.cwd(), 'client/dist'),
+  resolve(process.cwd(), '../client/dist'),
+]
+const clientBuildDirectory = clientBuildDirectoryCandidates.find((directory) => existsSync(resolve(directory, 'index.html')))
+if (!clientBuildDirectory) {
+  throw new Error('Client build not found. Build client/dist and run the server from the application deployment root.')
+}
 app.use(express.static(clientBuildDirectory))
 app.get('*', (req, res, next) => {
   if (req.path === '/api' || req.path.startsWith('/api/')) return next()
