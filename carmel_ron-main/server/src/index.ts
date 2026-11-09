@@ -17,6 +17,9 @@ import { z } from 'zod'
 const app = express()
 const prisma = new PrismaClient()
 const port = Number(process.env.PORT || 4000)
+const clientOrigin = process.env.CLIENT_ORIGIN || (process.env.NODE_ENV === 'production'
+  ? 'https://carmmessage-production.up.railway.app'
+  : 'http://localhost:5173')
 const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'local-only-change-this-secret')
 if (!jwtSecret) throw new Error('Set JWT_SECRET before starting in production.')
 const lightfmServiceUrl = process.env.LIGHTFM_SERVICE_URL || 'http://127.0.0.1:8001'
@@ -97,7 +100,7 @@ const backupEnumColumns: Record<string, Record<string, string>> = {
 
 app.disable('x-powered-by')
 app.use(helmet())
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173', credentials: true }))
+app.use(cors({ origin: clientOrigin, credentials: true }))
 app.use(express.json({ limit: '16mb' }))
 app.use(cookieParser())
 app.use('/api/auth', rateLimit({
@@ -519,7 +522,7 @@ app.post('/api/auth/password-reset/request', passwordResetRateLimit, asyncRoute(
     await prisma.passwordResetToken.create({
       data: { userId: user.id, tokenHash, expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
     })
-    const resetUrl = `${(process.env.CLIENT_ORIGIN || 'http://localhost:5173').replace(/\/$/, '')}/account/reset-password?token=${encodeURIComponent(token)}`
+    const resetUrl = `${clientOrigin.replace(/\/$/, '')}/account/reset-password?token=${encodeURIComponent(token)}`
     try {
       await sendEmail({
         to: parsed.data!.email,
@@ -690,7 +693,7 @@ app.post('/api/donations', rateLimit({
       } })
       return donation
     })
-    const configuredOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173'
+    const configuredOrigin = clientOrigin
     let returnOrigin = configuredOrigin
     if (process.env.NODE_ENV !== 'production') {
       const requestOrigin = req.get('origin')

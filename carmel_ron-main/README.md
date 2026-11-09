@@ -88,6 +88,8 @@ Signed-in members can find **Recommended for You** in their account navigation. 
 
 To build both applications, run `npm run build`.
 
+For Railway, set `CLIENT_ORIGIN` on the API service to the public website URL (for example, `https://carmmessage-production.up.railway.app`). Password-reset emails and Xendit checkout return links use this origin. If unset, production defaults to that Railway domain; local development defaults to `http://localhost:5173`.
+
 ## Prototype access
 
 For local demonstrations, set `DEMO_AUTH_ENABLED=true` and `NODE_ENV=development` in `server/.env`, then run the client and API using the commands above. Use these credentials:
