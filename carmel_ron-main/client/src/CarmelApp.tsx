@@ -1116,6 +1116,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       </div>
       <div className="carmelights-teaching-grid">{visibleTeachings.map((article) => <article className="carmelights-teaching-card" key={article.id}>
         <div className="carmelights-card-top"><span className="carmelights-category-tag">{article.category || 'Prayer'}</span><button type="button" className={`favorite-teaching ${favorites.includes(article.id) ? 'saved' : ''}`} onClick={() => toggleFavorite(article.id)} aria-label={favorites.includes(article.id) ? `Remove ${article.title} from favorites` : `Save ${article.title} to favorites`} aria-pressed={favorites.includes(article.id)} title={favorites.includes(article.id) ? 'Remove from favorites' : 'Save teaching'}><Heart size={16} fill={favorites.includes(article.id) ? 'currentColor' : 'none'} /></button></div>
+        <img className="carmelights-teaching-image" src={article.image || photo.chapel} alt={article.title} />
         <span className="carmelights-card-eyebrow">CARMELITE TEACHING</span>
         <h2>{article.title}</h2><b className="carmelights-card-author">{article.author}</b>
         <p>{article.body.split(/\n\s*\n/)[0]}</p>
@@ -1124,6 +1125,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       {visibleTeachings.length === 0 && <p className="content-empty">No teachings match your search.</p>}
       {selected && <div className={`carmelights-reading-backdrop ${fullView ? 'carmelights-reading-backdrop-full-view' : ''}`} role="presentation" onClick={closeStory}><article className={`carmelights-reading-dialog ${fullView ? 'carmelights-reading-dialog-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={selected.title} onClick={(event) => event.stopPropagation()}>
         <button className="carmelights-reading-close" type="button" onClick={closeStory} aria-label="Close teaching"><X size={20} /></button>
+        <img className="carmelights-reading-image" src={selected.image || photo.chapel} alt={selected.title} />
         <span className="carmelights-category-tag">{selected.category || 'Prayer'}</span>
         <span className="carmelights-reading-eyebrow">CARMELITE TEACHING</span>
         <h2>{selected.title}</h2>
@@ -3156,8 +3158,8 @@ function ContentAdminPage() {
         <label>Title<input required value={article.title} onChange={(event) => updateArticle('title', event.target.value)} placeholder={isLife ? 'Story title' : 'Teaching title'} /></label>
         <label>{isLife ? 'Sister / author' : 'Saint'}<input required value={article.author} onChange={(event) => updateArticle('author', event.target.value)} placeholder={isLife ? 'Name or community' : 'Saint name'} /></label>
         <label>Story<textarea required rows={7} value={article.body} onChange={(event) => updateArticle('body', event.target.value)} placeholder="Write the entry shown on the public page" /></label>
-        <label>Image URL<input value={article.image.startsWith('data:') ? '' : article.image} onChange={(event) => updateArticle('image', event.target.value)} placeholder="https://..." /></label>
-        <label className="content-image-picker">Upload image<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'article')} />{article.image && <img src={article.image} alt="Entry preview" />}</label>
+        <label>{isLife ? 'Story image URL' : 'Teaching image URL'}<input value={article.image.startsWith('data:') ? '' : article.image} onChange={(event) => updateArticle('image', event.target.value)} placeholder="https://..." /></label>
+        <label className="content-image-picker">{isLife ? 'Upload story image' : 'Upload teaching image'}<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'article')} />{article.image && <img src={article.image} alt="Entry image preview" />}</label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="content-editor-actions">
           <button className="button button-dark" type="submit">{editingArticle ? 'Save changes' : 'Publish entry'}</button>
