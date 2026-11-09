@@ -2299,6 +2299,15 @@ app.get('*', (req, res, next) => {
 })
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (
+    error instanceof SyntaxError
+    && 'status' in error
+    && error.status === 400
+    && 'type' in error
+    && error.type === 'entity.parse.failed'
+  ) {
+    return res.status(400).json({ error: 'Request body must contain valid JSON.' })
+  }
   console.error(error)
   res.status(500).json({ error: 'The request could not be completed. Please try again.' })
 })
