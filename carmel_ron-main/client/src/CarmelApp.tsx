@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Plus, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
-import { Area, AreaChart, CartesianGrid, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import attractedByTheVeilImage from './assets/attracted-by-the-veil.jpg'
 import vocationHeroImage from '../../assets/image_carmelife/vocation-to-carmel.png'
 import seekingFaceImage from '../../assets/image_carmelife/seeking-the-face.png'
@@ -29,6 +28,8 @@ import './carmelights-reference.css'
 import './mobile-experience.css'
 import HomepageReference from './HomepageReference'
 import { homeSectionCards, type HomeSectionKey } from './home-section-cards'
+
+const DonationChart = lazy(() => import('./DonationChart'))
 
 const cities = ['Angeles', 'Bacolod', 'Baguio', 'Cagayan de Oro', 'Castillejos', 'Cebu', 'Davao', 'Gumaca', 'Infanta']
 const nav = [['Home', '/'], ['Our Monastery', '/monasteries'], ['Carmelife', '/carmelife'], ['Discernment', '/discernment'], ['Carmelights', '/carmelights'], ['Donations', '/donations'], ['Updates', '/updates'], ['Contact us', '/contact'], ['About us', '/about']]
@@ -2539,7 +2540,7 @@ function DashboardPage() {
         <div className="panel-heading"><div><h2>Monthly donations & total amount</h2><p>Confirmed donation volume for {new Date().getFullYear()}.</p></div><span className="date-pill">{new Date().getFullYear()} Year-to-date</span></div>
         <div className="chart-switch">{['Both', 'Amount (₱)', 'Donation count'].map((item) => <button type="button" className={mode === item ? 'active' : ''} onClick={() => setMode(item)} key={item}>{item}</button>)}</div>
         <div className="chart-summary"><span>Selected month <b>{selected.month || monthNames[selectedMonth]} {new Date().getFullYear()}</b></span><span>Total offerings <b>{money(selected.amount)}</b></span><span>Confirmed donations <b>{selected.donations}</b></span></div>
-        <div className="chart-area">{!loading && summary?.confirmedCount === 0 ? <p className="staff-empty">No confirmed donations recorded yet.</p> : <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartRows} onMouseMove={(state) => { if (typeof state.activeTooltipIndex === 'number') setSelectedMonth(state.activeTooltipIndex) }} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}><defs><linearGradient id="givingFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8b5e3c" stopOpacity={0.2} /><stop offset="95%" stopColor="#8b5e3c" stopOpacity={0.01} /></linearGradient></defs><CartesianGrid strokeDasharray="3 5" vertical={false} stroke="#eee6dc" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#8f8378', fontSize: 11 }} /><YAxis axisLine={false} tickLine={false} tick={{ fill: '#8f8378', fontSize: 10 }} tickFormatter={(value) => `${value / 1000}k`} /><Tooltip /><Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />{mode !== 'Donation count' && <Area type="monotone" dataKey="amount" name="Offering amount" stroke="#8b5e3c" fill="url(#givingFill)" strokeWidth={2.5} />}{mode !== 'Amount (₱)' && <Line type="monotone" dataKey="donations" name="Confirmed donations" stroke="#729278" strokeWidth={2.5} dot={{ r: 3 }} />}</AreaChart></ResponsiveContainer>}</div>
+        <div className="chart-area">{!loading && summary?.confirmedCount === 0 ? <p className="staff-empty">No confirmed donations recorded yet.</p> : <Suspense fallback={<p className="staff-empty">Loading chart…</p>}><DonationChart rows={chartRows} mode={mode} onActiveMonthChange={setSelectedMonth} /></Suspense>}</div>
       </section>
       <section className="admin-panel demographics-panel">
         <div className="panel-heading"><div><h2>Donor details</h2><p>Confirmed gifts by donor preference</p></div></div>

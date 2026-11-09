@@ -5,10 +5,29 @@ import { homeSectionCards, type HomeSectionKey } from './home-section-cards'
 import './homepage-reference.css'
 
 const cities = ['Angeles', 'Bacolod', 'Baguio', 'Cagayan de Oro', 'Castillejos', 'Cebu', 'Davao', 'Gumaca', 'Infanta']
+const heroImageCacheKey = 'carmel-home-hero-image-v1'
+
+function getCachedHeroImage() {
+  try {
+    return localStorage.getItem(heroImageCacheKey) || '/assets/images/landingcarm.png'
+  } catch (error) {
+    console.error('Unable to read the cached homepage image.', error)
+    return '/assets/images/landingcarm.png'
+  }
+}
+
+function cacheHeroImage(image: string | null) {
+  try {
+    if (image) localStorage.setItem(heroImageCacheKey, image)
+    else localStorage.removeItem(heroImageCacheKey)
+  } catch (error) {
+    console.error('Unable to cache the homepage image.', error)
+  }
+}
 
 export default function HomepageReference() {
   const cards = useRef<HTMLDivElement>(null)
-  const [heroImage, setHeroImage] = useState('/assets/images/landingcarm.png')
+  const [heroImage, setHeroImage] = useState(getCachedHeroImage)
   const [sectionImages, setSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>({})
 
   function scrollCards(direction: number) {
@@ -21,7 +40,10 @@ export default function HomepageReference() {
       try {
         const response = await fetch('/api/content/HOME_HERO_IMAGE')
         if (response.status === 404) {
-          if (active) setHeroImage('/assets/images/landingcarm.png')
+          if (active) {
+            setHeroImage('/assets/images/landingcarm.png')
+            cacheHeroImage(null)
+          }
           return
         }
         if (!response.ok) throw new Error('The saved homepage image could not be loaded.')
@@ -30,7 +52,10 @@ export default function HomepageReference() {
         const savedImage = blocks && typeof blocks === 'object' && !Array.isArray(blocks) && 'image' in blocks && typeof blocks.image === 'string' && blocks.image.trim()
           ? blocks.image
           : null
-        if (active) setHeroImage(savedImage || '/assets/images/landingcarm.png')
+        if (active) {
+          setHeroImage(savedImage || '/assets/images/landingcarm.png')
+          cacheHeroImage(savedImage)
+        }
       } catch (error) {
         console.error('Unable to load the saved homepage image.', error)
       }
