@@ -703,7 +703,7 @@ app.post('/api/donations', rateLimit({
     })
     const configuredOrigin = clientOrigin
     let returnOrigin = configuredOrigin
-    if (process.env.NODE_ENV !== 'production') {
+    if (!isProduction) {
       const requestOrigin = req.get('origin')
       if (requestOrigin) {
         try {
