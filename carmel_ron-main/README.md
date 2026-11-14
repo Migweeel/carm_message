@@ -1,6 +1,6 @@
 # Carmels in Communion
 
-A React and Express prototype for the Philippine Federation of Discalced Carmelite Nuns. The client contains the public website and administration dashboard; the server provides API routes backed by PostgreSQL and Prisma.
+A React and Express application for the Philippine Federation of Discalced Carmelite Nuns. The client contains the public website and administration dashboard; the server provides API routes backed by PostgreSQL and Prisma.
 
 ## Requirements
 
@@ -49,7 +49,7 @@ Donors can request an email acknowledgment during checkout. The server sends it 
 
 Discerner registrations, discernment conversations and replies, contact inquiries, and Admin-managed website content are stored by the API in PostgreSQL, not in the visitor's browser. Discerning users can message the Federation from their account; the public floating chat also creates a saved conversation, with a signed HttpOnly visitor cookie allowing the visitor to receive and reply to staff messages without signing in. Admins and Formators can read and reply from the dashboard inbox, which refreshes automatically. The dashboard Messages badge and notification bell refresh from the API; the badge counts unread incoming messages, and the notification list includes recent messages, account registrations, donations, dashboard audit activity, published updates, and managed website-content changes. Opening an unread message marks its incoming messages as read for the staff inbox. The homepage image, About Us images, monastery details, Carmelife/Carmelights stories, Contact Us page image and details, and published Carmelinks updates use the `PageContent` table. Admins and Formators with Manage Details permission can update the eight About Us pictures under **Manage Details → About Us** and the Contact Us page image plus the public phone number, email, Facebook link, and location under **Manage Details → Contact Us**. Existing browser-managed monastery, story, and update data is copied to PostgreSQL the first time an Admin opens the relevant content section, if no database record exists yet. Content changes report an error if the API or database is unavailable; they are not treated as successfully saved to local storage alone.
 
-Admin account management, including User and Formator counts, contact details, account status, Formator creation, and Formator permissions, is backed by PostgreSQL. Formator accounts use hashed passwords and share the same database-backed sign-in as other accounts. Some prototype dashboard features and member preferences remain browser-local and are not shared between browsers. For production, point `DATABASE_URL` at a managed PostgreSQL database with persistent storage and backups. Keep that database independent from the website host so removing or redeploying the website does not remove records. Database retention and backups depend on the database provider and its configuration.
+Account registration and management, including User and Staff counts, contact details, account status, Staff creation, password changes, and permissions, use the authenticated API and PostgreSQL. Passwords are stored as hashes. Database-backed actions require the API and PostgreSQL to be available; browser storage is used only for non-authoritative caches and interface state. For production, point `DATABASE_URL` at a managed PostgreSQL database with persistent storage and backups. Keep that database independent from the website host so removing or redeploying the website does not remove records. Database retention and backups depend on the database provider and its configuration.
 
 The Carmelights content-admin section includes 30-day teaching-view and current-member-bookmark analytics. Opening a published teaching records a view; repeated views from the same browser or consented member are deduplicated per UTC day. Member-linked activity is recorded only for active accounts with recorded privacy consent; anonymous views store no user ID. To add the `ContentInteraction` table to an existing database, run `npm run db:generate` followed by `npm run db:push`. These analytics are engagement reporting only; a LightFM recommendation model and personalized reading recommendations are not currently implemented.
 
@@ -84,38 +84,23 @@ npm run dev
 
 The API is exposed only on local loopback port 8001 and the model artifact persists in the `lightfm-models` Docker volume. After signing in as an Admin, open **Manage Details → Carmelight** and choose **Train model**. Training requires at least two members, three published teachings, and six member-reading pairs; until then the model stays untrained and the site continues to use popularity fallback. The training result includes a timestamp-based offline ranking evaluation against a popularity baseline when there is enough test data; otherwise it explicitly reports that evaluation is unavailable. Latent components, epochs, view weight, and bookmark weight can be configured through `LATENT_COMPONENTS`, `TRAINING_EPOCHS`, `VIEW_WEIGHT`, and `BOOKMARK_WEIGHT` in the recommender environment.
 
-Signed-in members can find **Recommended for You** in their account navigation. Recommendations show reading cards and never expose other members' identities, histories, model scores, or private account data. Docker's Linux container avoids compiling LightFM directly on Windows. For production, deploy the API and recommender on a private network, set a unique shared secret, retain the model volume, use HTTPS at the public edge, and use a managed persistent database. Retrain periodically from the protected Admin action as interaction data grows; do not rely on fabricated interactions to evaluate the model.
+Signed-in members can find **Recommended for You** in their account navigation. Recommendations show reading cards and never expose other members' identities, histories, model scores, or private account data. Docker's Linux container avoids compiling LightFM directly on Windows. For production, deploy the API and recommender on a private network, set a unique shared secret, retain the model volume, use HTTPS at the public edge, and use a managed persistent database. Retrain periodically from the protected Admin action as interaction data grows; do not use fabricated interactions to evaluate the model.
 
 To build both applications, run `npm run build`.
 
 Password-reset emails and Xendit checkout return links use the public website origin. On Railway, the server uses `PUBLIC_APP_URL` when set, otherwise it builds the HTTPS origin from `RAILWAY_PUBLIC_DOMAIN`; it falls back to `https://carmmessage-production.up.railway.app` for other production deployments. Production URLs must use HTTPS and cannot point to localhost. Local development uses `CLIENT_ORIGIN` or defaults to `http://localhost:5173`.
 
-## Local accounts and saved content
-
-Browser-only demo accounts and local-only CRUD have been removed. Member and staff sign-in, managed content, homepage images, updates, messages, profiles, donations, and discernment features use the API and PostgreSQL; browser storage is not the authoritative store. Follow **Run locally** above to start PostgreSQL, prepare the database, and run both the client and API. Without the API and database, public pages can still be previewed, but sign-in and database-backed features will be unavailable.
-
-To preview only the public pages without PostgreSQL, start the Vite client:
-
-```powershell
-npm --prefix client run dev -- --host 127.0.0.1
-```
-
-## Contributor and Copilot handoff
-
-When making requested design or functionality changes for this project, update the application source and keep production accounts, managed content, and other shared data connected to their existing API and PostgreSQL flows. Update this README when a change affects behavior, setup, permissions, or database migrations, and record notable user-requested code changes here so future maintainers and Copilot sessions have context.
-
 ### Recent code changes
 
 - **2026-11-14 — Staff display name:** The website now displays the role previously labeled “Formator” as “Staff.” This is a display-only wording change; internal code, database role values (`FORMATOR`), API routes, and existing account credentials remain unchanged.
-- **2026-11-14 — About Us image editing:** Admins and Formators with Manage Details permission can replace or upload the eight images used on the About Us page from Manage Details → About Us. Database-backed changes are shared across visitors.
+- **2026-11-14 — About Us image editing:** Admins and Formators with Manage Details permission can replace or upload the eight images used on the About Us page from Manage Details → About Us. Changes are saved to PostgreSQL and shared across visitors.
 - **2026-11-14 — Contact Us image editing:** Manage Details → Contact Us includes the Contact Us page hero image as well as the public contact information; changes are saved with the shared website content.
-- **2026-11-13 — Database-free role previews and content editing:** Demo Admin and Formator sign-ins open their respective dashboard layouts, and the demo Member opens the account panels. Without PostgreSQL, edits to managed website pages, homepage images, thumbnails, and Updates are saved only in the current browser's local storage; they do not change project source files or production database records. Demo profile data and features requiring server data remain local or unavailable.
 - **2026-11-13 — Update category choices:** Removed **Community life**, **Meeting**, and **Official Letters** from the Admin create/edit category selectors and the public Updates category filters. Existing posts are not deleted or recategorized; they remain visible under **All Updates**.
 - **2026-11-13 — Carmelights teaching display:** Removed the fixed reflection callout from the teaching reader. Public teaching cards and full readings show the title, author, and text maintained in Manage Details → Carmelights.
 - **2026-11-13 — Carmelights category and saint selectors:** The Admin Carmelights editor allows typing categories and saint names or choosing from suggestions for existing values and common Carmelite saints. The public page has adjacent, unlabeled category and saint dropdowns that can be used together to filter teachings; saved custom categories and saints are included.
 
-## Prototype access
+## Account access
 
-Create a database-backed administrator by setting `ADMIN_EMAIL` and a unique `ADMIN_PASSWORD` of at least 16 characters in `server/.env`, then run `npm run db:seed`. Do not use shared or default credentials. Sign in at `/staff/login`; user and discerner accounts cannot access staff dashboards. Website content, user accounts, Formator accounts, and uploaded images are stored in PostgreSQL; URL-based images remain dependent on their external host. Discerner registration and contact inquiries also use the PostgreSQL-backed API described above.
+Create an administrator by setting `ADMIN_EMAIL` and a unique `ADMIN_PASSWORD` of at least 16 characters in `server/.env`, then run `npm run db:seed`. Do not use shared or default credentials. Sign in at `/staff/login`; User accounts cannot access staff dashboards. Website content, User and Staff accounts, and uploaded images are stored in PostgreSQL; URL-based images remain dependent on their external host. Discerner registration and contact inquiries also use the PostgreSQL-backed API described above.
 
 Never commit `server/.env` or production secrets; only the `.env.example` template belongs in Git.

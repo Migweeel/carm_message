@@ -1500,6 +1500,15 @@ app.post('/api/content/interactions', asyncRoute(async (req, res) => {
   `)
   res.status(204).end()
 }))
+app.get('/api/account/favorites', authenticate, allowRoles('USER'), asyncRoute(async (req, res) => {
+  const interactions = await prisma.contentInteraction.findMany({
+    where: { userId: req.auth!.id, eventType: { in: ['BOOKMARK', 'UNBOOKMARK'] } },
+    distinct: ['readingId'],
+    orderBy: [{ readingId: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
+    select: { readingId: true, eventType: true },
+  })
+  res.json({ favorites: interactions.filter((interaction) => interaction.eventType === 'BOOKMARK').map((interaction) => interaction.readingId) })
+}))
 const managedMonasterySchema = z.object({
   id: z.string().min(1).max(100),
   name: z.string().trim().min(1).max(200),
