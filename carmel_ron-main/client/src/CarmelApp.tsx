@@ -1729,7 +1729,7 @@ function DonationsPage() {
     if (xenditEnabled) {
       setCheckoutStarting(true)
       try {
-        const response = await fetch('/api/donations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...gift, amount, fund }) })
+        const response = await fetch('/api/donations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...gift, amount, fund }) })
         const result = await readApiResponse<{ invoiceUrl?: string }>(response, 'Starting secure checkout')
         if (!result.invoiceUrl) throw new Error('Xendit did not return a checkout link. Please try again.')
         window.location.assign(result.invoiceUrl)
@@ -1742,7 +1742,7 @@ function DonationsPage() {
       return
     }
     try {
-      const response = await fetch('/api/donations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...gift, amount, fund }) })
+      const response = await fetch('/api/donations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...gift, amount, fund }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Your offering could not be recorded.')
       setReceiptCode(result.donation.referenceCode)

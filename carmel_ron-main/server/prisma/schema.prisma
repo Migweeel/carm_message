@@ -90,6 +90,7 @@ model User {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   auditLogs    AuditLog[]
+  donations    Donation[]   @relation("UserDonations")
   discernment  Discernment?
   conversations Conversation[] @relation("UserConversations")
   staffConversations Conversation[] @relation("StaffConversations")
@@ -161,6 +162,8 @@ model Donation {
   paymentReference      String?
   beneficiaryMonasteryId String?
   beneficiaryMonastery  Monastery?     @relation(fields: [beneficiaryMonasteryId], references: [id], onDelete: SetNull)
+  userId                 String?
+  user                   User?          @relation("UserDonations", fields: [userId], references: [id], onDelete: SetNull)
   status                DonationStatus @default(PENDING)
   files                 DonationFile[]
   createdAt             DateTime       @default(now())
@@ -168,6 +171,7 @@ model Donation {
 
   @@index([status, createdAt])
   @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 model DonationFile {

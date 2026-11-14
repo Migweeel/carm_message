@@ -80,7 +80,7 @@ const backupTables = [
   { name: 'User', columns: ['id', 'name', 'email', 'phone', 'address', 'privacyConsentAt', 'privacyPolicyVersion', 'discernmentTrackingConsentAt', 'passwordHash', 'role', 'isActive', 'canManageUsers', 'canManageDetails', 'canManageUpdates', 'createdAt', 'updatedAt'], uniqueColumns: ['email'] },
   { name: 'Monastery', columns: ['id', 'name', 'city', 'slug', 'description', 'imageUrl', 'address', 'contact', 'sortOrder', 'createdAt', 'updatedAt'], uniqueColumns: ['slug'] },
   { name: 'Discernment', columns: ['id', 'userId', 'stage', 'monastery', 'note', 'createdAt', 'updatedAt'], uniqueColumns: ['userId'] },
-  { name: 'Donation', columns: ['id', 'referenceCode', 'amount', 'type', 'fund', 'paymentMethod', 'xenditInvoiceId', 'xenditInvoiceUrl', 'paymongoPaymentIntentId', 'paymongoQrImageUrl', 'paymongoQrExpiresAt', 'isManual', 'isAnonymous', 'donorName', 'donorEmail', 'donorPhone', 'wantsReceipt', 'receiptEmailSentAt', 'receiptEmailSendingAt', 'paymentReference', 'beneficiaryMonasteryId', 'status', 'createdAt', 'updatedAt'], uniqueColumns: ['referenceCode', 'xenditInvoiceId', 'paymongoPaymentIntentId'] },
+  { name: 'Donation', columns: ['id', 'referenceCode', 'amount', 'type', 'fund', 'paymentMethod', 'xenditInvoiceId', 'xenditInvoiceUrl', 'paymongoPaymentIntentId', 'paymongoQrImageUrl', 'paymongoQrExpiresAt', 'isManual', 'isAnonymous', 'donorName', 'donorEmail', 'donorPhone', 'wantsReceipt', 'receiptEmailSentAt', 'receiptEmailSendingAt', 'paymentReference', 'beneficiaryMonasteryId', 'userId', 'status', 'createdAt', 'updatedAt'], uniqueColumns: ['referenceCode', 'xenditInvoiceId', 'paymongoPaymentIntentId'] },
   { name: 'DonationFile', columns: ['id', 'donationId', 'fileUrl', 'type', 'fileName', 'createdAt'], uniqueColumns: [] },
   { name: 'Conversation', columns: ['id', 'userId', 'name', 'email', 'subject', 'category', 'isRead', 'lastMessageAt', 'createdAt'], uniqueColumns: ['userId'] },
   { name: 'Message', columns: ['id', 'conversationId', 'senderId', 'senderType', 'body', 'readAt', 'createdAt'], uniqueColumns: [] },
@@ -93,7 +93,7 @@ const backupTables = [
 ] as const
 const backupDependencies: Record<string, Array<{ table: string; column: string }>> = {
   Discernment: [{ table: 'User', column: 'userId' }],
-  Donation: [{ table: 'Monastery', column: 'beneficiaryMonasteryId' }],
+  Donation: [{ table: 'Monastery', column: 'beneficiaryMonasteryId' }, { table: 'User', column: 'userId' }],
   DonationFile: [{ table: 'Donation', column: 'donationId' }],
   Conversation: [{ table: 'User', column: 'userId' }],
   Message: [{ table: 'Conversation', column: 'conversationId' }, { table: 'User', column: 'senderId' }],
@@ -147,6 +147,10 @@ app.use('/api/discernment/activity', rateLimit({ windowMs: 15 * 60 * 1000, limit
 const cookieOptions = { httpOnly: true, secure: isProduction, sameSite: 'strict' as const, path: '/' }
 const visitorChatCookieOptions = { ...cookieOptions, path: '/api/chat' }
 type AuthRequest = Request & { auth?: { id: string; role: 'ADMIN' | 'FORMATOR' | 'USER'; canManageUsers: boolean; canManageDetails: boolean; canManageUpdates: boolean } }
+async function optionalAuthenticate(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.cookies?.carmel_session) return next()
+  return authenticate(req, res, next)
+}
 async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
   const token = req.cookies?.carmel_session as string | undefined
   if (!token) return res.status(401).json({ error: 'Sign in is required.' })
@@ -638,7 +642,7 @@ app.post('/api/donations', rateLimit({
   handler: (_req, res) => res.setHeader('Retry-After', '900').status(429).json({
     error: 'Too many donation checkout attempts. Please wait 15 minutes before trying again.',
   }),
-}), asyncRoute(async (req, res) => {
+}), optionalAuthenticate, asyncRoute(async (req, res) => {
   const parsed = validate(donationSchema, req.body)
   if (parsed.error) return res.status(400).json({ error: 'Please check the donation details.', details: parsed.error })
   const input = parsed.data!
@@ -655,6 +659,7 @@ app.post('/api/donations', rateLimit({
         fund: input.fund,
         paymentMethod: input.payment,
         isAnonymous: input.anonymous,
+        ...(req.auth?.role === 'USER' ? { userId: req.auth.id } : {}),
         donorName: input.anonymous ? null : input.name || null,
         donorEmail: input.anonymous && !input.receipt ? null : input.email || null,
         donorPhone: input.anonymous && !input.receipt ? null : input.phone || null,
@@ -771,6 +776,7 @@ app.post('/api/donations', rateLimit({
       fund: input.fund,
       paymentMethod: input.payment,
       isAnonymous: input.anonymous,
+      ...(req.auth?.role === 'USER' ? { userId: req.auth.id } : {}),
       donorName: retainName ? input.name || null : null,
       donorEmail: retainName || input.receipt ? input.email || null : null,
       donorPhone: retainName || input.receipt ? input.phone || null : null,
@@ -921,7 +927,11 @@ app.post('/api/donations/xendit-webhook', asyncRoute(async (req, res) => {
 app.get('/api/donations/mine', authenticate, allowRoles('USER'), asyncRoute(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.auth!.id }, select: { email: true, isActive: true } })
   if (!user?.isActive) return res.status(401).json({ error: 'This account is inactive.' })
-  const donations = await prisma.donation.findMany({ where: { donorEmail: user.email }, orderBy: { createdAt: 'desc' }, select: { referenceCode: true, amount: true, paymentMethod: true, status: true, createdAt: true, fund: true } })
+  const donations = await prisma.donation.findMany({
+    where: { OR: [{ userId: req.auth!.id }, { donorEmail: user.email }] },
+    orderBy: { createdAt: 'desc' },
+    select: { referenceCode: true, amount: true, paymentMethod: true, status: true, createdAt: true, fund: true },
+  })
   res.json({ donations })
 }))
 const discernmentStages = ['EXPLORING', 'PRAYING_AND_LEARNING', 'READY_TO_VISIT', 'IN_CONVERSATION'] as const
