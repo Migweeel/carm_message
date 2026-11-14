@@ -103,4 +103,6 @@ Password-reset emails and Xendit checkout return links use the public website or
 
 Create an administrator by setting `ADMIN_EMAIL` and a unique `ADMIN_PASSWORD` of at least 16 characters in `server/.env`, then run `npm run db:seed`. Do not use shared or default credentials. Sign in at `/staff/login`; User accounts cannot access staff dashboards. Website content, User and Staff accounts, and uploaded images are stored in PostgreSQL; URL-based images remain dependent on their external host. Discerner registration and contact inquiries also use the PostgreSQL-backed API described above.
 
+The sign-in pages also offer local demo accounts for previewing the Admin, Staff, and Member interfaces. Demo sessions and demo content edits stay in that browser and do not authenticate with the API or change PostgreSQL. Demo accounts cannot submit donations. Use a database-backed account for real account, content, and donation activity.
+
 Never commit `server/.env` or production secrets; only the `.env.example` template belongs in Git.

@@ -9,6 +9,16 @@ const heroImageCacheKey = 'carmel-home-hero-image-v2'
 const heroImageFallback = '/assets/images/home-hero.jpg'
 const maxInlineHeroImageLength = 350_000
 
+function isLocalPreviewSession() {
+  try {
+    const staff = JSON.parse(localStorage.getItem('carmel-prototype-session') || 'null') as { demo?: boolean } | null
+    const member = JSON.parse(localStorage.getItem('carmel-member-session') || 'null') as { demo?: boolean } | null
+    return staff?.demo === true || member?.demo === true
+  } catch {
+    return false
+  }
+}
+
 function getCachedHeroImage() {
   try {
     return localStorage.getItem(heroImageCacheKey) || heroImageFallback
@@ -46,6 +56,10 @@ export default function HomepageReference() {
   useEffect(() => {
     let active = true
     async function loadHeroImage() {
+      if (isLocalPreviewSession()) {
+        if (active) setHeroImage(getCachedHeroImage())
+        return
+      }
       try {
         const response = await fetch('/api/content/HOME_HERO_IMAGE')
         if (response.status === 404) {
@@ -83,6 +97,15 @@ export default function HomepageReference() {
   useEffect(() => {
     let active = true
     async function loadSectionImages() {
+      if (isLocalPreviewSession()) {
+        try {
+          const saved = JSON.parse(localStorage.getItem('carmel-home-section-images-v2') || '{}') as Partial<Record<HomeSectionKey, string>>
+          if (active) setSectionImages(saved)
+        } catch (error) {
+          console.error('Unable to load local homepage thumbnails.', error)
+        }
+        return
+      }
       try {
         const response = await fetch('/api/content/HOME_SECTION_IMAGES')
         if (response.status === 404) {

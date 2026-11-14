@@ -261,6 +261,10 @@ function readManagedContent(): ManagedSiteContent {
 }
 async function saveManagedContent(content: ManagedSiteContent) {
   const versionedContent = { ...content, monasteriesVersion: 2 }
+  if (isLocalDemoSession()) {
+    cacheManagedContent(versionedContent)
+    return
+  }
   const response = await fetch('/api/admin/content/SITE_MANAGED', {
     method: 'PUT',
     credentials: 'include',
@@ -281,6 +285,7 @@ async function saveManagedContentRecord(
   id: string,
   record: ManagedMonastery | ManagedArticle | null,
 ) {
+  if (isLocalDemoSession()) return
   const response = await fetch(`/api/admin/content/SITE_MANAGED/${collection}/${encodeURIComponent(id)}`, {
     method: record ? 'PUT' : 'DELETE',
     credentials: 'include',
@@ -297,6 +302,7 @@ function useManagedContent() {
     const refresh = () => setContent(readManagedContent())
     let active = true
     async function load() {
+      if (isLocalDemoSession()) return
       try {
         const response = await fetch('/api/content/SITE_MANAGED')
         if (response.status === 404) return
@@ -322,7 +328,7 @@ const memberSessionKey = 'carmel-member-session'
 const memberSessionUpdatedEvent = 'carmel-member-session-updated'
 const directThreadsUpdatedEvent = 'carmel-direct-threads-updated'
 type MemberGender = 'MALE' | 'FEMALE' | 'ANONYMOUS'
-type MemberAccount = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: 'USER'; discernmentTrackingEnabled?: boolean }
+type MemberAccount = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: 'USER'; prototype?: boolean; demo?: true; discernmentTrackingEnabled?: boolean }
 function useMemberFavorites(member: MemberAccount | null) {
   const [favorites, setFavorites] = useState<string[]>([])
   const [loading, setLoading] = useState(Boolean(member))
@@ -334,6 +340,13 @@ function useMemberFavorites(member: MemberAccount | null) {
       setLoading(false)
       return () => { active = false }
     }
+    if (member.demo) {
+      setFavorites(readMemberFavorites(member.email))
+      setError('')
+      setLoading(false)
+      return () => { active = false }
+    }
+    setLoading(true)
     async function loadFavorites() {
       try {
         const response = await fetch('/api/account/favorites', { credentials: 'include' })
@@ -350,9 +363,17 @@ function useMemberFavorites(member: MemberAccount | null) {
     }
     void loadFavorites()
     return () => { active = false }
-  }, [member?.id])
+  }, [member?.id, member?.demo, member?.email])
   async function setFavorite(readingId: string, bookmarked: boolean) {
     setError('')
+    if (member?.demo) {
+      const next = bookmarked
+        ? favorites.includes(readingId) ? favorites : [...favorites, readingId]
+        : favorites.filter((id) => id !== readingId)
+      localStorage.setItem(memberFavoriteKey(member.email), JSON.stringify(next))
+      setFavorites(next)
+      return
+    }
     try {
       const response = await fetch('/api/content/interactions', {
         method: 'POST',
@@ -408,8 +429,8 @@ function readMemberSession(): MemberAccount | null {
     for (const key of ['carmel-prototype-staff', 'carmel-prototype-users', 'carmel-prototype-admin-profile']) {
       localStorage.removeItem(key)
     }
-    const account = JSON.parse(localStorage.getItem(memberSessionKey) || 'null') as (MemberAccount & { prototype?: boolean; demo?: boolean }) | null
-    if (account?.prototype || account?.demo) {
+    const account = JSON.parse(localStorage.getItem(memberSessionKey) || 'null') as MemberAccount | null
+    if (account?.prototype && account.demo !== true) {
       localStorage.removeItem(memberSessionKey)
       return null
     }
@@ -443,7 +464,7 @@ function useDiscernmentTrackingEnabled(member: MemberAccount | null) {
   const enabled = Boolean(memberEmail && status.email === memberEmail && status.enabled)
   useEffect(() => {
     let active = true
-    if (!memberEmail) return
+    if (!memberEmail || member?.prototype) return
     const refresh = (event?: Event) => {
       if (event instanceof CustomEvent && typeof event.detail === 'boolean') {
         setStatus({ email: memberEmail, enabled: event.detail })
@@ -464,7 +485,7 @@ function useDiscernmentTrackingEnabled(member: MemberAccount | null) {
       active = false
       window.removeEventListener(discernmentTrackingEvent, refresh)
     }
-  }, [memberEmail])
+  }, [memberEmail, member?.prototype])
   return enabled
 }
 function useDiscernmentActivityTimer(enabled: boolean, type: 'SITE_TIME' | 'READING_TIME', readingId?: string) {
@@ -543,12 +564,22 @@ function DiscernmentSiteActivityTracker() {
   useDiscernmentActivityTimer(trackingEnabled, 'SITE_TIME')
   return null
 }
+function memberDonationKey(email: string) { return `carmel-member-donations:${email.toLowerCase()}` }
+function memberFavoriteKey(email: string) { return `carmel-member-favorites:${email.toLowerCase()}` }
+function memberDiscernmentKey(email: string) { return `carmel-member-discernment:${email.toLowerCase()}` }
+function moveMemberData(oldEmail: string, newEmail: string) {
+  if (oldEmail.toLowerCase() === newEmail.toLowerCase()) return
+  const entries = [[memberDonationKey(oldEmail), memberDonationKey(newEmail)], [memberFavoriteKey(oldEmail), memberFavoriteKey(newEmail)], [memberDiscernmentKey(oldEmail), memberDiscernmentKey(newEmail)]]
+  for (const [oldKey, newKey] of entries) { const value = localStorage.getItem(oldKey); if (value !== null) { localStorage.setItem(newKey, value); localStorage.removeItem(oldKey) } }
+}
+function readMemberFavorites(email: string): string[] { try { return JSON.parse(localStorage.getItem(memberFavoriteKey(email)) || '[]') as string[] } catch { return [] } }
+
 function Brand({ light = false }: { light?: boolean }) {
   return <Link to="/" className={`brand ${light ? 'brand-light' : ''}`}><span className="brand-mark" aria-hidden="true"><img className="brand-image" src="/assets/logo.png" alt="" /></span><span className="brand-name">Carmels in Communion</span></Link>
 }
 const staffSessionUpdatedEvent = 'carmel-staff-session-updated'
 const siteSearchHistoryKey = 'carmel-site-search-history'
-type PublicProfile = { id: string; name: string; email: string; role: 'USER' | 'ADMIN' | 'FORMATOR' }
+type PublicProfile = { id: string; name: string; email: string; role: 'USER' | 'ADMIN' | 'FORMATOR'; prototype?: boolean }
 type SiteSearchItem = { title: string; detail: string; path: string; searchableText: string }
 function readSiteSearchHistory(): string[] {
   try {
@@ -559,7 +590,10 @@ function readSiteSearchHistory(): string[] {
   }
 }
 function readPublicProfile(): PublicProfile | null {
-  return readMemberSession()
+  const member = readMemberSession()
+  if (member) return member
+  const staff = readPrototypeSession()
+  return staff && (staff.role === 'ADMIN' || staff.role === 'FORMATOR') ? { id: staff.id, name: staff.name, email: staff.email, role: staff.role, prototype: true } : null
 }
 function Navbar() {
   const [open, setOpen] = useState(false)
@@ -603,8 +637,8 @@ function Navbar() {
   }, [])
   function signOut() {
     if (profile?.role === 'USER') saveMemberSession(null)
-    navigator.sendBeacon('/api/auth/logout')
-    window.dispatchEvent(new Event(staffSessionUpdatedEvent))
+    else { localStorage.removeItem(prototypeSessionKey); window.dispatchEvent(new Event(staffSessionUpdatedEvent)) }
+    if (!profile?.prototype) navigator.sendBeacon('/api/auth/logout')
     setProfileOpen(false)
     setOpen(false)
     navigate('/')
@@ -1088,6 +1122,9 @@ function readSiteUpdates(): SiteUpdate[] {
   } catch { return defaultSiteUpdates }
 }
 async function fetchSiteUpdates(migrateLegacy = false): Promise<SiteUpdate[] | null> {
+  if (isLocalDemoSession()) {
+    return readSiteUpdates()
+  }
   const response = await fetch('/api/content/SITE_UPDATES')
   if (response.status === 404) return null
   const result = await response.json()
@@ -1108,6 +1145,11 @@ async function fetchSiteUpdates(migrateLegacy = false): Promise<SiteUpdate[] | n
   return updatesWithHighlights
 }
 async function persistSiteUpdates(updates: SiteUpdate[]): Promise<SiteUpdate[]> {
+  if (isLocalDemoSession()) {
+    localStorage.setItem(prototypeUpdatesKey, JSON.stringify(updates))
+    window.dispatchEvent(new Event('carmel-updates-updated'))
+    return updates
+  }
   const response = await fetch('/api/admin/content/SITE_UPDATES', {
     method: 'PUT',
     credentials: 'include',
@@ -1122,6 +1164,12 @@ async function persistSiteUpdates(updates: SiteUpdate[]): Promise<SiteUpdate[]> 
   return savedUpdates
 }
 async function persistSiteUpdateRecord(id: string, update: SiteUpdate | null) {
+  if (isLocalDemoSession()) {
+    const updates = readSiteUpdates().filter((item) => item.id !== id)
+    if (update) updates.unshift(update)
+    await persistSiteUpdates(updates)
+    return
+  }
   const response = await fetch(`/api/admin/content/SITE_UPDATES/${encodeURIComponent(id)}`, {
     method: update ? 'PUT' : 'DELETE',
     credentials: 'include',
@@ -1496,7 +1544,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
     return () => { active = false }
   }, [isLife, kind])
   useEffect(() => {
-    if (isLife || kind === 'updates' || !selectedId) return
+    if (isLife || kind === 'updates' || !selectedId || isLocalDemoSession()) return
     void fetch('/api/content/interactions', {
       method: 'POST',
       credentials: 'include',
@@ -1725,6 +1773,10 @@ function DonationsPage() {
   function next() { setError(''); if (step === 0 && amount < 50) return setError('Please choose an amount of at least ₱50.'); if (step === 2 && !gift.anonymous && (!gift.name.trim() || !gift.email.includes('@'))) return setError('Please provide your name and a valid email address.'); if (step === 2 && gift.receipt && !gift.email.trim().includes('@')) return setError('Enter a valid email address for your acknowledgment receipt.'); setStep(Math.min(step + 1, 3)) }
   async function complete() {
     setError('')
+    if (isLocalDemoSession()) {
+      setError('Local demo accounts cannot submit or create donations. Sign out to make a real donation.')
+      return
+    }
     const fund = giftLabels[giftAmounts.indexOf(amount)] || 'Federation formation program'
     if (xenditEnabled) {
       setCheckoutStarting(true)
@@ -1764,15 +1816,21 @@ function DonationsPage() {
     {!receiptCode && <div className="trust-row"><span><ShieldCheck />100% Direct to Monasteries</span><span><User />Anonymous Giving Supported</span><span><Smartphone />Helpline: (0921) 419-2267</span></div>}</div>
 }
 type StaffRole = 'ADMIN' | 'FORMATOR'
-type PrototypeStaff = { id: string; name: string; email: string; role: StaffRole; passwordHash?: string; isActive?: boolean; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
+type PrototypeStaff = { id: string; name: string; email: string; role: StaffRole; passwordHash?: string; isActive?: boolean; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean; prototype?: boolean; demo?: true }
 type FormatorPermissionKey = 'canManageUsers' | 'canManageDetails' | 'canManageUpdates'
 type PermissionAction = 'GRANT' | 'REVOKE'
 type PendingPermission = { staff: PrototypeStaff[]; memberName: string; labels: string[]; action: PermissionAction }
+const prototypeSessionKey = 'carmel-prototype-session'
 const prototypeUsersKey = 'carmel-prototype-users'
 const demoAdminProfileKey = 'carmel-prototype-admin-profile'
 const permissionRequestEvent = 'carmel-permission-requested'
 const staffUpdatedEvent = 'carmel-staff-updated'
 const prototypeStaffKey = 'carmel-prototype-staff'
+const localDemoAccounts = {
+  admin: { id: 'local-demo-admin', name: 'Demo Administrator', email: 'demo.admin@carmel.test', password: 'DemoAdmin2026!', role: 'ADMIN' as const },
+  formator: { id: 'local-demo-formator', name: 'Demo Staff', email: 'demo.formator@carmel.test', password: 'DemoFormator2026!', role: 'FORMATOR' as const },
+  member: { id: 'local-demo-member', name: 'Demo Member', email: 'demo.member@carmel.test', password: 'DemoMember2026!', role: 'USER' as const, gender: 'ANONYMOUS' as const },
+}
 type PrototypeUser = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: 'USER'; isBlocked: boolean; isActive?: boolean; passwordHash?: string; createdAt?: string; privacyConsentAt?: string; privacyPolicyVersion?: string }
 function readPrototypeUsers(): PrototypeUser[] { localStorage.removeItem(prototypeUsersKey); return [] }
 
@@ -1786,6 +1844,25 @@ function readPrototypeStaff(): PrototypeStaff[] {
   localStorage.removeItem(demoAdminProfileKey)
   return []
 }
+function readPrototypeSession(): PrototypeStaff | null {
+  try {
+    const account = JSON.parse(localStorage.getItem(prototypeSessionKey) || 'null') as PrototypeStaff | null
+    return account?.demo === true ? account : null
+  } catch {
+    return null
+  }
+}
+function isLocalDemoSession() {
+  return readPrototypeSession()?.demo === true || readMemberSession()?.demo === true
+}
+function saveDemoStaffSession(account: typeof localDemoAccounts.admin | typeof localDemoAccounts.formator) {
+  const staff: PrototypeStaff = { ...account, prototype: true, demo: true, isActive: true, canManageUsers: true, canManageDetails: true, canManageUpdates: true }
+  localStorage.removeItem(memberSessionKey)
+  window.dispatchEvent(new Event(memberSessionUpdatedEvent))
+  localStorage.setItem(prototypeSessionKey, JSON.stringify(staff))
+  window.dispatchEvent(new Event(staffSessionUpdatedEvent))
+}
+
 type AuthApiResponse = {
   error?: string
   user?: { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: string; discernmentTrackingEnabled?: boolean; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
@@ -1844,6 +1921,11 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [accountType, setAccountType] = useState<'admin' | 'staff'>('staff')
+  function fillDemoCredentials(email: string, password: string) {
+    setLoginEmail(email)
+    setLoginPassword(password)
+    setError('')
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -1867,6 +1949,23 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       const email = String(form.get('email') || '').trim().toLowerCase()
       const password = String(form.get('password') || '')
       const expectedRole = role === 'admin' ? 'ADMIN' : 'FORMATOR'
+      const demoAccount = Object.values(localDemoAccounts).find((account) => account.email === email && account.role !== 'USER')
+      if (demoAccount) {
+        if (demoAccount.password !== password) {
+          setError('The demo password is incorrect.')
+          setPending(false)
+          return
+        }
+        if (demoAccount.role !== expectedRole) {
+          setError(`Select ${demoAccount.role === 'FORMATOR' ? 'Staff' : 'Administrator'} to use this demo account.`)
+          setPending(false)
+          return
+        }
+        saveDemoStaffSession(demoAccount)
+        navigate('/admin', { replace: true })
+        setPending(false)
+        return
+      }
       try {
         const response = await fetch('/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
         const result = await readAuthResponse(response)
@@ -1896,6 +1995,19 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const phone = String(form.get('phone') || '').trim()
     const address = String(form.get('address') || '').trim()
     const password = String(form.get('password') || '')
+    if (!isSignup && email === localDemoAccounts.member.email) {
+      if (password !== localDemoAccounts.member.password) {
+        setError('The demo password is incorrect.')
+        setPending(false)
+        return
+      }
+      localStorage.removeItem(prototypeSessionKey)
+      window.dispatchEvent(new Event(staffSessionUpdatedEvent))
+      saveMemberSession({ id: localDemoAccounts.member.id, name: localDemoAccounts.member.name, email: localDemoAccounts.member.email, role: 'USER', gender: localDemoAccounts.member.gender, prototype: true, demo: true })
+      navigate('/', { replace: true })
+      setPending(false)
+      return
+    }
     try {
       const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password, privacyConsent: form.get('privacyConsent') === 'on' } : { email, password }) })
       const result = await readAuthResponse(response)
@@ -1923,6 +2035,17 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
           <label><input type="radio" name="accountType" value="admin" checked={accountType === 'admin'} onChange={() => { setAccountType('admin'); setLoginEmail(''); setLoginPassword('') }} /><span>Administrator</span></label>
         </div>
       </fieldset>}
+      {!isSignup && (isStaff ? <div className="local-demo-card">
+        <strong>Local demo account</strong>
+        <p>Browser-only preview; not a real or secure account. Data is not shared or saved to the server.</p>
+        {accountType === 'admin'
+          ? <button type="button" onClick={() => fillDemoCredentials(localDemoAccounts.admin.email, localDemoAccounts.admin.password)}><span>Administrator</span><small>{localDemoAccounts.admin.email} · {localDemoAccounts.admin.password}</small></button>
+          : <button type="button" onClick={() => fillDemoCredentials(localDemoAccounts.formator.email, localDemoAccounts.formator.password)}><span>Staff</span><small>{localDemoAccounts.formator.email} · {localDemoAccounts.formator.password}</small></button>}
+      </div> : <div className="local-demo-card">
+        <strong>Local demo account</strong>
+        <p>Browser-only preview; not a real or secure account. Data is not shared or saved to the server.</p>
+        <button type="button" onClick={() => fillDemoCredentials(localDemoAccounts.member.email, localDemoAccounts.member.password)}><span>Member</span><small>{localDemoAccounts.member.email} · {localDemoAccounts.member.password}</small></button>
+      </div>)}
       {isSignup && <>
         <label>Full name<input name="name" required minLength={2} maxLength={100} autoComplete="name" placeholder="Name, Initial, Surname" /></label>
         <label>Gender<select className="member-gender-select" name="gender" required defaultValue=""><option value="" disabled>Select gender</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="ANONYMOUS">Anonymous</option></select></label>
@@ -2055,10 +2178,19 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
     const normalizedAddress = address.trim()
     try {
       if (name.trim().length < 2 || !normalizedEmail.includes('@') || normalizedPhone.length < 7 || normalizedPhone.length > 30 || normalizedAddress.length < 5 || normalizedAddress.length > 300) throw new Error('Enter a valid name, email, contact number, and address.')
+      if (member.prototype) {
+        const updated: MemberAccount = { ...member, name: name.trim(), email: normalizedEmail, gender, phone: normalizedPhone, address: normalizedAddress }
+        moveMemberData(member.email, updated.email)
+        saveMemberSession(updated)
+        onUpdated(updated)
+        setSaved(true)
+        return
+      }
       const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), email: normalizedEmail, gender, phone: normalizedPhone, address: normalizedAddress }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Unable to update your profile.')
       const updated: MemberAccount = { ...member, name: result.user.name, email: result.user.email, gender: result.user.gender, phone: result.user.phone, address: result.user.address }
+      moveMemberData(member.email, updated.email)
       saveMemberSession(updated)
       onUpdated(updated)
       setSaved(true)
@@ -2068,11 +2200,18 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
 }
 
 function MemberDonationsView({ member }: { member: MemberAccount }) {
-  const [donations, setDonations] = useState<MemberDonation[]>([])
-  const [loading, setLoading] = useState(true)
+  const [donations, setDonations] = useState<MemberDonation[]>(() => {
+    if (!member.demo) return []
+    try { return JSON.parse(localStorage.getItem(memberDonationKey(member.email)) || '[]') as MemberDonation[] } catch { return [] }
+  })
+  const [loading, setLoading] = useState(!member.demo)
   const [error, setError] = useState('')
   useEffect(() => {
     let active = true
+    if (member.demo) {
+      setLoading(false)
+      return () => { active = false }
+    }
     async function loadDonations() {
       try {
         const response = await fetch('/api/donations/mine', { credentials: 'include' })
@@ -2089,13 +2228,17 @@ function MemberDonationsView({ member }: { member: MemberAccount }) {
     }
     void loadDonations()
     return () => { active = false }
-  }, [member.id])
-  return <section className="member-account-section"><div className="member-section-heading"><span className="eyebrow">YOUR GIVING</span><h2>Donation history</h2><p>Offerings associated with your account are loaded from the Federation database.</p></div>{error && <p className="form-error" role="alert">{error}</p>}{loading ? <p className="staff-empty">Loading donation history…</p> : donations.length ? <div className="member-donation-list">{donations.toReversed().map((donation) => <article className="member-donation-row" key={donation.referenceCode}><div><b>{donation.fund}</b><small>{new Date(donation.createdAt).toLocaleDateString()} · {donation.referenceCode}</small></div><strong>{money(donation.amount)}</strong><span className={`member-donation-status ${donation.status.toLowerCase()}`}>{donation.status.replace('_', ' ')}</span></article>)}</div> : <div className="member-empty"><HandHeart size={22} /><h3>No donations linked yet</h3><p>Donations associated with your account will appear here. Older gifts may need to be linked by the Federation.</p><Link className="button button-outline" to="/donations">Make a donation <ArrowRight size={14} /></Link></div>}</section>
+  }, [member.id, member.demo, member.email])
+  return <section className="member-account-section">
+    <div className="member-section-heading"><span className="eyebrow">YOUR GIVING</span><h2>Donation history</h2><p>{member.demo ? 'Demo accounts cannot make real donations.' : 'Offerings associated with your account are loaded from the Federation database.'}</p></div>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    {loading ? <p className="staff-empty">Loading donation history…</p> : donations.length ? <div className="member-donation-list">{donations.toReversed().map((donation) => <article className="member-donation-row" key={donation.referenceCode}><div><b>{donation.fund}</b><small>{new Date(donation.createdAt).toLocaleDateString()} · {donation.referenceCode}</small></div><strong>{money(donation.amount)}</strong><span className={`member-donation-status ${donation.status.toLowerCase()}`}>{donation.status.replace('_', ' ')}</span></article>)}</div> : <div className="member-empty"><HandHeart size={22} /><h3>No donations linked yet</h3><p>{member.demo ? 'Demo accounts cannot make real donations.' : 'Donations associated with your account will appear here. Older gifts may need to be linked by the Federation.'}</p>{!member.demo && <Link className="button button-outline" to="/donations">Make a donation <ArrowRight size={14} /></Link>}</div>}
+  </section>
 }
 
 function MemberDiscernmentView({ member }: { member: MemberAccount }) {
   const [details, setDetails] = useState<MemberDiscernment>(() => ({ monastery: '', stage: 'EXPLORING', note: '' }))
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!member.prototype)
   const [error, setError] = useState('')
   const [criteria, setCriteria] = useState<DiscernmentCriteria>(discernmentCriteriaDefault)
   const [metrics, setMetrics] = useState<DiscernmentMetrics>({ activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 })
@@ -2104,6 +2247,19 @@ function MemberDiscernmentView({ member }: { member: MemberAccount }) {
   const [savedActivity, setSavedActivity] = useState(false)
   useEffect(() => {
     let active = true
+    if (member.prototype) {
+      let savedDetails: MemberDiscernment
+      try {
+        const stored = localStorage.getItem(memberDiscernmentKey(member.email))
+        savedDetails = stored ? JSON.parse(stored) as MemberDiscernment : { monastery: '', stage: 'EXPLORING', note: '' }
+      } catch { savedDetails = { monastery: '', stage: 'EXPLORING', note: '' } }
+      savedDetails.stage = normalizeDiscernmentStage(savedDetails.stage)
+      localStorage.setItem(memberDiscernmentKey(member.email), JSON.stringify(savedDetails))
+      setDetails(savedDetails)
+      setLoading(false)
+      window.dispatchEvent(new Event(discernmentUpdatedEvent))
+      return () => { active = false }
+    }
     async function loadProgress() {
       const response = await fetch('/api/discernment/mine', { credentials: 'include' })
       const result = await response.json()
@@ -2121,7 +2277,7 @@ function MemberDiscernmentView({ member }: { member: MemberAccount }) {
       void loadProgress().catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Unable to refresh your discernment progress.') })
     }, 30_000)
     return () => { active = false; window.clearInterval(timer) }
-  }, [member.id])
+  }, [member.email, member.prototype])
   async function setActivityTracking(enabled: boolean) {
     setError('')
     try {
@@ -2184,7 +2340,7 @@ function MemberDiscernmentView({ member }: { member: MemberAccount }) {
       <div className="discernment-progress-heading"><div><span className="eyebrow">CURRENT STAGE</span><h3>{discernmentStages[currentStageIndex]?.label}</h3></div><span>{currentStageIndex + 1} of {discernmentStages.length}</span></div>
       <ol>{discernmentStages.map((stage, index) => <li className={index < currentStageIndex ? 'complete' : index === currentStageIndex ? 'current' : ''} key={stage.id}><span className="discernment-stage-marker">{index < currentStageIndex ? <Check size={13} /> : index + 1}</span><div><b>{stage.label}</b><small>{stage.description}</small></div></li>)}</ol>
     </section>
-    <section className="discernment-milestones" aria-labelledby="discernment-milestones-title">
+    {!member.prototype && <section className="discernment-milestones" aria-labelledby="discernment-milestones-title">
       <div><span className="eyebrow">YOUR NEXT STEP</span><h3 id="discernment-milestones-title">{currentStageIndex < 3 ? `Milestones for ${discernmentStages[currentStageIndex + 1].label}` : 'Continue discerning with your community'}</h3>
         <p>Milestone totals are cumulative. The Federation sets the criteria in Manage Details; meeting them advances your stage automatically. A reflection check-in is self-reported, and your reflection text is never collected.</p>
       </div>
@@ -2195,11 +2351,11 @@ function MemberDiscernmentView({ member }: { member: MemberAccount }) {
         {trackingEnabled && <button className="button button-outline" type="button" onClick={() => void recordReflection()} disabled={savingActivity}>{savingActivity ? 'Saving…' : 'I spent time in prayer or reflection'} <Check size={15} /></button>}
         {savedActivity && <p className="form-success" role="status">Your reflection check-in was recorded. No reflection text is saved.</p>}
       </>}
-    </section>
-    <section className="discernment-tracking-settings">
+    </section>}
+    {!member.prototype && <section className="discernment-tracking-settings">
       <div><span className="eyebrow">YOUR PRIVACY</span><h3>{trackingEnabled ? 'Activity tracking is on' : 'Optional progress tracking'}</h3><p>When enabled, we count time on the site and active time reading teachings. The timer pauses when this tab is hidden and stops after 10 minutes without interaction. We record time by teaching to calculate completion; your progress shows totals, not a reading-history list. We also count your reflection check-ins and messages you send to Federation staff, but never collect reflection text or keystrokes. Turning tracking off deletes this discernment activity history; your current stage will not move backward.</p></div>
       <button className={trackingEnabled ? 'button button-outline' : 'button button-dark'} type="button" onClick={() => void setActivityTracking(!trackingEnabled)}>{trackingEnabled ? 'Turn off and delete activity history' : 'Enable activity tracking'}</button>
-    </section>
+    </section>}
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="discernment-contact"><p>Have a question about your journey? Send the Federation staff a private message.</p><Link className="button button-dark" to="/account/messages"><MessageCircle size={16} />Contact admin</Link></div>
   </section>
@@ -2378,7 +2534,7 @@ function MemberFavoritesView({ member }: { member: MemberAccount }) {
   const saved = content.carmelights.filter((teaching) => favorites.includes(teaching.id))
   const selected = saved.find((teaching) => teaching.id === selectedId)
   useEffect(() => {
-    if (!selectedId) return
+    if (!selectedId || isLocalDemoSession()) return
     void fetch('/api/content/interactions', {
       method: 'POST',
       credentials: 'include',
@@ -2392,7 +2548,7 @@ function MemberFavoritesView({ member }: { member: MemberAccount }) {
     void setFavorite(id, false).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'The saved teaching activity could not be updated.'))
   }
   function closeTeaching() { setSelectedId(null); setFullView(false) }
-  return <section className="member-account-section"><div className="member-section-heading"><span className="eyebrow">SAVED FOR LATER</span><h2>Favorite teachings</h2><p>Teachings saved to your account are loaded from the Federation database.</p></div>{(error || favoriteError) && <p className="form-error" role="alert">{error || favoriteError}</p>}{favoritesLoading ? <p className="staff-empty">Loading favorite teachings…</p> : saved.length ? <div className="member-favorites-list">{saved.map((teaching) => <article className="member-favorite-row" key={teaching.id}><img src={articleImageFor(teaching.image, photo.chapel)} alt="" /><div><span className="eyebrow">{teaching.author}</span><h3>{teaching.title}</h3><p>{teaching.body}</p><button type="button" className="text-link story-read-button" onClick={() => { setSelectedId(teaching.id); setFullView(false) }}>Read teaching <ArrowRight size={14} /></button></div><button type="button" className="member-favorite-remove" onClick={() => setPendingRemoval({ id: teaching.id, title: teaching.title })} aria-label={`Remove ${teaching.title} from favorites`}><Heart size={17} fill="currentColor" /></button></article>)}</div> : <div className="member-empty"><Heart size={22} /><h3>No favorite teachings yet</h3><p>Save a teaching from Carmelights to find it here.</p><Link className="button button-outline" to="/carmelights">Explore Carmelights <ArrowRight size={14} /></Link></div>}{selected && <div className={`carmelights-reading-backdrop ${fullView ? 'carmelights-reading-backdrop-full-view' : ''}`} role="presentation" onClick={closeTeaching}><article className={`carmelights-reading-dialog ${fullView ? 'carmelights-reading-dialog-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={selected.title} onClick={(event) => event.stopPropagation()}><button className="carmelights-reading-close" type="button" onClick={closeTeaching} aria-label="Close teaching"><X size={20} /></button><img className="carmelights-reading-image" src={articleImageFor(selected.image, photo.chapel)} alt={selected.title} /><span className="carmelights-category-tag">{selected.category || 'Prayer'}</span><span className="carmelights-reading-eyebrow">SAINTS’ QUOTE</span><h2>{selected.title}</h2><b className="carmelights-reading-author">{selected.author}</b><div className="carmelights-reading-copy">{selected.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div><button className="button button-outline story-full-view-toggle" type="button" onClick={() => setFullView(!fullView)}>{fullView ? 'Return to quote preview' : 'Read quote in full view'} <Maximize2 size={15} /></button></article></div>}{pendingRemoval && <AccountActionConfirmation title="Remove this favorite?" description={`“${pendingRemoval.title}” will be removed from your saved teachings. You can save it again from Carmelights.`} confirmLabel="Remove favorite" onCancel={() => setPendingRemoval(null)} onConfirm={() => { remove(pendingRemoval.id); setPendingRemoval(null) }} />}</section>
+  return <section className="member-account-section"><div className="member-section-heading"><span className="eyebrow">SAVED FOR LATER</span><h2>Favorite teachings</h2><p>{member.demo ? 'Demo favorites are saved only in this browser.' : 'Teachings saved to your account are loaded from the Federation database.'}</p></div>{(error || favoriteError) && <p className="form-error" role="alert">{error || favoriteError}</p>}{favoritesLoading ? <p className="staff-empty">Loading favorite teachings…</p> : saved.length ? <div className="member-favorites-list">{saved.map((teaching) => <article className="member-favorite-row" key={teaching.id}><img src={articleImageFor(teaching.image, photo.chapel)} alt="" /><div><span className="eyebrow">{teaching.author}</span><h3>{teaching.title}</h3><p>{teaching.body}</p><button type="button" className="text-link story-read-button" onClick={() => { setSelectedId(teaching.id); setFullView(false) }}>Read teaching <ArrowRight size={14} /></button></div><button type="button" className="member-favorite-remove" onClick={() => setPendingRemoval({ id: teaching.id, title: teaching.title })} aria-label={`Remove ${teaching.title} from favorites`}><Heart size={17} fill="currentColor" /></button></article>)}</div> : <div className="member-empty"><Heart size={22} /><h3>No favorite teachings yet</h3><p>Save a teaching from Carmelights to find it here.</p><Link className="button button-outline" to="/carmelights">Explore Carmelights <ArrowRight size={14} /></Link></div>}{selected && <div className={`carmelights-reading-backdrop ${fullView ? 'carmelights-reading-backdrop-full-view' : ''}`} role="presentation" onClick={closeTeaching}><article className={`carmelights-reading-dialog ${fullView ? 'carmelights-reading-dialog-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={selected.title} onClick={(event) => event.stopPropagation()}><button className="carmelights-reading-close" type="button" onClick={closeTeaching} aria-label="Close teaching"><X size={20} /></button><img className="carmelights-reading-image" src={articleImageFor(selected.image, photo.chapel)} alt={selected.title} /><span className="carmelights-category-tag">{selected.category || 'Prayer'}</span><span className="carmelights-reading-eyebrow">SAINTS’ QUOTE</span><h2>{selected.title}</h2><b className="carmelights-reading-author">{selected.author}</b><div className="carmelights-reading-copy">{selected.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div><button className="button button-outline story-full-view-toggle" type="button" onClick={() => setFullView(!fullView)}>{fullView ? 'Return to quote preview' : 'Read quote in full view'} <Maximize2 size={15} /></button></article></div>}{pendingRemoval && <AccountActionConfirmation title="Remove this favorite?" description={`“${pendingRemoval.title}” will be removed from your saved teachings. You can save it again from Carmelights.`} confirmLabel="Remove favorite" onCancel={() => setPendingRemoval(null)} onConfirm={() => { remove(pendingRemoval.id); setPendingRemoval(null) }} />}</section>
 }
 
 function MemberRecommendationsView() {
@@ -2441,6 +2597,7 @@ function MemberAccountPage() {
   }, [])
   useEffect(() => {
     const local = readMemberSession()
+    if (local?.demo) return
     let active = true
     fetch('/api/auth/me', { credentials: 'include' }).then(async (response) => {
       const result = await readAuthResponse(response)
@@ -2489,9 +2646,12 @@ function formatNotificationDate(value: string) {
 function useAdminNotifications(userId: string) {
   const [data, setData] = useState<AdminNotificationResponse>({ unreadMessageCount: 0, notifications: [] })
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !isLocalDemoSession())
   const [refreshToken, setRefreshToken] = useState(0)
   useEffect(() => {
+    if (isLocalDemoSession()) {
+      return
+    }
     let active = true
     async function refresh() {
       try {
@@ -2571,6 +2731,7 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
   useEffect(() => { const timer = setInterval(() => setClock(new Date()), 60000); return () => clearInterval(timer) }, [])
   useEffect(() => { if (adminSearchOpen) adminSearchInputRef.current?.focus() }, [adminSearchOpen])
   function signOut() {
+    localStorage.removeItem(prototypeSessionKey)
     navigator.sendBeacon('/api/auth/logout')
     window.dispatchEvent(new Event(staffSessionUpdatedEvent))
     navigate('/staff/login', { replace: true })
@@ -2584,6 +2745,13 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
     const email = profileEmail.trim().toLowerCase()
     try {
       if (name.length < 2) throw new Error('Enter a name with at least two characters.')
+      if (user.demo) {
+        const updatedUser = { ...user, name, email }
+        localStorage.setItem(prototypeSessionKey, JSON.stringify(updatedUser))
+        onUserUpdated(updatedUser)
+        setEditingProfile(false)
+        return
+      }
       const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, ...(currentPassword ? { currentPassword } : {}), ...(newPassword ? { newPassword } : {}) }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Unable to update your account.')
@@ -2599,7 +2767,7 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
     <aside className={`admin-sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
       <div className="admin-sidebar-brand-row"><Brand light /><button type="button" className="admin-sidebar-collapse" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>{sidebarCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}</button></div>
       <button type="button" className="admin-mobile-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={18} /></button>
-      <div className="admin-role">{user.role === 'ADMIN' ? 'FEDERATION ADMIN' : 'FORMATOR STAFF'}</div>
+      <div className="admin-role">{user.demo ? 'LOCAL PREVIEW · ' : ''}{user.role === 'ADMIN' ? 'FEDERATION ADMIN' : 'FORMATOR STAFF'}</div>
       <AdminSidebarNav user={user} onNavigate={() => setMobileOpen(false)} unreadCount={notifications.unreadMessageCount} />
       <div className="sidebar-bottom"><span>{clock.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span><b>{clock.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</b><button type="button" className="sidebar-logout" onClick={signOut}><LogOut size={15} /> Sign out</button></div>
     </aside>
@@ -2682,6 +2850,10 @@ function DashboardPage() {
   useEffect(() => {
     let active = true
     async function loadDashboard() {
+      if (isLocalDemoSession()) {
+        setLoading(false)
+        return
+      }
       try {
         const response = await fetch('/api/admin/dashboard', { credentials: 'include' })
         const result = await readApiResponse<DashboardData>(response, 'Loading donation dashboard')
@@ -2898,7 +3070,7 @@ function UpdatesAdminPage() {
     try {
       if (recordMutation) await persistSiteUpdateRecord(recordMutation.id, recordMutation.update)
       else setUpdates(await persistSiteUpdates(next))
-      setSuccess(confirmation)
+      setSuccess(isLocalDemoSession() ? 'Updates saved in this browser.' : confirmation)
       return true
     } catch (saveError) {
       setUpdates(updates)
@@ -2997,7 +3169,7 @@ function UpdatesAdminPage() {
   }
   async function removeUpdate(update: SiteUpdate) { await saveUpdates(updates.filter((item) => item.id !== update.id), 'Update removed successfully.') }
   return <>
-    <div className="admin-title-row"><div><span className="eyebrow">FEDERATION NEWS</span><h1>Updates</h1><p>Published posts are saved for all visitors.</p></div></div>
+    <div className="admin-title-row"><div><span className="eyebrow">FEDERATION NEWS</span><h1>Updates</h1><p>{isLocalDemoSession() ? 'Preview posts are saved only in this browser and are not included in website builds.' : 'Published posts are saved for all visitors.'}</p></div></div>
     <div className="updates-admin-layout">
       <form className="admin-panel update-composer" onSubmit={publish}>
         <div className="panel-heading"><div><h2>Create an update</h2><p>Share a reflection, event, or community moment.</p></div><span className="staff-role-label">PUBLIC POST</span></div>
@@ -3269,7 +3441,11 @@ function ContentAdminPage() {
     let active = true
     async function ensureManagedContentRecord() {
       if (section === 'discernment') return
-      try {
+        if (isLocalDemoSession()) {
+          setContentReady(true)
+          return
+        }
+        try {
         const response = await fetch('/api/content/SITE_MANAGED')
         if (response.status !== 404) {
           if (!response.ok) {
@@ -3349,6 +3525,10 @@ function ContentAdminPage() {
     if (section !== 'home') return
     let active = true
     async function loadHomeImage() {
+      if (isLocalDemoSession()) {
+        setHomeImageState({ section, ready: true })
+        return
+      }
       try {
         const response = await fetch('/api/content/HOME_HERO_IMAGE')
         if (response.status === 404) { if (active) setHomeImageState({ section, ready: true }); return }
@@ -3368,6 +3548,16 @@ function ContentAdminPage() {
     if (section !== 'home') return
     let active = true
     async function loadHomeSectionImages() {
+      if (isLocalDemoSession()) {
+        try {
+          const savedImages = JSON.parse(localStorage.getItem('carmel-home-section-images-v2') || '{}') as Partial<Record<HomeSectionKey, string>>
+          setHomeSectionImages(savedImages)
+          setHomeSectionImagesState({ section, ready: true })
+        } catch (loadError) {
+          if (active) setError(loadError instanceof Error ? loadError.message : 'Saved homepage thumbnails could not be loaded.')
+        }
+        return
+      }
       try {
         const response = await fetch('/api/content/HOME_SECTION_IMAGES')
         if (response.status === 404) {
@@ -3456,6 +3646,16 @@ function ContentAdminPage() {
     setSuccess('')
     setSavingImage(true)
     try {
+      if (isLocalDemoSession()) {
+        const nextContent = { ...content, homeHeroImage: image.trim() }
+        cacheManagedContent(nextContent)
+        if (image.trim().length <= 350_000) localStorage.setItem('carmel-home-hero-image-v2', image.trim())
+        else localStorage.removeItem('carmel-home-hero-image-v2')
+        setError('')
+        setSuccess('Homepage background image saved in this browser.')
+        window.dispatchEvent(new Event('carmel-home-hero-updated'))
+        return
+      }
       const response = await fetch('/api/admin/content/home-hero-image', {
         method: 'PUT',
         credentials: 'include',
@@ -3508,7 +3708,7 @@ function ContentAdminPage() {
     try {
       await saveManagedContent(nextContent)
       setContactDetails(savedContactDetails)
-      setSuccess('Contact details saved successfully.')
+      setSuccess(isLocalDemoSession() ? 'Contact details saved in this browser.' : 'Contact details saved successfully.')
     } catch (saveError) {
       cacheManagedContent(content)
       setSuccess('')
@@ -3535,7 +3735,7 @@ function ContentAdminPage() {
     try {
       await saveManagedContent(nextContent)
       setAboutImages(savedAboutImages)
-      setSuccess('About Us images saved successfully.')
+      setSuccess(isLocalDemoSession() ? 'About Us images saved in this browser.' : 'About Us images saved successfully.')
     } catch (saveError) {
       cacheManagedContent(content)
       setSuccess('')
@@ -3552,6 +3752,17 @@ function ContentAdminPage() {
     setSuccess('')
     setSavingSectionImage(key)
     try {
+      if (isLocalDemoSession()) {
+        const savedImages = { ...homeSectionImages }
+        savedImages[key] = sectionImage
+        localStorage.setItem('carmel-home-section-images-v2', JSON.stringify(savedImages))
+        setHomeSectionImages(savedImages)
+        window.dispatchEvent(new Event('carmel-home-section-images-updated'))
+        setError('')
+        const label = homeSectionCards.find((card) => card.key === key)?.sectionLabel || 'section'
+        setSuccess(`${label} thumbnail saved in this browser.`)
+        return
+      }
       const response = await fetch('/api/admin/content/home-section-image', {
         method: 'PUT',
         credentials: 'include',
@@ -3588,7 +3799,9 @@ function ContentAdminPage() {
       setMonastery({ id: '', name: '', city: '', description: '', image: '' })
       setEditingMonastery(false)
       setError('')
-      setSuccess(editingMonastery ? 'Monastery details updated successfully.' : 'Monastery added successfully.')
+      setSuccess(isLocalDemoSession()
+        ? (editingMonastery ? 'Monastery details saved in this browser.' : 'Monastery added in this browser.')
+        : (editingMonastery ? 'Monastery details updated successfully.' : 'Monastery added successfully.'))
     } catch (saveError) {
       cacheManagedContent(content)
       setSuccess('')
@@ -3616,7 +3829,9 @@ function ContentAdminPage() {
       setSaintSuggestionsOpen(false)
       setCategorySuggestionsOpen(false)
       setError('')
-      setSuccess(editingArticle ? 'Entry updated successfully.' : 'Entry published successfully.')
+      setSuccess(isLocalDemoSession()
+        ? (editingArticle ? 'Entry saved in this browser.' : 'Entry added in this browser.')
+        : (editingArticle ? 'Entry updated successfully.' : 'Entry published successfully.'))
     } catch (saveError) {
       cacheManagedContent(content)
       setSuccess('')
@@ -3636,7 +3851,7 @@ function ContentAdminPage() {
     try {
       await saveManagedContentRecord('monasteries', id, null)
       setError('')
-      setSuccess('Monastery removed successfully.')
+      setSuccess(isLocalDemoSession() ? 'Monastery removed in this browser.' : 'Monastery removed successfully.')
     } catch (saveError) {
       cacheManagedContent(content)
       setSuccess('')
@@ -3656,7 +3871,7 @@ function ContentAdminPage() {
     try {
       await saveManagedContentRecord(articleKey, id, null)
       setError('')
-      setSuccess('Entry removed successfully.')
+      setSuccess(isLocalDemoSession() ? 'Entry removed in this browser.' : 'Entry removed successfully.')
     } catch (saveError) {
       cacheManagedContent(content)
       setSuccess('')
@@ -3675,7 +3890,7 @@ function ContentAdminPage() {
       <div>
         <span className="eyebrow">WEBSITE CONTENT</span>
         <h1>{sectionTitle}</h1>
-        <p>Changes are saved to the database and appear on the public website for everyone.</p>
+        <p>{isLocalDemoSession() ? 'Local preview edits are saved only in this browser and are not included in builds or published to a database-backed site.' : 'Changes appear on the public website for everyone.'}</p>
       </div>
     </div>
     <nav className="content-admin-tabs" aria-label="Website sections">
@@ -3842,7 +4057,7 @@ function ContentAdminPage() {
         </article>)}
       </section>
     </div> : <form className="admin-panel content-editor content-image-editor" onSubmit={saveHomeImage}>
-      <div className="panel-heading"><div><h2>Replace the site background image</h2><p>This image is saved for every visitor on the home hero.</p></div></div>
+      <div className="panel-heading"><div><h2>Replace the site background image</h2><p>{isLocalDemoSession() ? 'This image is saved only in this browser and is not included in website builds.' : 'This image is saved for every visitor on the home hero.'}</p></div></div>
       <label>Image URL<input value={image.startsWith('data:') ? '' : image} onChange={(event) => { setImage(event.target.value); setSuccess(''); setError('') }} placeholder="https://..." /></label>
       <label className="content-image-picker">Or upload an image<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'home')} />{image && <img src={image} alt="Current background preview" />}<small>Uploaded backgrounds are optimized automatically for faster loading.</small></label>
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -4379,6 +4594,13 @@ function FormatorDashboard({ user }: { user: PrototypeStaff }) {
   useEffect(() => {
     let active = true
     async function refresh() {
+      if (user.demo) {
+        if (canManageUsers) setUserCount(readPrototypeUsers().length)
+        setUpdateCount(readSiteUpdates().length)
+        setUserCountError('')
+        setUpdateCountError('')
+        return
+      }
       if (canManageUsers) {
         try {
           const response = await fetch('/api/admin/users?role=USER', { credentials: 'include' })
@@ -4402,7 +4624,7 @@ function FormatorDashboard({ user }: { user: PrototypeStaff }) {
     window.addEventListener('carmel-updates-updated', refresh)
     window.addEventListener('focus', refresh)
     return () => { active = false; window.removeEventListener('storage', refresh); window.removeEventListener('carmel-updates-updated', refresh); window.removeEventListener('focus', refresh) }
-  }, [canManageUsers])
+  }, [canManageUsers, user.demo])
   const accessCount = Number(canManageUsers) + Number(canManageDetails) + Number(canManageUpdates)
   const accessTrend = accessCount === 3 ? 'All permissions granted' : accessCount > 0 ? 'Some permissions granted' : 'No extra permissions'
   const userCountLabel = userCount === null ? (canManageUsers ? (userCountError ? 'Unavailable' : 'Loading…') : 'Restricted') : String(userCount)
@@ -4514,6 +4736,9 @@ function LegacyManageUsersPage() {
     saveUsers(users.filter((item) => item.id !== member.id))
     if (readMemberSession()?.id === member.id) saveMemberSession(null)
     localStorage.setItem(prototypeThreadsKey, JSON.stringify(readDirectThreads().filter((thread) => thread.id !== `user:${member.id}`)))
+    localStorage.removeItem(memberDonationKey(member.email))
+    localStorage.removeItem(memberFavoriteKey(member.email))
+    localStorage.removeItem(memberDiscernmentKey(member.email))
     window.dispatchEvent(new Event(directThreadsUpdatedEvent))
   }
   if (new URLSearchParams(location.search).get('role') !== 'USER') return <main className="user-admin-page"><header className="user-admin-heading"><div><span className="eyebrow">ACCESS CONTROL</span><h1>Manage users</h1><p>Manage accounts and staff access from one place.</p></div><button className="button button-dark" onClick={() => setShowCreate(!showCreate)}>{showCreate ? <X size={15} /> : <Users size={15} />}{showCreate ? 'Cancel' : 'Add Staff'}</button></header><nav className="user-management-tabs" aria-label="Account type"><Link className="active" to="/admin/users?role=FORMATOR"><Users size={15} />Staff<span>{staff.length}</span></Link><Link to="/admin/users?role=USER"><User size={15} />Users<span>{users.length}</span></Link></nav><FormatorManagerView staff={staff} permissions={permissions} showCreate={showCreate} name={name} email={email} password={password} setName={setName} setEmail={setEmail} setPassword={setPassword} canManageUsers={canManageUsers} canManageDetails={canManageDetails} canManageUpdates={canManageUpdates} setCreationPermission={setCreationPermission} error={error} createFormator={createFormator} requestPermissionAction={requestPermissionAction} toggleStaffActive={toggleStaffActive} deleteStaff={deleteStaff} /></main>
@@ -4990,11 +5215,13 @@ function AdminDiscernmentPage() {
 }
 
 function AdminPage() {
-  const [user, setUser] = useState<PrototypeStaff | null>(null)
-  const [checking, setChecking] = useState(true)
+  const [user, setUser] = useState<PrototypeStaff | null>(readPrototypeSession)
+  const [checking, setChecking] = useState(() => !readPrototypeSession())
   const [sessionError, setSessionError] = useState('')
   const [retrySessionCheck, setRetrySessionCheck] = useState(0)
   useEffect(() => {
+    const demoSession = readPrototypeSession()
+    if (demoSession) return
     let active = true
     fetch('/api/auth/me', { credentials: 'include' }).then(async (response) => {
       const result = await readAuthResponse(response)
