@@ -30,7 +30,14 @@ function cacheHeroImage(image: string | null) {
 export default function HomepageReference() {
   const cards = useRef<HTMLDivElement>(null)
   const [heroImage, setHeroImage] = useState(getCachedHeroImage)
-  const [sectionImages, setSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>({})
+  const [sectionImages, setSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('carmel-home-section-images-v2') || '{}') as Partial<Record<HomeSectionKey, string>>
+    } catch (error) {
+      console.error('Unable to read local homepage thumbnails.', error)
+      return {}
+    }
+  })
 
   function scrollCards(direction: number) {
     cards.current?.scrollBy({ left: direction * 280, behavior: 'smooth' })

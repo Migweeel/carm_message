@@ -117,6 +117,8 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       imgSrc: ["'self'", 'data:', 'https://images.unsplash.com'],
+      mediaSrc: ["'self'", 'data:'],
+      frameSrc: ["'self'", 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'],
     },
   },
 }))
@@ -1503,8 +1505,6 @@ const managedMonasterySchema = z.object({
   name: z.string().trim().min(1).max(200),
   city: z.string().trim().min(1).max(100),
   description: z.string().max(5000),
-  projectTitle: z.string().max(200),
-  projectDetails: z.string().max(5000),
   image: z.string().max(3_000_000),
 })
 const managedArticleSchema = z.object({
@@ -1522,7 +1522,51 @@ const managedSiteContentSchema = z.object({
   monasteries: z.array(managedMonasterySchema).max(100),
   carmelife: z.array(managedArticleSchema).max(200),
   carmelights: z.array(managedArticleSchema).max(200),
+  contactDetails: z.object({
+    phone: z.string().trim().min(1).max(100),
+    email: z.string().trim().email().max(320),
+    facebookLabel: z.string().trim().min(1).max(200),
+    facebookUrl: z.string().url().max(500).refine((value) => {
+      const protocol = new URL(value).protocol
+      return protocol === 'http:' || protocol === 'https:'
+    }),
+    location: z.string().trim().min(1).max(1000),
+    heroImage: z.string().min(1).max(3_000_000),
+  }),
+  aboutImages: z.object({
+    spirituality: z.string().max(3_000_000),
+    assembly: z.string().max(3_000_000),
+    officers: z.string().max(3_000_000),
+    purposeOne: z.string().max(3_000_000),
+    purposeTwo: z.string().max(3_000_000),
+    purposeThree: z.string().max(3_000_000),
+    purposeFour: z.string().max(3_000_000),
+    quote: z.string().max(3_000_000),
+  }),
 })
+function isSupportedUpdateVideoSource(value: string) {
+  if (/^data:video\/(?:mp4|webm|ogg);base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) return true
+  let url: URL
+  try { url = new URL(value) } catch { return false }
+  if (url.protocol !== 'https:') return false
+  const host = url.hostname.toLowerCase()
+  if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com', 'youtu.be'].includes(host)) {
+    const segments = url.pathname.split('/').filter(Boolean)
+    const id = host === 'youtu.be'
+      ? segments[0]
+      : url.pathname === '/watch'
+        ? url.searchParams.get('v')
+        : (segments[0] === 'embed' || segments[0] === 'shorts') ? segments[1] : null
+    return Boolean(id && /^[A-Za-z0-9_-]{11}$/.test(id))
+  }
+  if (['vimeo.com', 'www.vimeo.com', 'player.vimeo.com'].includes(host)) {
+    const segments = url.pathname.split('/').filter(Boolean)
+    const id = host === 'player.vimeo.com' ? (segments[0] === 'video' ? segments[1] : null) : segments[0]
+    return Boolean(id && /^\d+$/.test(id))
+  }
+  return false
+}
+const managedUpdateVideoSchema = z.string().max(3_000_000).refine(isSupportedUpdateVideoSource, 'Provide a supported MP4, WebM, OGG, YouTube, or Vimeo video.')
 const managedUpdatesSchema = z.array(z.object({
   id: z.string().min(1).max(100),
   title: z.string().trim().min(1).max(200),
@@ -1530,6 +1574,8 @@ const managedUpdatesSchema = z.array(z.object({
   category: z.string().min(1).max(100),
   image: z.string().max(3_000_000),
   body: z.string().max(100_000),
+  video: managedUpdateVideoSchema.optional(),
+  featured: z.boolean().optional(),
 })).max(500)
 const managedUpdateSchema = z.object({
   id: z.string().min(1).max(100),
@@ -1538,6 +1584,8 @@ const managedUpdateSchema = z.object({
   category: z.string().min(1).max(100),
   image: z.string().max(3_000_000),
   body: z.string().max(100_000),
+  video: managedUpdateVideoSchema.optional(),
+  featured: z.boolean().optional(),
 })
 async function persistManagedContentRecord(
   pageKey: 'SITE_MANAGED' | 'SITE_UPDATES',

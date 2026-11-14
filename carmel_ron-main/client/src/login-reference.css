@@ -9,9 +9,9 @@
 }
 
 .member-auth-login-page {
-  height: 100svh;
-  min-height: 0;
-  overflow: hidden;
+  height: auto;
+  min-height: 100svh;
+  overflow: auto;
 }
 
 .member-auth-reset-page {
@@ -339,6 +339,49 @@
 
 .member-auth-page .auth-reference-form > p:not(.form-error, .prototype-note) {
   margin-bottom: 20px;
+}
+
+.local-demo-card {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid #dfd1bd;
+  border-radius: 7px;
+  background: #f3ede3;
+  color: #514235;
+  font-size: 12px;
+}
+
+.local-demo-card > p {
+  margin: 0;
+  color: #6f6257;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.local-demo-card > button {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d5c3ab;
+  border-radius: 5px;
+  background: #fffdfa;
+  color: #37291f;
+  cursor: pointer;
+  text-align: left;
+}
+
+.local-demo-card > button:hover {
+  border-color: #a9844d;
+}
+
+.local-demo-card > button small {
+  color: #6f6257;
+  font-size: 10px;
+  overflow-wrap: anywhere;
 }
 
 .member-auth-login-page .auth-reference-form {
