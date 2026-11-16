@@ -418,11 +418,24 @@ const discernmentCriteriaDefault = {
 }
 type DiscernmentCriteria = typeof discernmentCriteriaDefault
 type DiscernmentMetrics = { activeSiteMinutes: number; completedTeachings: number; prayerReflections: number; communityMessages: number }
+type DiscernmentMilestone = { label: string; value: number; target: number; unit: string }
+type MemberDiscernmentProgress = { discernment: MemberDiscernment; criteria: DiscernmentCriteria; metrics: DiscernmentMetrics; trackingEnabled: boolean }
 function normalizeDiscernmentStage(stage: string): DiscernmentStage {
   const normalized = stage.toUpperCase().replaceAll(' ', '_')
   if (normalized === 'IN_CONVERSATION_WITH_A_COMMUNITY') return 'IN_CONVERSATION'
   if (normalized === 'PRAYING_AND_LEARNING' || normalized === 'READY_TO_VISIT' || normalized === 'IN_CONVERSATION') return normalized
   return 'EXPLORING'
+}
+function getDiscernmentMilestones(stage: DiscernmentStage, criteria: DiscernmentCriteria, metrics: DiscernmentMetrics): DiscernmentMilestone[] {
+  const stageIndex = discernmentStages.findIndex((item) => item.id === stage)
+  const currentCriteria = criteria.transitions[stageIndex]
+  if (!currentCriteria) return []
+  return [
+    { label: 'Active time on the website', value: metrics.activeSiteMinutes, target: currentCriteria.activeSiteMinutes, unit: 'minutes' },
+    { label: 'Teachings read', value: metrics.completedTeachings, target: currentCriteria.completedTeachings, unit: 'teachings' },
+    { label: 'Prayer or reflection check-ins', value: metrics.prayerReflections, target: currentCriteria.prayerReflections, unit: 'check-ins' },
+    { label: 'Messages sent to the Federation', value: metrics.communityMessages, target: currentCriteria.communityMessages, unit: 'messages' },
+  ]
 }
 function readMemberSession(): MemberAccount | null {
   try {
@@ -2199,6 +2212,62 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
   return <form className="member-account-form member-profile-form" onSubmit={save}><div className="member-section-heading"><span className="eyebrow">YOUR ACCOUNT</span><h2>Profile details</h2><p>Keep your contact details current for messages from the Federation.</p></div><label>Full name<input required minLength={2} maxLength={100} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /></label><label>Gender<select value={gender} onChange={(event) => setGender(parseMemberGender(event.target.value))}><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="ANONYMOUS">Anonymous</option></select></label><label>Contact number<input required type="tel" minLength={7} maxLength={30} autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="e.g. +63 912 345 6789" /></label><label>Email address<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Address<textarea required minLength={5} maxLength={300} rows={3} autoComplete="street-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Your complete address" /></label><div className="member-account-form-actions">{error && <p className="form-error" role="alert">{error}</p>}{saved && <p className="member-success form-success" role="status" aria-live="polite">Profile details updated successfully.</p>}<button className="button button-dark" type="submit">Save profile</button></div></form>
 }
 
+function MemberDiscernmentSummary({ member }: { member: MemberAccount }) {
+  const [progress, setProgress] = useState<MemberDiscernmentProgress | null>(null)
+  const [loading, setLoading] = useState(!member.prototype)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    async function loadProgress() {
+      try {
+        if (member.prototype) {
+          const stored = localStorage.getItem(memberDiscernmentKey(member.email))
+          const details = stored ? JSON.parse(stored) as Partial<MemberDiscernment> : {}
+          const discernment: MemberDiscernment = {
+            monastery: typeof details.monastery === 'string' ? details.monastery : '',
+            stage: normalizeDiscernmentStage(typeof details.stage === 'string' ? details.stage : 'EXPLORING'),
+            note: typeof details.note === 'string' ? details.note : '',
+          }
+          if (active) {
+            setProgress({ discernment, criteria: discernmentCriteriaDefault, metrics: { activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 }, trackingEnabled: false })
+            setError('')
+          }
+          return
+        }
+        const response = await fetch('/api/discernment/mine', { credentials: 'include' })
+        const result = await readApiResponse<MemberDiscernmentProgress>(response, 'Loading discernment progress')
+        if (active) {
+          setProgress({ ...result, discernment: { ...result.discernment, stage: normalizeDiscernmentStage(result.discernment.stage) } })
+          setError('')
+        }
+      } catch (reason) {
+        if (active) {
+          setProgress(null)
+          setError(reason instanceof Error ? reason.message : 'Discernment progress could not be loaded.')
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    void loadProgress()
+    return () => { active = false }
+  }, [member.email, member.id, member.prototype])
+  if (loading) return <p className="member-discernment-summary-status" role="status">Loading discernment summary…</p>
+  if (error) return <section className="member-discernment-summary"><div className="member-discernment-summary-heading"><span className="eyebrow">YOUR JOURNEY</span><h2>Discernment</h2></div><p className="form-error" role="alert">{error}</p><Link className="text-link" to="/account/discernment">Open discernment details <ArrowRight size={14} /></Link></section>
+  if (!progress) return null
+  const stageIndex = discernmentStages.findIndex((stage) => stage.id === progress.discernment.stage)
+  const currentStage = discernmentStages[stageIndex]
+  const milestones = getDiscernmentMilestones(progress.discernment.stage, progress.criteria, progress.metrics)
+  const hasMilestones = stageIndex < discernmentStages.length - 1 && milestones.some((milestone) => milestone.target > 0)
+  return <section className="member-discernment-summary" aria-labelledby="member-discernment-summary-title">
+    <div className="member-discernment-summary-heading"><div><span className="eyebrow">YOUR JOURNEY</span><h2 id="member-discernment-summary-title">Discernment</h2></div><span>{stageIndex + 1} of {discernmentStages.length} stages</span></div>
+    <p className="member-discernment-current"><span className="eyebrow">CURRENT STAGE</span><b>{currentStage?.label || discernmentStages[0].label}</b></p>
+    <ol className="member-discernment-stages" aria-label="Discernment stages">{discernmentStages.map((stage, index) => <li className={index < stageIndex ? 'complete' : index === stageIndex ? 'current' : ''} key={stage.id}><span>{index < stageIndex ? <Check size={12} /> : index + 1}</span><b>{stage.label}</b></li>)}</ol>
+    {member.prototype ? <p className="member-discernment-note">Demo progress is saved in this browser. Activity milestones are available for real accounts.</p> : stageIndex === discernmentStages.length - 1 ? <p className="member-discernment-note">Continue discerning with your community. Your stage is updated as the Federation’s milestones are met.</p> : hasMilestones ? <div className="member-discernment-milestones"><h3>Next: {discernmentStages[stageIndex + 1].label}</h3>{progress.trackingEnabled ? <ul>{milestones.map(({ label, value, target, unit }) => <li key={label}><span>{label}</span><b>{target > 0 ? `${unit === 'minutes' ? value.toFixed(1) : value} / ${target} ${unit}` : 'Not required'}</b></li>)}</ul> : <p>Optional activity tracking is off. Enable it in your discernment details to see milestone progress.</p>}</div> : <p className="member-discernment-note">The Federation has not set milestones for the next stage yet.</p>}
+    <Link className="button button-outline member-discernment-summary-link" to="/account/discernment">View full discernment progress <ArrowRight size={14} /></Link>
+  </section>
+}
+
 function MemberDonationsView({ member }: { member: MemberAccount }) {
   const [donations, setDonations] = useState<MemberDonation[]>(() => {
     if (!member.demo) return []
@@ -2325,13 +2394,7 @@ function MemberDiscernmentView({ member }: { member: MemberAccount }) {
     }
   }
   const currentStageIndex = discernmentStages.findIndex((stage) => stage.id === details.stage)
-  const currentCriteria = criteria.transitions[currentStageIndex]
-  const milestones = currentCriteria ? [
-    { label: 'Active time on the website', value: metrics.activeSiteMinutes, target: currentCriteria.activeSiteMinutes, unit: 'minutes' },
-    { label: 'Teachings read', value: metrics.completedTeachings, target: currentCriteria.completedTeachings, unit: 'teachings' },
-    { label: 'Prayer or reflection check-ins', value: metrics.prayerReflections, target: currentCriteria.prayerReflections, unit: 'check-ins' },
-    { label: 'Messages sent to the Federation', value: metrics.communityMessages, target: currentCriteria.communityMessages, unit: 'messages' },
-  ] : []
+  const milestones = getDiscernmentMilestones(details.stage, criteria, metrics)
   const hasMilestones = milestones.some((milestone) => milestone.target > 0)
   return <section className="member-account-section discernment-form">
     <div className="member-section-heading"><span className="eyebrow">YOUR JOURNEY</span><h2>Discernment</h2><p>Your stage advances automatically when the Federation’s published milestones are met. These are guideposts for engagement, not a judgment of your vocation.</p><Link className="text-link" to="/discernment">Read discernment guides <ArrowRight size={14} /></Link></div>
@@ -2633,7 +2696,7 @@ function MemberAccountPage() {
     { id: 'recommendations', label: 'Recommended for You', icon: BookOpen, path: '/account/recommendations' },
   ]
   function signOut() { saveMemberSession(null); navigator.sendBeacon('/api/auth/logout'); navigate('/') }
-  return <section className="member-account-page"><div className="member-account-shell"><aside className="member-account-sidebar"><div className="member-account-identity"><span className="member-account-avatar">{member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><b>{member.name}</b><small>{member.email}</small><Link className="member-edit-profile" to="/account"><Pencil size={13} /> Edit profile</Link></div><nav aria-label="Your account">{tabs.map(({ id, label, icon: Icon, path }) => <NavLink key={id} to={path} end={id === 'profile'} className={({ isActive }) => isActive || section === id ? 'active' : ''}><Icon size={16} />{label}</NavLink>)}</nav><button className="member-signout" type="button" onClick={signOut}><LogOut size={15} />Sign out</button></aside><main className="member-account-main">{sessionWarning && <p className="form-error" role="status">{sessionWarning}</p>}{section === 'profile' && <MemberProfileDetails key={member.email} member={member} onUpdated={setMember} />}{section === 'donations' && <MemberDonationsView member={member} />}{section === 'discernment' && <MemberDiscernmentView key={member.email} member={member} />}{section === 'security' && <MemberSecurityView member={member} />}{section === 'messages' && <MemberMessagesView member={member} />}{section === 'favorites' && <MemberFavoritesView member={member} />}{section === 'recommendations' && <MemberRecommendationsView />}</main></div></section>
+  return <section className="member-account-page"><div className="member-account-shell"><aside className="member-account-sidebar"><div className="member-account-identity"><span className="member-account-avatar">{member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><b>{member.name}</b><small>{member.email}</small><Link className="member-edit-profile" to="/account"><Pencil size={13} /> Edit profile</Link></div><nav aria-label="Your account">{tabs.map(({ id, label, icon: Icon, path }) => <NavLink key={id} to={path} end={id === 'profile'} className={({ isActive }) => isActive || section === id ? 'active' : ''}><Icon size={16} />{label}</NavLink>)}</nav><button className="member-signout" type="button" onClick={signOut}><LogOut size={15} />Sign out</button></aside><main className="member-account-main">{sessionWarning && <p className="form-error" role="status">{sessionWarning}</p>}{section === 'profile' && <><MemberProfileDetails key={member.email} member={member} onUpdated={setMember} /><MemberDiscernmentSummary key={`discernment-${member.email}`} member={member} /></>}{section === 'donations' && <MemberDonationsView member={member} />}{section === 'discernment' && <MemberDiscernmentView key={member.email} member={member} />}{section === 'security' && <MemberSecurityView member={member} />}{section === 'messages' && <MemberMessagesView member={member} />}{section === 'favorites' && <MemberFavoritesView member={member} />}{section === 'recommendations' && <MemberRecommendationsView />}</main></div></section>
 }
 
 const conversations = [{ name: 'Maria Santos', email: 'maria.santos@email.com', subject: 'Monthly offering receipt', text: 'Thank you for confirming my contribution…', time: '10:42 AM', type: 'Donation', unread: true, color: 'rose' }, { name: 'Ana Reyes', email: 'ana.reyes@email.com', subject: 'Discernment and visits', text: 'I have been thinking about visiting…', time: 'Yesterday', type: 'Discerner', unread: true, color: 'gold' }, { name: 'John Dela Cruz', email: 'john.dc@email.com', subject: 'Bank transfer question', text: 'Could you help me verify a transfer?', time: 'Sep 25', type: 'Donation', unread: false, color: 'green' }, { name: 'Rosa Villanueva', email: 'rosa.v@email.com', subject: 'A note to the sisters', text: 'Please include our family in your prayers…', time: 'Sep 24', type: 'General', unread: false, color: 'blue' }]
