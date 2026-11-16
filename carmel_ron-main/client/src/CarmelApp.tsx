@@ -1541,9 +1541,19 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
 }
 function ContactPage() {
   const { contactDetails } = useManagedContent()
+  const [email, setEmail] = useState(() => readMemberSession()?.email || '')
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
   const [sending, setSending] = useState(false)
+  useEffect(() => {
+    const refreshEmail = () => setEmail(readMemberSession()?.email || '')
+    window.addEventListener(memberSessionUpdatedEvent, refreshEmail)
+    window.addEventListener('storage', refreshEmail)
+    return () => {
+      window.removeEventListener(memberSessionUpdatedEvent, refreshEmail)
+      window.removeEventListener('storage', refreshEmail)
+    }
+  }, [])
   async function submitContact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSending(true)
@@ -1567,7 +1577,8 @@ function ContactPage() {
     }
     try {
       form.reset()
-      setStatus('Thank you. Your inquiry has been saved and sent.')
+      setEmail(readMemberSession()?.email || '')
+      setStatus('Your message was sent successfully. We’ll be in touch soon.')
     } catch (reason) {
       setError(`Your inquiry was saved, but the form could not be reset: ${reason instanceof Error ? reason.message : 'unknown error'}.`)
     } finally {
@@ -1593,7 +1604,7 @@ function ContactPage() {
         </div>
         <form className="contact-reference-form" onSubmit={submitContact}>
           <div className="contact-reference-field"><label htmlFor="contact-name">Your name</label><input type="text" id="contact-name" name="name" placeholder="Name" required minLength={2} maxLength={100} /></div>
-          <div className="contact-reference-field"><label htmlFor="contact-email">Email address</label><input type="email" id="contact-email" name="email" placeholder="you@example.com" required /></div>
+          <div className="contact-reference-field"><label htmlFor="contact-email">Email address</label><input type="email" id="contact-email" name="email" placeholder="you@example.com" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></div>
           <div className="contact-reference-field"><label htmlFor="contact-purpose">What would you like to talk about?</label><select id="contact-purpose" name="purpose" defaultValue="GENERAL" required><option value="GENERAL">A general question</option><option value="DISCERNER">My discernment</option><option value="DONATION">A donation</option><option value="PRAYER">A prayer request</option></select></div>
           <div className="contact-reference-field"><label htmlFor="contact-message">Your message</label><textarea id="contact-message" name="message" placeholder="Write your message here..." required minLength={10} maxLength={5000} /></div>
           {error && <p className="contact-reference-status contact-reference-error" role="alert">{error}</p>}
