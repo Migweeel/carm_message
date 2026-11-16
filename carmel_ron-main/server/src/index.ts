@@ -635,7 +635,6 @@ const donationSchema = z.object({
   phone: z.string().trim().max(30).optional().default(''),
   receipt: z.boolean().default(false),
   reference: z.string().trim().max(100).optional().default(''),
-  fund: z.string().trim().max(150).optional().default('Federation formation program'),
 })
 app.post('/api/donations', rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -659,14 +658,14 @@ app.post('/api/donations', rateLimit({
         referenceCode,
         amount: new Prisma.Decimal(input.amount),
         type: 'ONE_TIME',
-        fund: input.fund,
+        fund: 'Federation formation program',
         paymentMethod: input.payment,
         isAnonymous: input.anonymous,
         ...(req.auth?.role === 'USER' ? { userId: req.auth.id } : {}),
         donorName: input.anonymous ? null : input.name || null,
         donorEmail: input.anonymous && !input.receipt ? null : input.email || null,
         donorPhone: input.anonymous && !input.receipt ? null : input.phone || null,
-        wantsReceipt: input.receipt,
+        wantsReceipt: input.receipt || !input.anonymous,
         status: 'PENDING',
       } })
       await tx.auditLog.create({ data: {
@@ -676,7 +675,6 @@ app.post('/api/donations', rateLimit({
         meta: {
           referenceCode,
           amount: input.amount,
-          fund: input.fund,
           paymentMethod: input.payment,
           status: 'PENDING',
           isAnonymous: input.anonymous,
@@ -704,7 +702,7 @@ app.post('/api/donations', rateLimit({
       currency: 'PHP',
       external_id: referenceCode,
       invoice_duration: 86400,
-      description: `Donation to the Federation formation program (${referenceCode})`,
+      description: `Donation (${referenceCode})`,
       payment_methods: [{
         GCASH: 'GCASH',
         MAYA: 'PAYMAYA',
@@ -776,14 +774,14 @@ app.post('/api/donations', rateLimit({
       referenceCode,
       amount: new Prisma.Decimal(input.amount),
       type: 'ONE_TIME',
-      fund: input.fund,
+      fund: 'Federation formation program',
       paymentMethod: input.payment,
       isAnonymous: input.anonymous,
       ...(req.auth?.role === 'USER' ? { userId: req.auth.id } : {}),
       donorName: retainName ? input.name || null : null,
       donorEmail: retainName || input.receipt ? input.email || null : null,
       donorPhone: retainName || input.receipt ? input.phone || null : null,
-      wantsReceipt: input.receipt,
+      wantsReceipt: input.receipt || !input.anonymous,
       paymentReference: input.reference || null,
       status: input.reference ? 'RECONCILING' : 'PENDING',
     }, select: { id: true, referenceCode: true, amount: true, paymentMethod: true, isAnonymous: true, status: true, createdAt: true } })
@@ -794,7 +792,6 @@ app.post('/api/donations', rateLimit({
       meta: {
         referenceCode: created.referenceCode,
         amount: input.amount,
-        fund: input.fund,
         paymentMethod: input.payment,
         status: created.status,
         isAnonymous: input.anonymous,
@@ -825,7 +822,6 @@ async function sendDonationAcknowledgment(referenceCode: string): Promise<boolea
       id: true,
       referenceCode: true,
       amount: true,
-      fund: true,
       paymentMethod: true,
       donorName: true,
       isAnonymous: true,
@@ -864,8 +860,8 @@ async function sendDonationAcknowledgment(referenceCode: string): Promise<boolea
     await sendEmail({
       to: donation.donorEmail,
       subject: `Donation received — ${donation.referenceCode}`,
-      text: `Dear ${name},\n\nThank you for your generous donation to Carmels in Communion. Your payment has been confirmed and your donation was successfully received.\n\nAcknowledgment reference: ${donation.referenceCode}\nAmount: ${donation.amount.toFixed(2)} PHP\nFund: ${donation.fund}\nPayment method: ${donation.paymentMethod}\nDate: ${donation.createdAt.toLocaleDateString('en-PH')}\n\nPlease keep this email as your acknowledgment. If you have questions, contact ocdnuns.vocpromph@gmail.com.\n\nWith gratitude,\nCarmels in Communion`,
-      html: `<p>Dear ${escapeHtml(name)},</p><p>Thank you for your generous donation to Carmels in Communion. Your payment has been confirmed and your donation was successfully received.</p><table><tbody><tr><th align="left">Acknowledgment reference</th><td>${escapeHtml(donation.referenceCode)}</td></tr><tr><th align="left">Amount</th><td>PHP ${escapeHtml(donation.amount.toFixed(2))}</td></tr><tr><th align="left">Fund</th><td>${escapeHtml(donation.fund)}</td></tr><tr><th align="left">Payment method</th><td>${escapeHtml(donation.paymentMethod)}</td></tr><tr><th align="left">Date</th><td>${escapeHtml(donation.createdAt.toLocaleDateString('en-PH'))}</td></tr></tbody></table><p>Please keep this email as your acknowledgment. For questions, contact <a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a>.</p><p>With gratitude,<br />Carmels in Communion</p>`,
+      text: `Dear ${name},\n\nThank you for your generous donation to Carmels in Communion. Your payment has been confirmed and your donation was successfully received.\n\nAcknowledgment reference: ${donation.referenceCode}\nAmount: ${donation.amount.toFixed(2)} PHP\nPayment method: ${donation.paymentMethod}\nDate: ${donation.createdAt.toLocaleDateString('en-PH')}\n\nPlease keep this email as your acknowledgment. If you have questions, contact ocdnuns.vocpromph@gmail.com.\n\nWith gratitude,\nCarmels in Communion`,
+      html: `<p>Dear ${escapeHtml(name)},</p><p>Thank you for your generous donation to Carmels in Communion. Your payment has been confirmed and your donation was successfully received.</p><table><tbody><tr><th align="left">Acknowledgment reference</th><td>${escapeHtml(donation.referenceCode)}</td></tr><tr><th align="left">Amount</th><td>PHP ${escapeHtml(donation.amount.toFixed(2))}</td></tr><tr><th align="left">Payment method</th><td>${escapeHtml(donation.paymentMethod)}</td></tr><tr><th align="left">Date</th><td>${escapeHtml(donation.createdAt.toLocaleDateString('en-PH'))}</td></tr></tbody></table><p>Please keep this email as your acknowledgment. For questions, contact <a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a>.</p><p>With gratitude,<br />Carmels in Communion</p>`,
     })
     await prisma.donation.updateMany({
       where: { id: donation.id, receiptEmailSendingAt: sentAt },
@@ -933,7 +929,7 @@ app.get('/api/donations/mine', authenticate, allowRoles('USER'), asyncRoute(asyn
   const donations = await prisma.donation.findMany({
     where: { OR: [{ userId: req.auth!.id }, { donorEmail: user.email }] },
     orderBy: { createdAt: 'desc' },
-    select: { referenceCode: true, amount: true, paymentMethod: true, status: true, createdAt: true, fund: true },
+    select: { referenceCode: true, amount: true, paymentMethod: true, status: true, createdAt: true },
   })
   res.json({ donations })
 }))
@@ -1070,7 +1066,7 @@ app.get('/api/donations/:reference', rateLimit({
   standardHeaders: 'draft-8',
   legacyHeaders: false,
 }), asyncRoute(async (req, res) => {
-  const donation = await prisma.donation.findUnique({ where: { referenceCode: routeParam(req, 'reference') }, select: { referenceCode: true, amount: true, paymentMethod: true, isAnonymous: true, status: true, wantsReceipt: true, receiptEmailSentAt: true, receiptEmailSendingAt: true, createdAt: true, fund: true } })
+  const donation = await prisma.donation.findUnique({ where: { referenceCode: routeParam(req, 'reference') }, select: { referenceCode: true, amount: true, paymentMethod: true, isAnonymous: true, status: true, wantsReceipt: true, receiptEmailSentAt: true, receiptEmailSendingAt: true, createdAt: true } })
   if (!donation) return res.status(404).json({ error: 'Acknowledgment not found.' })
   if (['COMPLETED', 'VERIFIED'].includes(donation.status) && donation.wantsReceipt && !donation.receiptEmailSentAt) {
     await sendDonationAcknowledgment(donation.referenceCode)
@@ -1088,7 +1084,6 @@ app.get('/api/donations/:reference', rateLimit({
       status: donation.status,
       wantsReceipt: donation.wantsReceipt,
       createdAt: donation.createdAt,
-      fund: donation.fund,
       receiptEmailSent: Boolean(receiptEmail.receiptEmailSentAt),
       receiptEmailSending: Boolean(receiptEmail.receiptEmailSendingAt),
     },
@@ -1614,7 +1609,6 @@ app.get('/api/admin/dashboard', authenticate, allowRoles('ADMIN'), asyncRoute(as
       take: 8,
       select: {
         id: true,
-        fund: true,
         amount: true,
         isAnonymous: true,
         donorName: true,
@@ -1912,12 +1906,31 @@ app.get('/api/recommendations', authenticate, allowRoles('USER'), asyncRoute(asy
 }))
 
 app.get('/api/admin/donations', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (_req, res) => {
-  const donations = await prisma.donation.findMany({ orderBy: { createdAt: 'desc' }, include: { beneficiaryMonastery: { select: { name: true } } } })
+  const donations = await prisma.donation.findMany({
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      referenceCode: true,
+      amount: true,
+      type: true,
+      paymentMethod: true,
+      isManual: true,
+      isAnonymous: true,
+      donorName: true,
+      donorEmail: true,
+      donorPhone: true,
+      wantsReceipt: true,
+      paymentReference: true,
+      status: true,
+      createdAt: true,
+      beneficiaryMonastery: { select: { name: true } },
+      files: { select: { id: true, fileUrl: true, type: true, fileName: true, createdAt: true } },
+    },
+  })
   res.json({ donations })
 }))
 const manualDonationSchema = z.object({
   amount: z.coerce.number().finite().min(50).max(10000000),
-  fund: z.string().trim().min(1).max(150),
   paymentMethod: z.enum(['GCASH', 'MAYA', 'BANK', 'CARD']),
   type: z.enum(['ONE_TIME', 'MONTHLY']),
   isAnonymous: z.boolean(),
@@ -1941,13 +1954,14 @@ app.post('/api/admin/donations', authenticate, allowRoles('ADMIN'), asyncRoute(a
       referenceCode: `CARMEL-${new Date().getFullYear()}-${randomBytes(16).toString('hex').toUpperCase()}`,
       amount: new Prisma.Decimal(input.amount),
       type: input.type,
-      fund: input.fund,
+      fund: 'Federation formation program',
       paymentMethod: input.paymentMethod,
       isManual: true,
       isAnonymous: input.isAnonymous,
       donorName: input.isAnonymous ? null : input.donorName || null,
       donorEmail: input.isAnonymous ? null : input.donorEmail || null,
       donorPhone: input.isAnonymous ? null : input.donorPhone || null,
+      wantsReceipt: !input.isAnonymous && Boolean(input.donorEmail),
       paymentReference: input.paymentReference || null,
       status: 'COMPLETED',
       ...(input.proof ? { files: { create: { fileUrl: input.proof.fileUrl, fileName: input.proof.fileName, type: input.proof.type } } } : {}),
@@ -1955,7 +1969,8 @@ app.post('/api/admin/donations', authenticate, allowRoles('ADMIN'), asyncRoute(a
     include: { files: true, beneficiaryMonastery: { select: { name: true } } },
   })
   await audit(req.auth!.id, 'RECORD_DONATION', 'Donation', donation.id, { referenceCode: donation.referenceCode, amount: input.amount })
-  res.status(201).json({ donation })
+  const receiptEmailSent = donation.wantsReceipt ? await sendDonationAcknowledgment(donation.referenceCode) : false
+  res.status(201).json({ donation: { ...donation, receiptEmailSent } })
 }))
 const managedUserSelect = {
   id: true,
@@ -2173,7 +2188,7 @@ app.get('/api/admin/notifications', authenticate, allowRoles('ADMIN', 'FORMATOR'
       where: { createdAt: { gte: since } },
       orderBy: { createdAt: 'desc' },
       take: 10,
-      select: { id: true, donorName: true, fund: true, status: true, createdAt: true },
+      select: { id: true, donorName: true, status: true, createdAt: true },
     }) : Promise.resolve([]),
     prisma.auditLog.findMany({
       where: { createdAt: { gte: since }, entity: isAdmin ? { not: 'PageContent' } : { notIn: ['PageContent', 'Donation', 'SystemBackup'] } },
@@ -2220,7 +2235,7 @@ app.get('/api/admin/notifications', authenticate, allowRoles('ADMIN', 'FORMATOR'
       id: `donation-${donation.id}`,
       kind: 'donation',
       title: 'New donation received',
-      description: `${donation.donorName || 'Anonymous'} · ${donation.fund} · ${donation.status}`,
+      description: `${donation.donorName || 'Anonymous'} · ${donation.status}`,
       createdAt: donation.createdAt,
       href: isAdmin ? '/admin/donations' : '/admin/messages',
       unread: false,
@@ -2254,6 +2269,14 @@ app.get('/api/admin/notifications', authenticate, allowRoles('ADMIN', 'FORMATOR'
     })),
   ].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()).slice(0, 30)
   res.json({ unreadMessageCount, notifications })
+}))
+app.post('/api/admin/conversations/read', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (_req, res) => {
+  const now = new Date()
+  await prisma.$transaction([
+    prisma.message.updateMany({ where: { senderType: 'VISITOR', readAt: null }, data: { readAt: now } }),
+    prisma.conversation.updateMany({ where: { isRead: false }, data: { isRead: true } }),
+  ])
+  res.status(204).end()
 }))
 app.post('/api/admin/conversations/:id/read', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (req, res) => {
   const id = routeParam(req, 'id')

@@ -327,6 +327,7 @@ const money = (n: number) => new Intl.NumberFormat('en-PH', { style: 'currency',
 const memberSessionKey = 'carmel-member-session'
 const memberSessionUpdatedEvent = 'carmel-member-session-updated'
 const directThreadsUpdatedEvent = 'carmel-direct-threads-updated'
+const adminMessagesReadEvent = 'carmel-admin-messages-read'
 type MemberGender = 'MALE' | 'FEMALE' | 'ANONYMOUS'
 type MemberAccount = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: 'USER'; prototype?: boolean; demo?: true }
 function useMemberFavorites(member: MemberAccount | null) {
@@ -396,7 +397,7 @@ function useMemberFavorites(member: MemberAccount | null) {
 function parseMemberGender(value: string): MemberGender {
   return value === 'MALE' || value === 'FEMALE' ? value : 'ANONYMOUS'
 }
-type MemberDonation = { referenceCode: string; amount: number; paymentMethod: string; status: string; createdAt: string; fund: string }
+type MemberDonation = { referenceCode: string; amount: number; paymentMethod: string; status: string; createdAt: string }
 type DiscernmentStage = 'EXPLORING' | 'PRAYING_AND_LEARNING' | 'READY_TO_VISIT' | 'IN_CONVERSATION'
 type MemberDiscernment = { monastery: string; stage: DiscernmentStage; note: string; updatedAt?: string }
 const discernmentStages: Array<{ id: DiscernmentStage; label: string; description: string }> = [
@@ -1573,7 +1574,6 @@ function normalizePhilippinePhone(value: string) {
   return digits ? `+63${digits.slice(0, 10)}` : ''
 }
 const giftAmounts = [500, 1000, 2500, 5000]
-const giftLabels = ['Daily food & nutrition', 'Medicines & health care', 'Young sisters’ formation', 'Infirmary & monastery upkeep']
 const steps = ['Select amount', 'Payment method', 'Your details', 'Review & complete']
 function DonationsPage() {
   const [gift, setGiftState] = useState<Donation>(() => {
@@ -1638,14 +1638,13 @@ function DonationsPage() {
     })
     return () => { active = false }
   }, [])
-  function next() { setError(''); if (step === 0 && amount < 50) return setError('Please choose an amount of at least ₱50.'); if (step === 2 && !gift.anonymous && (!gift.name.trim() || !gift.email.includes('@'))) return setError('Please provide your name and a valid email address.'); if (step === 2 && gift.receipt && !gift.email.trim().includes('@')) return setError('Enter a valid email address for your acknowledgment receipt.'); setStep(Math.min(step + 1, 3)) }
+  function next() { setError(''); if (step === 0 && amount < 50) return setError('Please choose an amount of at least ₱50.'); if (step === 2 && !gift.anonymous && (!gift.name.trim() || !gift.email.includes('@'))) return setError('Please provide your name and a valid email address.'); if (step === 2 && gift.receipt && !gift.email.trim().includes('@')) return setError('Enter a valid email address for the thank-you email.'); setStep(Math.min(step + 1, 3)) }
   async function complete() {
     setError('')
-    const fund = giftLabels[giftAmounts.indexOf(amount)] || 'Federation formation program'
     if (xenditEnabled) {
       setCheckoutStarting(true)
       try {
-        const response = await fetch('/api/donations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...gift, amount, fund }) })
+        const response = await fetch('/api/donations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...gift, amount }) })
         const result = await readApiResponse<{ invoiceUrl?: string }>(response, 'Starting secure checkout')
         if (!result.invoiceUrl) throw new Error('Xendit did not return a checkout link. Please try again.')
         window.location.assign(result.invoiceUrl)
@@ -1658,7 +1657,7 @@ function DonationsPage() {
       return
     }
     try {
-      const response = await fetch('/api/donations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...gift, amount, fund }) })
+      const response = await fetch('/api/donations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...gift, amount }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Your offering could not be recorded.')
       setReceiptCode(result.donation.referenceCode)
@@ -1673,10 +1672,31 @@ function DonationsPage() {
     {!receiptCode ? <section className="donation-card"><div className="donation-card-head"><span>GIFT DETAILS</span><b>STEP {step + 1} <i>OF 4</i></b></div><div className="stepper">{steps.map((name, i) => <div className={`step-node ${i < step ? 'done' : ''} ${i === step ? 'current' : ''}`} key={name}><span>{i < step ? <Check size={14} /> : i + 1}</span><small>{name}</small></div>)}</div><div className="donation-step">
       {step === 0 && <><span className="eyebrow">STEP ONE</span><h2>Select your offering</h2><p>Choose a suggested gift or enter your own preferred amount.</p><div className="amount-grid">{giftAmounts.map((value, i) => <button className={`amount-option ${!gift.custom && gift.amount === value ? 'selected' : ''}`} key={value} onClick={() => setGift({ ...gift, amount: value, custom: '' })}>{i === 1 && <span className="amount-badge">MOST FREQUENT</span>}<strong>{money(value).replace('.00', '')}</strong></button>)}</div><button className="custom-toggle" onClick={() => setShowCustom(!showCustom)}>{showCustom ? '− Hide custom amount' : '+ Enter a different amount'}</button>{showCustom && <label className="input-label">Your amount (minimum ₱50)<span className="currency-input"><b>₱</b><input type="number" min={50} value={gift.custom} onChange={(e) => setGift({ ...gift, custom: e.target.value })} placeholder="0.00" /></span></label>}<div className="selected-offering">Selected one-time offering <b>{money(amount)}</b></div></>}
       {step === 1 && <><span className="eyebrow">STEP TWO</span><h2>Choose payment method</h2><p>{xenditEnabled ? 'Choose a method for secure payment through Xendit.' : 'Select the channel you find most comfortable and familiar.'}</p><div className="payment-options">{[['GCASH', 'G', 'GCash mobile wallet', 'Send via QR code or mobile number'], ['MAYA', 'M', 'Maya (PayMaya)', 'Send via Maya QR code or account'], ['BANK', '⌂', 'Bank transfer', xenditEnabled ? 'Pay securely through Xendit' : 'Currently unavailable'], ['CARD', '▣', 'Debit / credit card', xenditEnabled ? 'Pay securely through Xendit' : 'Currently unavailable']].map(([id, symbol, title, desc]) => { const unavailable = !xenditEnabled && (id === 'BANK' || id === 'CARD'); return <button key={id} type="button" disabled={unavailable} aria-disabled={unavailable} className={`payment-option ${gift.payment === id ? 'selected' : ''}${unavailable ? ' unavailable' : ''}`} onClick={() => { if (!unavailable) setGift({ ...gift, payment: id as Donation['payment'] }) }}><span className={`payment-symbol ${id.toLowerCase()}`}>{symbol}</span><span><b>{title}</b><small>{desc}</small></span>{unavailable ? <i className="payment-unavailable-label">Unavailable</i> : <i className="radio-dot" />}</button> })}</div></>}
-      {step === 2 && <><span className="eyebrow">STEP THREE</span><h2>Donor information</h2><p>You may offer this quietly without leaving your name, or share your name.</p><div className="anonymous-options"><button className={gift.anonymous ? 'selected' : ''} onClick={() => setGift({ ...gift, anonymous: true })}><ShieldCheck /><b>Give anonymously</b><small>No name stored</small></button><button className={!gift.anonymous ? 'selected' : ''} onClick={() => setGift({ ...gift, anonymous: false })}><User /><b>Include my name</b><small>For monastery records</small></button></div>{!gift.anonymous && <div className="donor-fields"><label>Your name<input value={gift.name} onChange={(e) => setGift({ ...gift, name: e.target.value })} placeholder="Full name" /></label><label>Email address<input type="email" value={gift.email} onChange={(e) => setGift({ ...gift, email: e.target.value })} placeholder="you@example.com" /></label><label>Phone number<input type="tel" value={gift.phone} onChange={(e) => setGift({ ...gift, phone: e.target.value })} placeholder="+63" /></label></div>}<label className="check-row"><input type="checkbox" checked={gift.receipt} onChange={(e) => setGift({ ...gift, receipt: e.target.checked })} /><span>Send acknowledgment receipt by Email <small>(Optional)</small></span></label>{gift.receipt && gift.anonymous && <div className="donor-fields receipt-email-fields"><label>Email address for acknowledgment receipt<input type="email" value={gift.email} onChange={(e) => setGift({ ...gift, email: e.target.value })} placeholder="you@example.com" autoComplete="email" /></label></div>}</>}
-      {step === 3 && <><span className="eyebrow">STEP FOUR</span><h2>Review & complete</h2><p>Please check the details below and send your offering.</p><div className="review-box"><div><small>OFFERING AMOUNT</small><strong>{money(amount)}</strong></div><div><small>PAYMENT CHANNEL</small><b>{gift.payment}</b></div><div><small>DONOR</small><b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></div></div>{xenditEnabled ? <div className="payment-instructions xendit-checkout"><p>You’ll continue to Xendit’s secure checkout to complete your test payment.</p><button className="button button-gold full-button" disabled={checkoutStarting} onClick={complete}>{checkoutStarting ? 'Opening secure checkout…' : 'Continue to secure checkout'} <ArrowRight size={16} /></button></div> : gift.payment === 'CARD' ? <div className="notice">Card checkout is coming soon. Select another payment method to continue.</div> : <div className="payment-instructions"><div className="qr-placeholder"><span>SCAN<br />TO GIVE</span><i>GCASH · MAYA</i></div><div><small>ACCOUNT</small><b>FEDERATION OF DISCALCED CARMELITE NUNS</b><div className="account-number">0921-419-2267 <button onClick={() => { navigator.clipboard?.writeText('0921-419-2267'); setCopied(true); setTimeout(() => setCopied(false), 1600) }} aria-label="Copy account number">{copied ? <Check size={15} /> : <Clipboard size={15} />}{copied ? 'Copied!' : 'Copy'}</button></div></div><label>Payment reference number <small>(optional)</small><input value={gift.reference} onChange={(e) => setGift({ ...gift, reference: e.target.value })} placeholder="From your GCash / bank SMS" /></label><button className="button button-gold full-button" onClick={complete}>I have sent {money(amount)} <ArrowRight size={16} /></button></div>}</>}{error && <p className="form-error">{error}</p>}</div><div className="donation-card-foot"><button className="button button-outline" disabled={step === 0} onClick={() => { setError(''); setStep(Math.max(0, step - 1)) }}><ArrowLeft size={15} /> Back</button><span>{steps[step]}</span>{step < 3 && <button className="button button-dark" onClick={next}>Continue <ArrowRight size={15} /></button>}</div></section> : <section className="confirmation-card"><span className="confirm-icon"><Check /></span><span className="eyebrow">{donationStatus === 'COMPLETED' ? 'DONATION CONFIRMED' : 'DONATION PENDING VERIFICATION'}</span><h2>{donationStatus === 'COMPLETED' ? 'Thank you for your generosity.' : 'Your donation is being verified.'}</h2><p>{donationStatus === 'COMPLETED' ? 'Your donation has been confirmed by the payment provider.' : 'Thank you. The payment provider is confirming your donation; the status will update once Xendit notifies the Federation.'}</p><div className="receipt"><b>DONATION ACKNOWLEDGMENT</b><strong>{receiptCode}</strong><span>Beneficiary <b>Discalced Carmelite Nuns</b></span><span>Offering amount <b>{money(amount)}</b></span><span>Payment method <b>{gift.payment}</b></span><span>Donor <b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></span><span>Status <b>{donationStatus === 'COMPLETED' ? 'Completed' : 'Pending verification'}</b></span><span>Date <b>{new Date().toLocaleDateString('en-PH')}</b></span></div><div className="confirmation-actions"><button className="button button-outline" onClick={() => window.print()}><FileText size={16} /> Print acknowledgment</button><button className="button button-dark" onClick={() => { setReceiptCode(''); setDonationStatus(''); setVerificationNoticeOpen(false); setStep(0); setGift(initialDonation); sessionStorage.removeItem('carmel-gift') }}>Make another offering <ArrowRight size={15} /></button></div></section>}
-    {receiptCode && gift.receipt && <p className={`donation-email-status ${donationConfirmed ? receiptEmailSent ? 'sent' : 'failed' : 'pending'}`} role="status">{!donationConfirmed ? 'Your acknowledgment email will be sent after your donation is verified.' : receiptEmailSent ? 'Your donation confirmation and acknowledgment receipt were successfully sent to your email.' : 'Your donation is confirmed, but we could not send the acknowledgment email. Please contact ocdnuns.vocpromph@gmail.com for help.'}</p>}
-    {verificationNoticeOpen && <div className="donation-verification-backdrop" role="presentation"><section className="donation-verification-dialog" role="alertdialog" aria-modal="true" aria-labelledby="donation-verification-title" aria-describedby="donation-verification-description"><span className="confirm-icon"><Check /></span><span className="eyebrow">AWAITING VERIFICATION</span><h2 id="donation-verification-title">Your donation is being verified.</h2><p id="donation-verification-description">Thank you for your generosity. The Federation will review your payment and update its status once it has been verified. {gift.email || gift.phone ? 'The Federation can use the contact details you provided to update you after verification.' : 'No contact details were provided, so please keep your acknowledgment reference for follow-up.'}</p><button className="button button-dark" onClick={() => setVerificationNoticeOpen(false)}>Continue</button></section></div>}
+      {step === 2 && (
+        <>
+          <span className="eyebrow">STEP THREE</span>
+          <h2>Donor information</h2>
+          <p>You may offer this quietly without leaving your name, or share your name.</p>
+          <div className="anonymous-options">
+            <button className={gift.anonymous ? 'selected' : ''} onClick={() => setGift({ ...gift, anonymous: true })}><ShieldCheck /><b>Give anonymously</b><small>No name stored</small></button>
+            <button className={!gift.anonymous ? 'selected' : ''} onClick={() => setGift({ ...gift, anonymous: false })}><User /><b>Include my name</b><small>For monastery records</small></button>
+          </div>
+          {!gift.anonymous && <div className="donor-fields">
+            <label>Your name<input value={gift.name} onChange={(e) => setGift({ ...gift, name: e.target.value })} placeholder="Full name" /></label>
+            <label>Email address<input type="email" value={gift.email} onChange={(e) => setGift({ ...gift, email: e.target.value })} placeholder="you@example.com" /></label>
+            <label>Phone number<input type="tel" value={gift.phone} onChange={(e) => setGift({ ...gift, phone: e.target.value })} placeholder="+63" /></label>
+          </div>}
+          {gift.anonymous ? (
+            <>
+              <label className="check-row"><input type="checkbox" checked={gift.receipt} onChange={(e) => setGift({ ...gift, receipt: e.target.checked })} /><span>Send a thank-you email after payment confirmation <small>(Optional for anonymous gifts)</small></span></label>
+              {gift.receipt && <div className="donor-fields receipt-email-fields"><label>Email address for thank-you email<input type="email" value={gift.email} onChange={(e) => setGift({ ...gift, email: e.target.value })} placeholder="you@example.com" autoComplete="email" /></label></div>}
+            </>
+          ) : <p className="form-note">We’ll email you a thank-you after your payment is confirmed.</p>}
+        </>
+      )}
+      {step === 3 && <><span className="eyebrow">STEP FOUR</span><h2>Review & complete</h2><p>Please check the details below and send your offering.</p><div className="review-box"><div><small>OFFERING AMOUNT</small><strong>{money(amount)}</strong></div><div><small>PAYMENT CHANNEL</small><b>{gift.payment}</b></div><div><small>DONOR</small><b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></div></div>{xenditEnabled ? <div className="payment-instructions xendit-checkout"><p>You’ll continue to Xendit’s secure checkout to complete your test payment.</p><button className="button button-gold full-button" disabled={checkoutStarting} onClick={complete}>{checkoutStarting ? 'Opening secure checkout…' : 'Continue to secure checkout'} <ArrowRight size={16} /></button></div> : gift.payment === 'CARD' ? <div className="notice">Card checkout is coming soon. Select another payment method to continue.</div> : <div className="payment-instructions"><div className="qr-placeholder"><span>SCAN<br />TO GIVE</span><i>GCASH · MAYA</i></div><div><small>ACCOUNT</small><b>FEDERATION OF DISCALCED CARMELITE NUNS</b><div className="account-number">0921-419-2267 <button onClick={() => { navigator.clipboard?.writeText('0921-419-2267'); setCopied(true); setTimeout(() => setCopied(false), 1600) }} aria-label="Copy account number">{copied ? <Check size={15} /> : <Clipboard size={15} />}{copied ? 'Copied!' : 'Copy'}</button></div></div><label>Payment reference number <small>(optional)</small><input value={gift.reference} onChange={(e) => setGift({ ...gift, reference: e.target.value })} placeholder="From your GCash / bank SMS" /></label><button className="button button-gold full-button" onClick={complete}>I have sent {money(amount)} <ArrowRight size={16} /></button></div>}</>}{error && <p className="form-error">{error}</p>}</div><div className="donation-card-foot"><button className="button button-outline" disabled={step === 0} onClick={() => { setError(''); setStep(Math.max(0, step - 1)) }}><ArrowLeft size={15} /> Back</button><span>{steps[step]}</span>{step < 3 && <button className="button button-dark" onClick={next}>Continue <ArrowRight size={15} /></button>}</div></section> : <section className="confirmation-card"><span className="confirm-icon"><Check /></span><span className="eyebrow">{donationStatus === 'COMPLETED' ? 'DONATION CONFIRMED' : 'PAYMENT CONFIRMATION PENDING'}</span><h2>{donationStatus === 'COMPLETED' ? 'Thank you for your generosity.' : 'Your payment is being confirmed.'}</h2><p>{donationStatus === 'COMPLETED' ? 'Your donation has been confirmed by the payment provider.' : 'Thank you. The payment provider is confirming your donation; the status will update once Xendit notifies the Federation.'}</p><div className="receipt"><b>DONATION ACKNOWLEDGMENT</b><strong>{receiptCode}</strong><span>Beneficiary <b>Discalced Carmelite Nuns</b></span><span>Offering amount <b>{money(amount)}</b></span><span>Payment method <b>{gift.payment}</b></span><span>Donor <b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></span><span>Status <b>{donationStatus === 'COMPLETED' ? 'Completed' : 'Payment confirmation pending'}</b></span><span>Date <b>{new Date().toLocaleDateString('en-PH')}</b></span></div><div className="confirmation-actions"><button className="button button-outline" onClick={() => window.print()}><FileText size={16} /> Print acknowledgment</button><button className="button button-dark" onClick={() => { setReceiptCode(''); setDonationStatus(''); setVerificationNoticeOpen(false); setStep(0); setGift(initialDonation); sessionStorage.removeItem('carmel-gift') }}>Make another offering <ArrowRight size={15} /></button></div></section>}
+    {receiptCode && gift.email && <p className={`donation-email-status ${donationConfirmed ? receiptEmailSent ? 'sent' : 'failed' : 'pending'}`} role="status">{!donationConfirmed ? 'Your thank-you email will be sent automatically once your payment is confirmed.' : receiptEmailSent ? `Your payment was confirmed, and a thank-you email was sent to ${gift.email}.` : 'Your payment was confirmed, but we could not send the thank-you email. Please contact ocdnuns.vocpromph@gmail.com for help.'}</p>}
+    {verificationNoticeOpen && <div className="donation-verification-backdrop" role="presentation"><section className="donation-verification-dialog" role="alertdialog" aria-modal="true" aria-labelledby="donation-verification-title" aria-describedby="donation-verification-description"><span className="confirm-icon"><Check /></span><span className="eyebrow">PAYMENT PENDING</span><h2 id="donation-verification-title">Your payment is being confirmed.</h2><p id="donation-verification-description">{xenditEnabled ? 'Xendit is confirming your payment. Your donation will appear in Transactions automatically when payment is complete, and we will send a thank-you email to the address you provided.' : `Thank you for your generosity. The Federation will review your payment and update its status once it has been confirmed. ${gift.email || gift.phone ? 'The Federation can use the contact details you provided to update you after confirmation.' : 'No contact details were provided, so please keep your acknowledgment reference for follow-up.'}`}</p><button className="button button-dark" onClick={() => setVerificationNoticeOpen(false)}>Continue</button></section></div>}
     {!receiptCode && <div className="trust-row"><span><ShieldCheck />100% Direct to Monasteries</span><span><User />Anonymous Giving Supported</span><span><Smartphone />Helpline: (0921) 419-2267</span></div>}</div>
 }
 type StaffRole = 'ADMIN' | 'FORMATOR'
@@ -2107,7 +2127,7 @@ function MemberDonationsView({ member }: { member: MemberAccount }) {
   return <section className="member-account-section">
     <div className="member-section-heading"><span className="eyebrow">YOUR GIVING</span><h2>Donation history</h2><p>{member.demo ? 'Demo accounts cannot make real donations.' : 'Offerings associated with your account are loaded from the Federation database.'}</p></div>
     {error && <p className="form-error" role="alert">{error}</p>}
-    {loading ? <p className="staff-empty">Loading donation history…</p> : donations.length ? <div className="member-donation-list">{donations.toReversed().map((donation) => <article className="member-donation-row" key={donation.referenceCode}><div><b>{donation.fund}</b><small>{new Date(donation.createdAt).toLocaleDateString()} · {donation.referenceCode}</small></div><strong>{money(donation.amount)}</strong><span className={`member-donation-status ${donation.status.toLowerCase()}`}>{donation.status.replace('_', ' ')}</span></article>)}</div> : <div className="member-empty"><HandHeart size={22} /><h3>No donations linked yet</h3><p>{member.demo ? 'Demo accounts cannot make real donations.' : 'Donations associated with your account will appear here. Older gifts may need to be linked by the Federation.'}</p>{!member.demo && <Link className="button button-outline" to="/donations">Make a donation <ArrowRight size={14} /></Link>}</div>}
+    {loading ? <p className="staff-empty">Loading donation history…</p> : donations.length ? <div className="member-donation-list">{donations.toReversed().map((donation) => <article className="member-donation-row" key={donation.referenceCode}><div><b>{donation.paymentMethod}</b><small>{new Date(donation.createdAt).toLocaleDateString()} · {donation.referenceCode}</small></div><strong>{money(donation.amount)}</strong><span className={`member-donation-status ${donation.status.toLowerCase()}`}>{donation.status.replace('_', ' ')}</span></article>)}</div> : <div className="member-empty"><HandHeart size={22} /><h3>No donations linked yet</h3><p>{member.demo ? 'Demo accounts cannot make real donations.' : 'Donations associated with your account will appear here. Older gifts may need to be linked by the Federation.'}</p>{!member.demo && <Link className="button button-outline" to="/donations">Make a donation <ArrowRight size={14} /></Link>}</div>}
   </section>
 }
 
@@ -2460,8 +2480,9 @@ function useAdminNotifications(userId: string) {
       }
     }
     void refresh()
+    window.addEventListener(adminMessagesReadEvent, refresh)
     const timer = window.setInterval(() => void refresh(), 8000)
-    return () => { active = false; window.clearInterval(timer) }
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener(adminMessagesReadEvent, refresh) }
   }, [userId, refreshToken])
   return { ...data, error, loading, refresh: () => setRefreshToken((value) => value + 1) }
 }
@@ -2505,7 +2526,7 @@ function AdminSidebarNav({ user, onNavigate, unreadCount }: { user: PrototypeSta
   const canManageUsers = user.role === 'ADMIN' || user.canManageUsers === true
   const canManageDetails = user.role === 'ADMIN' || user.canManageDetails === true
   const canManageUpdates = user.role === 'ADMIN' || user.canManageUpdates === true
-  return <nav className="admin-navigation"><NavLink to="/admin" end onClick={onNavigate}><Home size={17} />Dashboard</NavLink><NavLink to="/admin/messages" onClick={onNavigate}><MessageCircle size={17} />Messages{unreadCount > 0 && <i className="unread-count">{unreadCount}</i>}</NavLink>{canManageUpdates && <NavLink to="/admin/updates" onClick={onNavigate}><FileText size={17} />Updates</NavLink>}{(canManageUsers || canManageDetails || canManageUpdates || user.role === 'ADMIN') && <div className="admin-nav-label">MANAGEMENT</div>}{canManageUsers && (user.role === 'ADMIN' ? group('users', 'Manage Users', Users, [['Staff', '/admin/users?role=FORMATOR'], ['Users', '/admin/users?role=USER']]) : <NavLink to="/admin/users?role=USER" onClick={onNavigate}><Users size={17} />Manage Users</NavLink>)}{canManageUsers && <NavLink to="/admin/discerners" onClick={onNavigate}><Heart size={17} />Discerners</NavLink>}{user.role === 'ADMIN' && group('donations', 'Donations', HandHeart, [['Verification', '/admin/donations?view=verification'], ['Record Donation', '/admin/donations?view=logs'], ['Transactions', '/admin/donations?view=files']])}{canManageDetails && group('details', 'Manage Details', Image, [['Home', '/admin/content?section=home'], ['Our Monastery', '/admin/content?section=monastery'], ['Carmelife', '/admin/content?section=carmelife'], ['Carmelight', '/admin/content?section=carmelight'], ['About Us', '/admin/content?section=about'], ['Contact Us', '/admin/content?section=contact']])}{user.role === 'ADMIN' && <NavLink to="/admin/system-backup" onClick={onNavigate}><Database size={17} />System Backup</NavLink>}{(user.role === 'ADMIN' || user.role === 'FORMATOR') && <NavLink to="/admin/audit" onClick={onNavigate}><Clipboard size={17} />Audit Logs</NavLink>}</nav>
+  return <nav className="admin-navigation"><NavLink to="/admin" end onClick={onNavigate}><Home size={17} />Dashboard</NavLink><NavLink to="/admin/messages" onClick={onNavigate}><MessageCircle size={17} />Messages{unreadCount > 0 && <i className="unread-count">{unreadCount}</i>}</NavLink>{canManageUpdates && <NavLink to="/admin/updates" onClick={onNavigate}><FileText size={17} />Updates</NavLink>}{(canManageUsers || canManageDetails || canManageUpdates || user.role === 'ADMIN') && <div className="admin-nav-label">MANAGEMENT</div>}{canManageUsers && (user.role === 'ADMIN' ? group('users', 'Manage Users', Users, [['Staff', '/admin/users?role=FORMATOR'], ['Users', '/admin/users?role=USER']]) : <NavLink to="/admin/users?role=USER" onClick={onNavigate}><Users size={17} />Manage Users</NavLink>)}{canManageUsers && <NavLink to="/admin/discerners" onClick={onNavigate}><Heart size={17} />Discerners</NavLink>}{user.role === 'ADMIN' && group('donations', 'Donations', HandHeart, [['Record Donation', '/admin/donations?view=logs'], ['Transactions', '/admin/donations?view=files']])}{canManageDetails && group('details', 'Manage Details', Image, [['Home', '/admin/content?section=home'], ['Our Monastery', '/admin/content?section=monastery'], ['Carmelife', '/admin/content?section=carmelife'], ['Carmelight', '/admin/content?section=carmelight'], ['About Us', '/admin/content?section=about'], ['Contact Us', '/admin/content?section=contact']])}{user.role === 'ADMIN' && <NavLink to="/admin/system-backup" onClick={onNavigate}><Database size={17} />System Backup</NavLink>}{(user.role === 'ADMIN' || user.role === 'FORMATOR') && <NavLink to="/admin/audit" onClick={onNavigate}><Clipboard size={17} />Audit Logs</NavLink>}</nav>
 }
 function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; user: PrototypeStaff; onUserUpdated: (user: PrototypeStaff) => void }) {
   const navigate = useNavigate()
@@ -2590,7 +2611,6 @@ function StatCard({ label, value, sub, tone, badge, icon: Icon = Banknote, trend
 }
 type DashboardDonation = {
   id: string
-  fund: string
   amount: number | string
   isAnonymous: boolean
   donorName: string | null
@@ -2679,14 +2699,13 @@ function DashboardPage() {
       const result = await readApiResponse<{ donations: DashboardDonation[] }>(response, 'Exporting donation transactions')
       const escapeCsv = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
       const rows = result.donations.map((donation) => [
-        donation.fund,
         donation.beneficiaryMonastery?.name ?? '',
         donation.isAnonymous ? 'Anonymous' : donation.donorName ?? '',
         new Date(donation.createdAt).toISOString(),
         Number(donation.amount),
         donation.status,
       ].map(escapeCsv).join(','))
-      const csv = ['Purpose,Beneficiary,Donor,Date,Amount,Status', ...rows].join('\r\n')
+      const csv = ['Beneficiary,Donor,Date,Amount,Status', ...rows].join('\r\n')
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
       const anchor = document.createElement('a')
       anchor.href = url
@@ -2721,7 +2740,7 @@ function DashboardPage() {
     </div>
     <section className="admin-panel transactions-panel">
       <div className="panel-heading"><div><h2>Recent transactions</h2><p>{dashboard?.recentDonations.length ?? 0} most recent donations</p></div><Link to="/admin/donations?view=files" className="text-link">View all <ArrowRight size={15} /></Link></div>
-      <div className="table-scroll"><table><thead><tr>{['FUND / PURPOSE', 'BENEFICIARY', 'BENEFACTOR / DONOR', 'DATE', 'DONATION AMOUNT', 'STATUS'].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>{dashboard?.recentDonations.map((donation) => <tr key={donation.id}><td><b>{donation.fund}</b></td><td>{donation.beneficiaryMonastery?.name ?? 'Federation'}</td><td className={donation.isAnonymous ? 'anonymous-cell' : ''}>{donation.isAnonymous ? 'Anonymous' : donation.donorName || 'Donor'}</td><td>{new Date(donation.createdAt).toLocaleDateString('en-PH')}</td><td><b>{money(Number(donation.amount))}</b></td><td><span className={`status-badge ${donation.status.toLowerCase()}`}>{donation.status}</span></td></tr>)}</tbody></table>{!loading && dashboard?.recentDonations.length === 0 && <p className="staff-empty">No donation transactions have been recorded yet.</p>}{loading && <p className="staff-empty">Loading donation records…</p>}</div>
+      <div className="table-scroll"><table><thead><tr>{['BENEFICIARY', 'BENEFACTOR / DONOR', 'DATE', 'DONATION AMOUNT', 'STATUS'].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>{dashboard?.recentDonations.map((donation) => <tr key={donation.id}><td>{donation.beneficiaryMonastery?.name ?? 'Federation'}</td><td className={donation.isAnonymous ? 'anonymous-cell' : ''}>{donation.isAnonymous ? 'Anonymous' : donation.donorName || 'Donor'}</td><td>{new Date(donation.createdAt).toLocaleDateString('en-PH')}</td><td><b>{money(Number(donation.amount))}</b></td><td><span className={`status-badge ${donation.status.toLowerCase()}`}>{donation.status}</span></td></tr>)}</tbody></table>{!loading && dashboard?.recentDonations.length === 0 && <p className="staff-empty">No donation transactions have been recorded yet.</p>}{loading && <p className="staff-empty">Loading donation records…</p>}</div>
     </section>
   </>
 }
@@ -3834,7 +3853,6 @@ type AdminDonationRecord = {
   referenceCode: string
   amount: number | string
   type: 'ONE_TIME' | 'MONTHLY'
-  fund: string
   paymentMethod: 'GCASH' | 'MAYA' | 'BANK' | 'CARD'
   isManual: boolean
   isAnonymous: boolean
@@ -3842,6 +3860,7 @@ type AdminDonationRecord = {
   donorEmail: string | null
   donorPhone: string | null
   wantsReceipt: boolean
+  receiptEmailSent?: boolean
   paymentReference: string | null
   status: string
   createdAt: string
@@ -3853,17 +3872,14 @@ const donationPaymentLabels: Record<AdminDonationRecord['paymentMethod'], string
 function DonationAdminPage() {
   const location = useLocation()
   const requestedView = new URLSearchParams(location.search).get('view')
-  const view = requestedView === 'files' || requestedView === 'verification' ? requestedView : 'logs'
+  const view = requestedView === 'files' || requestedView === 'verification' ? 'files' : 'logs'
   const [donations, setDonations] = useState<AdminDonationRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [selectedDonation, setSelectedDonation] = useState<AdminDonationRecord | null>(null)
-  const [updatingStatus, setUpdatingStatus] = useState(false)
-  const [confirmReject, setConfirmReject] = useState(false)
   const [amount, setAmount] = useState('')
-  const [fund, setFund] = useState('Federation formation program')
   const [paymentMethod, setPaymentMethod] = useState<AdminDonationRecord['paymentMethod']>('GCASH')
   const [type, setType] = useState<AdminDonationRecord['type']>('ONE_TIME')
   const [anonymous, setAnonymous] = useState(true)
@@ -3929,7 +3945,6 @@ function DonationAdminPage() {
     setSaving(true)
     const record = {
       amount: Number(amount),
-      fund: fund.trim(),
       paymentMethod,
       type,
       anonymous,
@@ -3946,7 +3961,6 @@ function DonationAdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: record.amount,
-          fund: record.fund,
           paymentMethod: record.paymentMethod,
           type: record.type,
           isManual: true,
@@ -3962,7 +3976,6 @@ function DonationAdminPage() {
       const donation = result.donation
       setDonations((current) => [donation, ...current])
       setAmount('')
-      setFund('Federation formation program')
       setPaymentMethod('GCASH')
       setType('ONE_TIME')
       setAnonymous(true)
@@ -3971,7 +3984,11 @@ function DonationAdminPage() {
       setDonorPhone('')
       setPaymentReference('')
       setProof(null)
-      setSuccess(`Donation ${donation.referenceCode} was recorded.`)
+      setSuccess(record.donorEmail
+        ? donation.receiptEmailSent
+          ? `Donation ${donation.referenceCode} was recorded and the thank-you email was sent.`
+          : `Donation ${donation.referenceCode} was recorded, but the thank-you email could not be sent.`
+        : `Donation ${donation.referenceCode} was recorded.`)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The donation could not be recorded.')
     } finally {
@@ -3979,39 +3996,12 @@ function DonationAdminPage() {
     }
   }
 
-  function closeDetails() { setSelectedDonation(null); setConfirmReject(false) }
-  async function updateDonationStatus(status: 'VERIFIED' | 'FAILED') {
-    if (!selectedDonation) return
-    setError('')
-    setSuccess('')
-    setUpdatingStatus(true)
-    try {
-      const response = await fetch(`/api/admin/donations/${encodeURIComponent(selectedDonation.id)}/status`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      })
-      const result = await readApiResponse<{ donation: AdminDonationRecord }>(response, status === 'VERIFIED' ? 'Verifying donation' : 'Rejecting payment claim')
-      const updated = result.donation
-      setDonations((current) => current.map((donation) => donation.id === updated.id ? { ...donation, ...updated } : donation))
-      setSelectedDonation(updated)
-      setConfirmReject(false)
-      setSuccess(status === 'VERIFIED' ? `Donation ${updated.referenceCode} has been verified.` : `Payment claim ${updated.referenceCode} was rejected. The donation was not counted as received.`)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : status === 'VERIFIED' ? 'The donation could not be verified.' : 'The payment claim could not be rejected.')
-    } finally {
-      setUpdatingStatus(false)
-    }
-  }
-  function verifyDonation() { return updateDonationStatus('VERIFIED') }
+  function closeDetails() { setSelectedDonation(null) }
   const formattedAmount = (value: number | string) => `₱${Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  const pendingDonations = donations.filter((donation) => donation.status === 'PENDING' || donation.status === 'RECONCILING')
-  const visibleDonations = view === 'verification' ? pendingDonations : donations
+  const visibleDonations = donations
   return <>
-    <div className="admin-title-row"><div><span className="eyebrow">FEDERATION OFFICE</span><h1>{view === 'logs' ? 'Record a donation' : view === 'verification' ? 'Donation verification' : 'Donation transactions'}</h1><p>{view === 'logs' ? 'Log an offline contribution and attach its payment proof.' : view === 'verification' ? 'Review submitted donations and verify payments after checking the transaction.' : 'Online donations and manual entries appear together. Select a donation to view its details.'}</p></div></div>
+    <div className="admin-title-row"><div><span className="eyebrow">FEDERATION OFFICE</span><h1>{view === 'logs' ? 'Record a donation' : 'Donation transactions'}</h1><p>{view === 'logs' ? 'Log an offline contribution and attach its payment proof.' : 'Online donations and manual entries appear together. Select a donation to view its details.'}</p></div></div>
     <nav className="donation-admin-tabs" aria-label="Donation management">
-      <Link className={view === 'verification' ? 'active' : ''} to="/admin/donations?view=verification"><Check size={14} />Verification<span>{pendingDonations.length}</span></Link>
       <Link className={view === 'logs' ? 'active' : ''} to="/admin/donations?view=logs"><Pencil size={14} />Record donation</Link>
       <Link className={view === 'files' ? 'active' : ''} to="/admin/donations?view=files"><FileText size={14} />Transactions<span>{donations.length}</span></Link>
     </nav>
@@ -4021,7 +4011,6 @@ function DonationAdminPage() {
       <div className="panel-heading"><div><h2>Donation details</h2><p>Enter the contribution and payment details from the transaction.</p></div></div>
       <div className="donation-entry-grid">
         <label>Amount (₱)<input type="number" min="50" max="10000000" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" required /></label>
-        <label>Purpose / fund<input value={fund} onChange={(event) => setFund(event.target.value)} maxLength={150} required /></label>
         <label>Payment method<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as AdminDonationRecord['paymentMethod'])}><option value="GCASH">GCash</option><option value="MAYA">Maya</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option></select></label>
         <label>Donation frequency<select value={type} onChange={(event) => setType(event.target.value as AdminDonationRecord['type'])}><option value="ONE_TIME">One-time</option><option value="MONTHLY">Monthly</option></select></label>
         <label>Payment reference (optional)<input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} maxLength={100} placeholder="Transaction / confirmation number" /></label>
@@ -4036,20 +4025,18 @@ function DonationAdminPage() {
       {proof && <div className="donation-proof-selected"><FileText size={16} /><span>{proof.fileName}<small>{(proof.fileUrl.length * 0.75 / 1024).toFixed(0)} KB</small></span><button type="button" aria-label="Remove payment proof" onClick={() => setProof(null)}><X size={15} /></button></div>}
       <footer className="donation-entry-actions"><button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Saving donation…' : 'Record donation'} <ArrowRight size={15} /></button></footer>
     </form> : <section className="admin-panel donation-transactions-panel">
-      <div className="panel-heading"><div><h2>{view === 'verification' ? 'Awaiting verification' : 'Recorded donations'}</h2><p>{view === 'verification' ? `${pendingDonations.length} donation${pendingDonations.length === 1 ? '' : 's'} awaiting review · select one to verify` : `${donations.length} ${donations.length === 1 ? 'transaction' : 'transactions'} · select one for details`}</p></div></div>
+      <div className="panel-heading"><div><h2>Recorded donations</h2><p>{donations.length} {donations.length === 1 ? 'transaction' : 'transactions'} · select one for details</p></div></div>
       {loading ? <div className="staff-empty">Loading donation transactions…</div> : visibleDonations.length ? <div className="donation-transactions-list">{visibleDonations.map((donation) => <button className="donation-transaction-row" type="button" key={donation.id} onClick={() => setSelectedDonation(donation)}>
-        <span className="donation-transaction-icon"><HandHeart size={17} /></span><span className="donation-transaction-main"><b>{donation.isAnonymous ? 'Anonymous donor' : donation.donorName || 'Donor'}</b><small>{donation.isManual ? 'Manual entry' : 'Online donation'} · {donation.referenceCode} · {donation.fund}</small></span><span className="donation-transaction-payment"><b>{donationPaymentLabels[donation.paymentMethod]}</b><small>{donation.files?.length ? 'Proof attached' : donation.isManual ? 'No proof attached' : 'Proof not required'}</small></span><span className="donation-transaction-amount">{formattedAmount(donation.amount)}</span><ChevronRight size={16} />
-      </button>)}</div> : <div className="staff-empty"><HandHeart size={24} /><p>{view === 'verification' ? 'No donations are awaiting verification.' : 'No donation transactions have been recorded yet.'}</p>{view === 'files' && <Link className="button button-outline" to="/admin/donations?view=logs">Record the first donation <ArrowRight size={14} /></Link>}</div>}
+        <span className="donation-transaction-icon"><HandHeart size={17} /></span><span className="donation-transaction-main"><b>{donation.isAnonymous ? 'Anonymous donor' : donation.donorName || 'Donor'}</b><small>{donation.isManual ? 'Manual entry' : 'Online donation'} · {donation.referenceCode}</small></span><span className="donation-transaction-payment"><b>{donationPaymentLabels[donation.paymentMethod]}</b><small>{donation.files?.length ? 'Proof attached' : donation.isManual ? 'No proof attached' : 'Proof not required'}</small></span><span className="donation-transaction-amount">{formattedAmount(donation.amount)}</span><ChevronRight size={16} />
+      </button>)}</div> : <div className="staff-empty"><HandHeart size={24} /><p>No donation transactions have been recorded yet.</p>{view === 'files' && <Link className="button button-outline" to="/admin/donations?view=logs">Record the first donation <ArrowRight size={14} /></Link>}</div>}
     </section>}
     {selectedDonation && <div className="donation-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDetails() }} onKeyDown={(event) => { if (event.key === 'Escape') closeDetails() }}>
       <section className="donation-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="donation-detail-title">
         <header><div><span className="eyebrow">DONATION TRANSACTION</span><h2 id="donation-detail-title">{selectedDonation.referenceCode}</h2></div><button type="button" aria-label="Close transaction details" onClick={closeDetails}><X size={18} /></button></header>
-        <dl className="donation-detail-grid"><div><dt>Source</dt><dd>{selectedDonation.isManual ? 'Manual entry' : 'Submitted through donation form'}</dd></div><div><dt>Amount</dt><dd>{formattedAmount(selectedDonation.amount)}</dd></div><div><dt>Payment method</dt><dd>{donationPaymentLabels[selectedDonation.paymentMethod]}</dd></div><div><dt>Donor</dt><dd>{selectedDonation.isAnonymous ? 'Anonymous' : selectedDonation.donorName || 'Not provided'}</dd></div><div><dt>Email</dt><dd>{selectedDonation.isAnonymous ? 'Not recorded' : selectedDonation.donorEmail || 'Not provided'}</dd></div><div><dt>Phone</dt><dd>{selectedDonation.isAnonymous ? 'Not recorded' : selectedDonation.donorPhone || 'Not provided'}</dd></div><div><dt>Purpose / fund</dt><dd>{selectedDonation.fund}</dd></div><div><dt>Frequency</dt><dd>{selectedDonation.type === 'MONTHLY' ? 'Monthly' : 'One-time'}</dd></div><div className="donation-payment-reference"><dt>Payment reference</dt><dd>{selectedDonation.paymentReference || 'Not provided'}</dd></div><div><dt>Status</dt><dd>{selectedDonation.status}</dd></div><div><dt>Date recorded</dt><dd>{new Date(selectedDonation.createdAt).toLocaleString()}</dd></div></dl>
+        <dl className="donation-detail-grid"><div><dt>Source</dt><dd>{selectedDonation.isManual ? 'Manual entry' : 'Submitted through donation form'}</dd></div><div><dt>Amount</dt><dd>{formattedAmount(selectedDonation.amount)}</dd></div><div><dt>Payment method</dt><dd>{donationPaymentLabels[selectedDonation.paymentMethod]}</dd></div><div><dt>Donor</dt><dd>{selectedDonation.isAnonymous ? 'Anonymous' : selectedDonation.donorName || 'Not provided'}</dd></div><div><dt>Email</dt><dd>{selectedDonation.isAnonymous ? 'Not recorded' : selectedDonation.donorEmail || 'Not provided'}</dd></div><div><dt>Phone</dt><dd>{selectedDonation.isAnonymous ? 'Not recorded' : selectedDonation.donorPhone || 'Not provided'}</dd></div><div><dt>Frequency</dt><dd>{selectedDonation.type === 'MONTHLY' ? 'Monthly' : 'One-time'}</dd></div><div className="donation-payment-reference"><dt>Payment reference</dt><dd>{selectedDonation.paymentReference || 'Not provided'}</dd></div><div><dt>Status</dt><dd>{selectedDonation.status}</dd></div><div><dt>Date recorded</dt><dd>{new Date(selectedDonation.createdAt).toLocaleString()}</dd></div></dl>
         <div className="donation-detail-proof"><h3>Payment proof</h3>{selectedDonation.files?.length ? selectedDonation.files.map((file) => <div key={file.id}>{file.type === 'application/pdf' ? <a href={file.fileUrl} target="_blank" rel="noreferrer">{file.fileName || 'Open proof document'} <ArrowUpRight size={14} /></a> : <a href={file.fileUrl} target="_blank" rel="noreferrer"><img src={file.fileUrl} alt={file.fileName || 'Donation payment proof'} /><span>{file.fileName || 'View proof image'} <ArrowUpRight size={14} /></span></a>}</div>) : <p>{selectedDonation.isManual ? 'No proof was attached to this manual entry.' : 'Proof is not required for donations submitted through the donation form.'}</p>}</div>
-        {(selectedDonation.status === 'PENDING' || selectedDonation.status === 'RECONCILING') && <footer className="donation-detail-actions"><p>Confirm the payment in your GCash or Maya account before marking it verified.</p><div><button className="button button-outline donation-reject-button" type="button" onClick={() => setConfirmReject(true)} disabled={updatingStatus}>Reject payment claim</button><button className="button button-dark" type="button" onClick={() => void verifyDonation()} disabled={updatingStatus}>{updatingStatus ? 'Verifying…' : 'Mark payment as verified'} <Check size={15} /></button></div></footer>}
       </section>
     </div>}
-    {confirmReject && selectedDonation && <div className="account-confirm-backdrop donation-reject-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !updatingStatus) setConfirmReject(false) }}><section className="account-confirm-dialog donation-reject-dialog" role="alertdialog" aria-modal="true" aria-labelledby="donation-reject-title" aria-describedby="donation-reject-description"><span className="eyebrow">DONATION VERIFICATION</span><h2 id="donation-reject-title">Reject this payment claim?</h2><p id="donation-reject-description">The submitted payment could not be verified. This donation will not be counted as received.</p>{error && <p className="form-error" role="alert">{error}</p>}<footer><button className="button button-outline" type="button" onClick={() => setConfirmReject(false)} disabled={updatingStatus}>Cancel</button><button className="button donation-reject-confirm" type="button" onClick={() => void updateDonationStatus('FAILED')} disabled={updatingStatus}>{updatingStatus ? 'Rejecting…' : 'Reject payment claim'}</button></footer></section></div>}
   </>
 }
 
@@ -4180,7 +4167,6 @@ function formatAuditDetails(log: AuditRecord) {
     const details = [
       typeof log.meta?.isAnonymous === 'boolean' && log.meta.isAnonymous ? 'Anonymous donation' : 'Donation',
       typeof log.meta?.amount === 'number' ? money(log.meta.amount) : null,
-      typeof log.meta?.fund === 'string' ? log.meta.fund : null,
       typeof log.meta?.referenceCode === 'string' ? `Reference ${log.meta.referenceCode}` : null,
     ].filter((value): value is string => value !== null)
     return details.join(' · ')
@@ -4701,7 +4687,16 @@ function DirectMessagesPage({ user }: { user: PrototypeStaff }) {
       try {
         const response = await fetch('/api/admin/conversations', { credentials: 'include' })
         const result = await readApiResponse<{ conversations: ApiConversation[] }>(response, 'Loading messages')
-        if (active) { setConversations(result.conversations); setError('') }
+        if (!active) return
+        setConversations(result.conversations)
+        setError('')
+        if (document.visibilityState !== 'visible' || !result.conversations.some((conversation) => !conversation.isRead)) return
+        const readResponse = await fetch('/api/admin/conversations/read', { method: 'POST', credentials: 'include' })
+        await readApiResponse<unknown>(readResponse, 'Marking messages as read')
+        if (active) {
+          setConversations((current) => current.map((conversation) => ({ ...conversation, isRead: true })))
+          window.dispatchEvent(new Event(adminMessagesReadEvent))
+        }
       } catch (reason) {
         if (active) setError(reason instanceof Error ? reason.message : 'Messages could not be loaded.')
       } finally {
@@ -4730,6 +4725,7 @@ function DirectMessagesPage({ user }: { user: PrototypeStaff }) {
       const response = await fetch(`/api/admin/conversations/${encodeURIComponent(conversation.id)}/read`, { method: 'POST', credentials: 'include' })
       await readApiResponse<unknown>(response, 'Marking conversation as read')
       await loadConversations()
+      window.dispatchEvent(new Event(adminMessagesReadEvent))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not mark the conversation as read.')
     }
