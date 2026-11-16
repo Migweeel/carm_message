@@ -460,6 +460,15 @@ function readSiteSearchHistory(): string[] {
     return []
   }
 }
+function getSiteSearchItems(content: ManagedSiteContent): SiteSearchItem[] {
+  return [
+    ...nav.map(([title, path]) => ({ title, detail: 'Page', path, searchableText: title })),
+    ...content.monasteries.map((monastery) => ({ title: monastery.name, detail: monastery.city, path: '/monasteries', searchableText: `${monastery.name} ${monastery.city} ${monastery.description}` })),
+    ...content.carmelife.map((article) => ({ title: article.title, detail: `Carmelife · ${article.author}`, path: `/carmelife/stories?reading=${encodeURIComponent(article.id)}`, searchableText: `${article.title} ${article.author} ${article.body}` })),
+    ...content.carmelights.map((article) => ({ title: article.title, detail: `Carmelights · ${article.author}`, path: `/carmelights?reading=${encodeURIComponent(article.id)}`, searchableText: `${article.title} ${article.author} ${article.body} ${article.category || ''}` })),
+    ...readSiteUpdates().map((update) => ({ title: update.title, detail: `Updates · ${update.category}`, path: `/updates?search=${encodeURIComponent(update.title)}`, searchableText: `${update.title} ${update.category} ${update.body}` })),
+  ]
+}
 function readPublicProfile(): PublicProfile | null {
   const member = readMemberSession()
   if (member) return member
@@ -526,13 +535,7 @@ function Navbar() {
     <Link to="/account/messages" role="menuitem" onClick={closeNavigation}><MessageCircle size={15} />Messages</Link>
     <Link to="/account/favorites" role="menuitem" onClick={closeNavigation}><Heart size={15} />Favorite teachings</Link>
   </> : <Link to="/admin" role="menuitem" onClick={closeNavigation}><Home size={15} />Open dashboard</Link>
-  const searchableItems: SiteSearchItem[] = [
-    ...nav.map(([title, path]) => ({ title, detail: 'Page', path, searchableText: title })),
-    ...content.monasteries.map((monastery) => ({ title: monastery.name, detail: monastery.city, path: '/monasteries', searchableText: `${monastery.name} ${monastery.city} ${monastery.description}` })),
-    ...content.carmelife.map((article) => ({ title: article.title, detail: `Carmelife · ${article.author}`, path: `/carmelife/stories?reading=${encodeURIComponent(article.id)}`, searchableText: `${article.title} ${article.author} ${article.body}` })),
-    ...content.carmelights.map((article) => ({ title: article.title, detail: `Carmelights · ${article.author}`, path: `/carmelights?reading=${encodeURIComponent(article.id)}`, searchableText: `${article.title} ${article.author} ${article.body} ${article.category || ''}` })),
-    ...readSiteUpdates().map((update) => ({ title: update.title, detail: `Updates · ${update.category}`, path: `/updates?search=${encodeURIComponent(update.title)}`, searchableText: `${update.title} ${update.category} ${update.body}` })),
-  ]
+  const searchableItems = getSiteSearchItems(content)
   const matchingSearchItems = mobileSearchQuery.trim()
     ? searchableItems.filter((item) => `${item.title} ${item.detail} ${item.searchableText}`.toLowerCase().includes(mobileSearchQuery.trim().toLowerCase())).slice(0, 12)
     : []
@@ -606,6 +609,43 @@ function Navbar() {
     </section>}
     </>
   )
+}
+function SiteSearchPage() {
+  const content = useManagedContent()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const submittedQuery = new URLSearchParams(location.search).get('q') || ''
+  const [query, setQuery] = useState(submittedQuery)
+  useEffect(() => setQuery(submittedQuery), [submittedQuery])
+  const normalizedQuery = submittedQuery.trim().toLowerCase()
+  const results = normalizedQuery
+    ? getSiteSearchItems(content).filter((item) => `${item.title} ${item.detail} ${item.searchableText}`.toLowerCase().includes(normalizedQuery))
+    : []
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const term = query.trim()
+    navigate(term ? `/search?q=${encodeURIComponent(term)}` : '/search')
+  }
+  return <section className="content-page section-wrap site-search-page">
+    <span className="eyebrow">SEARCH THE SITE</span>
+    <h1>Find <em>Carmel</em></h1>
+    <p className="page-lead">Search pages, monastery listings, stories, and federation updates.</p>
+    <form className="site-search-form" onSubmit={submitSearch}>
+      <label className="field-search"><Search size={17} aria-hidden="true" /><input autoFocus type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Carmels in Communion" aria-label="Search Carmels in Communion" required /></label>
+      <button className="button button-dark" type="submit">Search <ArrowRight size={15} /></button>
+    </form>
+    {normalizedQuery ? <>
+      <p className="site-search-count" role="status">{results.length} {results.length === 1 ? 'result' : 'results'} for <strong>{submittedQuery}</strong></p>
+      {results.length ? <div className="site-search-results">{results.map((item) => {
+        const snippet = item.searchableText.replace(/\s+/g, ' ').trim()
+        return <Link className="site-search-result" key={`${item.title}-${item.path}`} to={item.path}>
+          <span className="eyebrow">{item.detail}</span>
+          <h2>{item.title}</h2>
+          <p>{snippet.length > 220 ? `${snippet.slice(0, 217)}…` : snippet}</p>
+        </Link>
+      })}</div> : <p className="site-search-empty">No results found. Try a different search term.</p>}
+    </> : <p className="site-search-empty">Enter a search term to find pages and content across the site.</p>}
+  </section>
 }
 function Footer() {
   const { contactDetails } = useManagedContent()
@@ -4928,6 +4968,7 @@ function AdminPage() {
 function AppRoutes() {
   return <Routes>
     <Route path="/" element={<PublicLayout><HomepageReference /></PublicLayout>} />
+    <Route path="/search" element={<PublicLayout><SiteSearchPage /></PublicLayout>} />
     <Route path="/about" element={<PublicLayout><AboutPage /></PublicLayout>} />
     <Route path="/spirituality" element={<PublicLayout><SpiritualityPage /></PublicLayout>} />
     <Route path="/monasteries" element={<PublicLayout><MonasteriesPage /></PublicLayout>} />

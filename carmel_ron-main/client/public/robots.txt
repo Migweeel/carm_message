@@ -2,6 +2,7 @@ User-agent: *
 Allow: /
 Disallow: /account
 Disallow: /admin
+Disallow: /search
 Disallow: /staff
 
 Sitemap: https://carmelsincommunion.org/sitemap.xml
