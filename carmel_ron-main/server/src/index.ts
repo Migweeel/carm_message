@@ -143,6 +143,13 @@ app.use('/api/content/interactions', rateLimit({ windowMs: 15 * 60 * 1000, limit
 const cookieOptions = { httpOnly: true, secure: isProduction, sameSite: 'strict' as const, path: '/' }
 const visitorChatCookieOptions = { ...cookieOptions, path: '/api/chat' }
 type AuthRequest = Request & { auth?: { id: string; role: 'ADMIN' | 'FORMATOR' | 'USER'; canManageUsers: boolean; canManageDetails: boolean; canManageUpdates: boolean } }
+function staffConversationAccessWhere(req: AuthRequest): Prisma.ConversationWhereInput {
+  const actor = req.auth!
+  if (actor.role === 'ADMIN') {
+    return { OR: [{ staffRecipientId: null }, { staffRecipient: { is: { role: 'ADMIN' } } }] }
+  }
+  return { staffRecipientId: actor.id }
+}
 async function optionalAuthenticate(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.cookies?.carmel_session) return next()
   return authenticate(req, res, next)
@@ -967,10 +974,7 @@ app.get('/api/account/conversations', authenticate, allowRoles('USER'), asyncRou
   })
   const ids = conversations.map(({ id }) => id)
   if (ids.length) {
-    await prisma.$transaction([
-      prisma.message.updateMany({ where: { conversationId: { in: ids }, senderType: { in: ['ADMIN', 'FORMATOR'] }, readAt: null }, data: { readAt: new Date() } }),
-      prisma.conversation.updateMany({ where: { id: { in: ids } }, data: { isRead: true } }),
-    ])
+    await prisma.message.updateMany({ where: { conversationId: { in: ids }, senderType: { in: ['ADMIN', 'FORMATOR'] }, readAt: null }, data: { readAt: new Date() } })
   }
   res.json({ conversations })
 }))
@@ -1038,7 +1042,6 @@ app.get('/api/account/conversation', authenticate, allowRoles('USER'), asyncRout
   })
   if (conversation) {
     await prisma.message.updateMany({ where: { conversationId: conversation.id, senderType: { in: ['ADMIN', 'FORMATOR'] }, readAt: null }, data: { readAt: new Date() } })
-    await prisma.conversation.update({ where: { id: conversation.id }, data: { isRead: true } })
   }
   res.json({ conversation })
 }))
@@ -1153,10 +1156,7 @@ app.post('/api/chat/conversation/read', asyncRoute(async (req, res) => {
   if (!conversationId) return res.status(401).json({ error: 'Start a conversation to continue chatting.' })
   const conversation = await prisma.conversation.findUnique({ where: { id: conversationId }, select: { id: true } })
   if (!conversation) return res.status(404).json({ error: 'This conversation is no longer available.' })
-  await prisma.$transaction([
-    prisma.message.updateMany({ where: { conversationId, senderType: { in: ['ADMIN', 'FORMATOR'] }, readAt: null }, data: { readAt: new Date() } }),
-    prisma.conversation.update({ where: { id: conversationId }, data: { isRead: true } }),
-  ])
+  await prisma.message.updateMany({ where: { conversationId, senderType: { in: ['ADMIN', 'FORMATOR'] }, readAt: null }, data: { readAt: new Date() } })
   res.status(204).end()
 }))
 app.post('/api/chat/messages', rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false }), asyncRoute(async (req, res) => {
@@ -2155,8 +2155,9 @@ app.patch('/api/admin/donations/:id/status', authenticate, allowRoles('ADMIN', '
     : false
   res.json({ donation: { ...donation, receiptEmailSent } })
 }))
-app.get('/api/admin/conversations', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (_req, res) => {
+app.get('/api/admin/conversations', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (req, res) => {
   const conversations = await prisma.conversation.findMany({
+    where: staffConversationAccessWhere(req),
     orderBy: { lastMessageAt: 'desc' },
     include: {
       user: { select: { id: true, role: true, isActive: true } },
@@ -2164,16 +2165,20 @@ app.get('/api/admin/conversations', authenticate, allowRoles('ADMIN', 'FORMATOR'
       messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } },
     },
   })
-  res.json({ conversations })
+  res.json({ conversations: conversations.map((conversation) => ({
+    ...conversation,
+    isRead: !conversation.messages.some((message) => message.senderType === 'VISITOR' && !message.readAt),
+  })) })
 }))
 app.get('/api/admin/notifications', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (req, res) => {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const isAdmin = req.auth!.role === 'ADMIN'
+  const conversationAccess = staffConversationAccessWhere(req)
   const [staffPermissions, unreadMessageCount, recentMessages, recentUsers, recentDonations, recentAuditLogs, recentUpdates, recentContent] = await Promise.all([
     isAdmin ? Promise.resolve(null) : prisma.user.findUnique({ where: { id: req.auth!.id }, select: { canManageUsers: true, canManageDetails: true, canManageUpdates: true } }),
-    prisma.message.count({ where: { senderType: 'VISITOR', readAt: null } }),
+    prisma.message.count({ where: { senderType: 'VISITOR', readAt: null, conversation: { is: conversationAccess } } }),
     prisma.message.findMany({
-      where: { senderType: 'VISITOR', OR: [{ readAt: null }, { createdAt: { gte: since } }] },
+      where: { senderType: 'VISITOR', OR: [{ readAt: null }, { createdAt: { gte: since } }], conversation: { is: conversationAccess } },
       orderBy: { createdAt: 'desc' },
       take: 25,
       include: { conversation: { select: { id: true, name: true, subject: true } } },
@@ -2191,7 +2196,7 @@ app.get('/api/admin/notifications', authenticate, allowRoles('ADMIN', 'FORMATOR'
       select: { id: true, donorName: true, status: true, createdAt: true },
     }) : Promise.resolve([]),
     prisma.auditLog.findMany({
-      where: { createdAt: { gte: since }, entity: isAdmin ? { not: 'PageContent' } : { notIn: ['PageContent', 'Donation', 'SystemBackup'] } },
+      where: { createdAt: { gte: since }, entity: isAdmin ? { not: 'PageContent' } : { notIn: ['PageContent', 'Donation', 'SystemBackup', 'Conversation'] } },
       orderBy: { createdAt: 'desc' },
       take: 20,
       select: { id: true, action: true, entity: true, entityId: true, createdAt: true },
@@ -2270,17 +2275,21 @@ app.get('/api/admin/notifications', authenticate, allowRoles('ADMIN', 'FORMATOR'
   ].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()).slice(0, 30)
   res.json({ unreadMessageCount, notifications })
 }))
-app.post('/api/admin/conversations/read', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (_req, res) => {
-  const now = new Date()
-  await prisma.$transaction([
-    prisma.message.updateMany({ where: { senderType: 'VISITOR', readAt: null }, data: { readAt: now } }),
-    prisma.conversation.updateMany({ where: { isRead: false }, data: { isRead: true } }),
-  ])
+app.post('/api/admin/conversations/read', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (req, res) => {
+  const conversations = await prisma.conversation.findMany({ where: staffConversationAccessWhere(req), select: { id: true } })
+  const ids = conversations.map(({ id }) => id)
+  if (ids.length) {
+    const now = new Date()
+    await prisma.$transaction([
+      prisma.message.updateMany({ where: { conversationId: { in: ids }, senderType: 'VISITOR', readAt: null }, data: { readAt: now } }),
+      prisma.conversation.updateMany({ where: { id: { in: ids }, isRead: false }, data: { isRead: true } }),
+    ])
+  }
   res.status(204).end()
 }))
 app.post('/api/admin/conversations/:id/read', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (req, res) => {
   const id = routeParam(req, 'id')
-  const conversation = await prisma.conversation.findUnique({ where: { id }, select: { id: true } })
+  const conversation = await prisma.conversation.findFirst({ where: { id, ...staffConversationAccessWhere(req) }, select: { id: true } })
   if (!conversation) return res.status(404).json({ error: 'Conversation not found.' })
   await prisma.$transaction([
     prisma.message.updateMany({ where: { conversationId: id, senderType: 'VISITOR', readAt: null }, data: { readAt: new Date() } }),
@@ -2292,7 +2301,7 @@ const replySchema = z.object({ body: z.string().trim().min(1).max(5000) })
 app.post('/api/admin/conversations/:id/messages', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (req, res) => {
   const parsed = validate(replySchema, req.body)
   if (parsed.error) return res.status(400).json({ error: 'A reply cannot be empty.' })
-  const conversation = await prisma.conversation.findUnique({ where: { id: routeParam(req, 'id') }, select: { id: true, userId: true } })
+  const conversation = await prisma.conversation.findFirst({ where: { id: routeParam(req, 'id'), ...staffConversationAccessWhere(req) }, select: { id: true, userId: true } })
   if (!conversation) return res.status(404).json({ error: 'Conversation not found.' })
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.message.create({ data: { conversationId: conversation.id, senderId: req.auth!.id, senderType: req.auth!.role === 'FORMATOR' ? 'FORMATOR' : 'ADMIN', body: parsed.data!.body } })
