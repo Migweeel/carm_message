@@ -1978,6 +1978,11 @@
 
 @media (max-width: 900px) {
   html,
+  body {
+    overflow-x: clip;
+  }
+
+  html,
   body,
   .site-header .main-nav {
     scrollbar-width: none;
