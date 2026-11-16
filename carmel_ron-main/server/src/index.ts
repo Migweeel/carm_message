@@ -77,7 +77,7 @@ async function sendEmail(email: { to: string; subject: string; text: string; htm
   throw new Error(`Resend email request failed (HTTP ${response.status})${detail ? `: ${detail}` : '.'}`)
 }
 const backupTables = [
-  { name: 'User', columns: ['id', 'name', 'email', 'phone', 'address', 'privacyConsentAt', 'privacyPolicyVersion', 'discernmentTrackingConsentAt', 'passwordHash', 'role', 'isActive', 'canManageUsers', 'canManageDetails', 'canManageUpdates', 'createdAt', 'updatedAt'], uniqueColumns: ['email'] },
+  { name: 'User', columns: ['id', 'name', 'email', 'phone', 'address', 'privacyConsentAt', 'privacyPolicyVersion', 'passwordHash', 'role', 'isActive', 'canManageUsers', 'canManageDetails', 'canManageUpdates', 'createdAt', 'updatedAt'], uniqueColumns: ['email'] },
   { name: 'Monastery', columns: ['id', 'name', 'city', 'slug', 'description', 'imageUrl', 'address', 'contact', 'sortOrder', 'createdAt', 'updatedAt'], uniqueColumns: ['slug'] },
   { name: 'Discernment', columns: ['id', 'userId', 'stage', 'monastery', 'note', 'createdAt', 'updatedAt'], uniqueColumns: ['userId'] },
   { name: 'Donation', columns: ['id', 'referenceCode', 'amount', 'type', 'fund', 'paymentMethod', 'xenditInvoiceId', 'xenditInvoiceUrl', 'paymongoPaymentIntentId', 'paymongoQrImageUrl', 'paymongoQrExpiresAt', 'isManual', 'isAnonymous', 'donorName', 'donorEmail', 'donorPhone', 'wantsReceipt', 'receiptEmailSentAt', 'receiptEmailSendingAt', 'paymentReference', 'beneficiaryMonasteryId', 'userId', 'status', 'createdAt', 'updatedAt'], uniqueColumns: ['referenceCode', 'xenditInvoiceId', 'paymongoPaymentIntentId'] },
@@ -87,7 +87,6 @@ const backupTables = [
   { name: 'Update', columns: ['id', 'title', 'slug', 'excerpt', 'body', 'coverImage', 'category', 'publishedAt', 'createdAt', 'updatedAt'], uniqueColumns: ['slug'] },
   { name: 'PageContent', columns: ['id', 'pageKey', 'blocks', 'updatedAt'], uniqueColumns: ['pageKey'], jsonColumns: ['blocks'] },
   { name: 'ContentInteraction', columns: ['id', 'userId', 'readingId', 'eventType', 'dedupeKey', 'createdAt'], uniqueColumns: ['dedupeKey'] },
-  { name: 'DiscernmentActivity', columns: ['id', 'userId', 'type', 'readingId', 'durationSeconds', 'dedupeKey', 'createdAt'], uniqueColumns: ['dedupeKey'] },
   { name: 'FAQ', columns: ['id', 'question', 'answer', 'sortOrder', 'isPublished', 'updatedAt'], uniqueColumns: [] },
   { name: 'AuditLog', columns: ['id', 'userId', 'action', 'entity', 'entityId', 'meta', 'createdAt'], uniqueColumns: [], jsonColumns: ['meta'] },
 ] as const
@@ -98,7 +97,6 @@ const backupDependencies: Record<string, Array<{ table: string; column: string }
   Conversation: [{ table: 'User', column: 'userId' }],
   Message: [{ table: 'Conversation', column: 'conversationId' }, { table: 'User', column: 'senderId' }],
   ContentInteraction: [{ table: 'User', column: 'userId' }],
-  DiscernmentActivity: [{ table: 'User', column: 'userId' }],
   AuditLog: [{ table: 'User', column: 'userId' }],
 }
 const backupEnumColumns: Record<string, Record<string, string>> = {
@@ -108,7 +106,6 @@ const backupEnumColumns: Record<string, Record<string, string>> = {
   Conversation: { category: '"MessageCategory"' },
   Message: { senderType: '"SenderType"' },
   ContentInteraction: { eventType: '"ContentInteractionType"' },
-  DiscernmentActivity: { type: '"DiscernmentActivityType"' },
 }
 
 app.disable('x-powered-by')
@@ -142,7 +139,6 @@ const passwordResetRateLimit = rateLimit({
   handler: (_req, res) => res.setHeader('Retry-After', '900').status(429).json({ error: 'Too many password reset requests. Please wait 15 minutes before trying again.' }),
 })
 app.use('/api/content/interactions', rateLimit({ windowMs: 15 * 60 * 1000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }))
-app.use('/api/discernment/activity', rateLimit({ windowMs: 15 * 60 * 1000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }))
 
 const cookieOptions = { httpOnly: true, secure: isProduction, sameSite: 'strict' as const, path: '/' }
 const visitorChatCookieOptions = { ...cookieOptions, path: '/api/chat' }
@@ -468,10 +464,16 @@ app.post('/api/admin/system-backup/import', authenticate, allowRoles('ADMIN'), r
 }))
 
 const memberPrivacyVersion = '2026-11-06'
+const retiredDemoAccountEmails = new Set([
+  'demo.admin@carmel.test',
+  'demo.formator@carmel.test',
+  'demo.member@carmel.test',
+])
 const registerSchema = z.object({ name: z.string().trim().min(2).max(100), email: z.email().transform((value) => value.toLowerCase()), gender: z.enum(['MALE', 'FEMALE', 'ANONYMOUS']).default('ANONYMOUS'), phone: z.string().trim().min(7).max(30), address: z.string().trim().min(5).max(300), password: z.string().min(10).max(128), privacyConsent: z.literal(true) })
 app.post('/api/auth/register', asyncRoute(async (req, res) => {
   const parsed = validate(registerSchema, req.body)
   if (parsed.error) return res.status(400).json({ error: 'Please check the form fields.', details: parsed.error })
+  if (retiredDemoAccountEmails.has(parsed.data!.email)) return res.status(403).json({ error: 'This email address is not available for registration.' })
   const passwordHash = await bcrypt.hash(parsed.data!.password, 12)
   try {
     const user = await prisma.user.create({ data: { name: parsed.data!.name, email: parsed.data!.email, gender: parsed.data!.gender, phone: parsed.data!.phone, address: parsed.data!.address, passwordHash, role: 'USER', privacyConsentAt: new Date(), privacyPolicyVersion: memberPrivacyVersion, discernment: { create: {} } }, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, role: true } })
@@ -491,13 +493,14 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
   const parsed = validate(loginSchema, req.body)
   if (parsed.error) return res.status(400).json({ error: 'Enter a valid email and password.' })
   const input = parsed.data!
+  if (retiredDemoAccountEmails.has(input.email)) return res.status(401).json({ error: 'Email or password is incorrect.' })
   const user = await prisma.user.findUnique({ where: { email: input.email } })
   if (user) {
     if (!user.isActive || !(await bcrypt.compare(input.password, user.passwordHash))) return res.status(401).json({ error: 'Email or password is incorrect.' })
     if (user.role === 'ADMIN' || user.role === 'FORMATOR') await audit(user.id, 'LOGIN', 'Session', user.id, { role: user.role })
     const token = jwt.sign({ id: user.id, role: user.role }, jwtSecret, { expiresIn: '8h' })
     res.cookie('carmel_session', token, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 })
-    return res.json({ user: { id: user.id, name: user.name, email: user.email, gender: user.gender, phone: user.phone, address: user.address, role: user.role, discernmentTrackingEnabled: Boolean(user.discernmentTrackingConsentAt), canManageUsers: user.canManageUsers, canManageDetails: user.canManageDetails, canManageUpdates: user.canManageUpdates } })
+    return res.json({ user: { id: user.id, name: user.name, email: user.email, gender: user.gender, phone: user.phone, address: user.address, role: user.role, canManageUsers: user.canManageUsers, canManageDetails: user.canManageDetails, canManageUpdates: user.canManageUpdates } })
   }
   return res.status(401).json({ error: 'Email or password is incorrect.' })
 }))
@@ -936,194 +939,12 @@ app.get('/api/donations/mine', authenticate, allowRoles('USER'), asyncRoute(asyn
 }))
 const discernmentStages = ['EXPLORING', 'PRAYING_AND_LEARNING', 'READY_TO_VISIT', 'IN_CONVERSATION'] as const
 const discernmentSchema = z.object({ monastery: z.string().trim().max(150).default(''), note: z.string().trim().max(5000).default('') })
-const discernmentCriteriaSchema = z.object({
-  readingWordsPerMinute: z.number().int().min(80).max(500),
-  readingCompletionPercent: z.number().int().min(50).max(100),
-  transitions: z.array(z.object({
-    activeSiteMinutes: z.number().int().min(0).max(100_000),
-    completedTeachings: z.number().int().min(0).max(10_000),
-    prayerReflections: z.number().int().min(0).max(10_000),
-    communityMessages: z.number().int().min(0).max(10_000),
-  }).strict()).length(3),
-}).strict()
-type DiscernmentCriteria = z.infer<typeof discernmentCriteriaSchema>
-const defaultDiscernmentCriteria: DiscernmentCriteria = {
-  readingWordsPerMinute: 200,
-  readingCompletionPercent: 80,
-  transitions: [
-    { activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 },
-    { activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 },
-    { activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 },
-  ],
-}
-async function getDiscernmentCriteria(): Promise<DiscernmentCriteria> {
-  const record = await prisma.pageContent.findUnique({ where: { pageKey: 'DISCERNMENT_CRITERIA' }, select: { blocks: true } })
-  if (!record) return defaultDiscernmentCriteria
-  const parsed = discernmentCriteriaSchema.safeParse(record.blocks)
-  if (!parsed.success) throw new Error('Saved discernment criteria are invalid. Review them under Manage Details.')
-  return parsed.data
-}
-async function getDiscernmentMetrics(userId: string, criteria: DiscernmentCriteria, trackingStartedAt: Date) {
-  const [siteTime, reflections, teachingTime, communityMessages, siteContent] = await Promise.all([
-    prisma.discernmentActivity.aggregate({ where: { userId, type: 'SITE_TIME' }, _sum: { durationSeconds: true } }),
-    prisma.discernmentActivity.count({ where: { userId, type: 'REFLECTION' } }),
-    prisma.discernmentActivity.groupBy({ by: ['readingId'], where: { userId, type: 'READING_TIME', readingId: { not: null } }, _sum: { durationSeconds: true } }),
-    prisma.message.count({ where: { senderId: userId, senderType: 'VISITOR', createdAt: { gte: trackingStartedAt } } }),
-    prisma.pageContent.findUnique({ where: { pageKey: 'SITE_MANAGED' }, select: { blocks: true } }),
-  ])
-  const blocks = siteContent?.blocks
-  const entries = blocks && typeof blocks === 'object' && !Array.isArray(blocks) && Array.isArray(blocks.carmelights)
-    ? blocks.carmelights
-    : []
-  const readingSeconds = new Map(teachingTime.flatMap((item) => item.readingId ? [[item.readingId, item._sum.durationSeconds || 0] as const] : []))
-  const minimumCompletionRatio = criteria.readingCompletionPercent / 100
-  const completedTeachings = entries.reduce<number>((completed, entry) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry) || typeof entry.id !== 'string' || typeof entry.body !== 'string') return completed
-    const wordCount = entry.body.trim().split(/\s+/).filter(Boolean).length
-    if (!wordCount) return completed
-    const estimatedSeconds = Math.ceil(wordCount / criteria.readingWordsPerMinute * 60 * minimumCompletionRatio)
-    return (readingSeconds.get(entry.id) || 0) >= estimatedSeconds ? completed + 1 : completed
-  }, 0)
-  return {
-    activeSiteMinutes: (siteTime._sum.durationSeconds || 0) / 60,
-    completedTeachings,
-    prayerReflections: reflections,
-    communityMessages,
-  }
-}
-function meetsDiscernmentCriteria(criteria: DiscernmentCriteria['transitions'][number], metrics: Awaited<ReturnType<typeof getDiscernmentMetrics>>) {
-  const requirements = [
-    criteria.activeSiteMinutes > 0,
-    criteria.completedTeachings > 0,
-    criteria.prayerReflections > 0,
-    criteria.communityMessages > 0,
-  ]
-  if (!requirements.some(Boolean)) return false
-  return metrics.activeSiteMinutes >= criteria.activeSiteMinutes
-    && metrics.completedTeachings >= criteria.completedTeachings
-    && metrics.prayerReflections >= criteria.prayerReflections
-    && metrics.communityMessages >= criteria.communityMessages
-}
-async function advanceDiscernmentIfReady(userId: string, criteria: DiscernmentCriteria, metrics: Awaited<ReturnType<typeof getDiscernmentMetrics>>) {
-  const current = await prisma.discernment.upsert({ where: { userId }, update: {}, create: { userId } })
-  let stageIndex = discernmentStages.indexOf(current.stage)
-  const originalStageIndex = stageIndex
-  while (stageIndex < 3 && meetsDiscernmentCriteria(criteria.transitions[stageIndex], metrics)) stageIndex += 1
-  if (stageIndex === originalStageIndex) return current
-  const updated = await prisma.discernment.update({
-    where: { userId },
-    data: { stage: discernmentStages[stageIndex] },
-  })
-  await audit(userId, 'AUTO_ADVANCE_STAGE', 'Discernment', userId, { from: current.stage, to: updated.stage })
-  return updated
-}
-async function evaluateMemberDiscernment(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { discernmentTrackingConsentAt: true } })
-  if (!user?.discernmentTrackingConsentAt) return
-  const criteria = await getDiscernmentCriteria()
-  const metrics = await getDiscernmentMetrics(userId, criteria, user.discernmentTrackingConsentAt)
-  await advanceDiscernmentIfReady(userId, criteria, metrics)
-}
 const memberMessageSchema = z.object({ body: z.string().trim().min(1).max(5000) })
 app.get('/api/discernment/mine', authenticate, allowRoles('USER'), asyncRoute(async (req, res) => {
-  const [user, criteria] = await Promise.all([
-    prisma.user.findUnique({ where: { id: req.auth!.id }, select: { isActive: true, discernmentTrackingConsentAt: true } }),
-    getDiscernmentCriteria(),
-  ])
-  if (!user?.isActive) return res.status(401).json({ error: 'This account is inactive.' })
-  const discernment = await prisma.discernment.upsert({ where: { userId: req.auth!.id }, update: {}, create: { userId: req.auth!.id } })
-  const trackingEnabled = Boolean(user.discernmentTrackingConsentAt)
-  const metrics = trackingEnabled ? await getDiscernmentMetrics(req.auth!.id, criteria, user.discernmentTrackingConsentAt!) : {
-    activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0,
-  }
-  const currentDiscernment = trackingEnabled ? await advanceDiscernmentIfReady(req.auth!.id, criteria, metrics) : discernment
-  res.json({
-    discernment: currentDiscernment,
-    trackingEnabled,
-    criteria,
-    metrics,
-  })
-}))
-app.get('/api/discernment/tracking-status', authenticate, allowRoles('USER'), asyncRoute(async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.auth!.id }, select: { isActive: true, discernmentTrackingConsentAt: true } })
-  if (!user?.isActive) return res.status(401).json({ error: 'This account is inactive.' })
-  res.json({ enabled: Boolean(user.discernmentTrackingConsentAt) })
-}))
-app.put('/api/discernment/tracking-consent', authenticate, allowRoles('USER'), asyncRoute(async (req, res) => {
-  const parsed = validate(z.object({ enabled: z.boolean() }).strict(), req.body)
-  if (parsed.error) return res.status(400).json({ error: 'Choose whether to enable discernment activity tracking.' })
   const user = await prisma.user.findUnique({ where: { id: req.auth!.id }, select: { isActive: true } })
   if (!user?.isActive) return res.status(401).json({ error: 'This account is inactive.' })
-  if (parsed.data!.enabled) {
-    await prisma.user.update({ where: { id: req.auth!.id }, data: { discernmentTrackingConsentAt: new Date() } })
-  } else {
-    await prisma.$transaction([
-      prisma.discernmentActivity.deleteMany({ where: { userId: req.auth!.id } }),
-      prisma.user.update({ where: { id: req.auth!.id }, data: { discernmentTrackingConsentAt: null } }),
-    ])
-  }
-  res.json({ enabled: parsed.data!.enabled })
-}))
-const discernmentActivitySchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('SITE_TIME'), seconds: z.number().int().min(1).max(60), dedupeKey: z.uuid() }).strict(),
-  z.object({ type: z.literal('READING_TIME'), readingId: z.string().trim().min(1).max(100), seconds: z.number().int().min(1).max(60), dedupeKey: z.uuid() }).strict(),
-  z.object({ type: z.literal('REFLECTION'), dedupeKey: z.uuid() }).strict(),
-])
-app.post('/api/discernment/activity', authenticate, allowRoles('USER'), asyncRoute(async (req, res) => {
-  const parsed = validate(discernmentActivitySchema, req.body)
-  if (parsed.error) return res.status(400).json({ error: 'Provide a valid discernment activity.' })
-  const user = await prisma.user.findUnique({
-    where: { id: req.auth!.id },
-    select: { isActive: true, discernmentTrackingConsentAt: true },
-  })
-  if (!user?.isActive) return res.status(401).json({ error: 'This account is inactive.' })
-  if (!user.discernmentTrackingConsentAt) return res.status(403).json({ error: 'Enable discernment activity tracking in your journey settings first.' })
-  const activity = parsed.data!
-  if (activity.type === 'READING_TIME') {
-    const siteContent = await prisma.pageContent.findUnique({ where: { pageKey: 'SITE_MANAGED' }, select: { blocks: true } })
-    const blocks = siteContent?.blocks
-    const entries = blocks && typeof blocks === 'object' && !Array.isArray(blocks) ? blocks.carmelights : undefined
-    const published = Array.isArray(entries) && entries.some((entry) =>
-      entry && typeof entry === 'object' && !Array.isArray(entry) && entry.id === activity.readingId)
-    if (!published) return res.status(404).json({ error: 'This Carmelights teaching is unavailable.' })
-  }
-  try {
-    await prisma.discernmentActivity.create({
-      data: {
-        userId: req.auth!.id,
-        type: activity.type,
-        readingId: activity.type === 'READING_TIME' ? activity.readingId : null,
-        durationSeconds: activity.type === 'REFLECTION' ? 0 : activity.seconds,
-        dedupeKey: activity.dedupeKey,
-      },
-    })
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return res.status(204).end()
-    throw error
-  }
-  const criteria = await getDiscernmentCriteria()
-  const metrics = await getDiscernmentMetrics(req.auth!.id, criteria, user.discernmentTrackingConsentAt)
-  await advanceDiscernmentIfReady(req.auth!.id, criteria, metrics)
-  res.status(204).end()
-}))
-app.get('/api/discernment/criteria', asyncRoute(async (_req, res) => {
-  res.json({ criteria: await getDiscernmentCriteria() })
-}))
-app.get('/api/admin/discernment/criteria', authenticate, asyncRoute(async (req, res) => {
-  if (!await authorizeStaffPermission(req, res, 'canManageDetails')) return
-  res.json({ criteria: await getDiscernmentCriteria() })
-}))
-app.put('/api/admin/discernment/criteria', authenticate, asyncRoute(async (req, res) => {
-  if (!await authorizeStaffPermission(req, res, 'canManageDetails')) return
-  const parsed = validate(discernmentCriteriaSchema, req.body)
-  if (parsed.error) return res.status(400).json({ error: 'Please check the discernment milestones before saving.', details: parsed.error })
-  const content = await prisma.pageContent.upsert({
-    where: { pageKey: 'DISCERNMENT_CRITERIA' },
-    update: { blocks: parsed.data! as Prisma.InputJsonValue },
-    create: { pageKey: 'DISCERNMENT_CRITERIA', blocks: parsed.data! as Prisma.InputJsonValue },
-  })
-  await audit(req.auth!.id, 'UPDATE_CONTENT', 'PageContent', content.id, { pageKey: 'DISCERNMENT_CRITERIA' })
-  res.json({ criteria: parsed.data })
+  const discernment = await prisma.discernment.upsert({ where: { userId: req.auth!.id }, update: {}, create: { userId: req.auth!.id } })
+  res.json({ discernment })
 }))
 app.patch('/api/discernment/mine', authenticate, allowRoles('USER'), asyncRoute(async (req, res) => {
   const parsed = validate(discernmentSchema, req.body)
@@ -1188,7 +1009,6 @@ app.post('/api/account/conversations', authenticate, allowRoles('USER'), asyncRo
       messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } },
     },
   })
-  await evaluateMemberDiscernment(user.id)
   res.status(201).json({ conversation })
 }))
 app.post('/api/account/conversations/:id/messages', authenticate, allowRoles('USER'), asyncRoute(async (req, res) => {
@@ -1210,7 +1030,6 @@ app.post('/api/account/conversations/:id/messages', authenticate, allowRoles('US
       },
     })
   })
-  await evaluateMemberDiscernment(req.auth!.id)
   res.status(201).json({ conversation: updated })
 }))
 app.get('/api/account/conversation', authenticate, allowRoles('USER'), asyncRoute(async (req, res) => {
@@ -1243,7 +1062,6 @@ app.post('/api/account/conversation/messages', authenticate, allowRoles('USER'),
       include: { messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } } },
     })
   })
-  await evaluateMemberDiscernment(user.id)
   res.status(201).json({ conversation })
 }))
 app.get('/api/donations/:reference', rateLimit({
@@ -2270,41 +2088,25 @@ app.delete('/api/admin/users/:id', authenticate, allowRoles('ADMIN'), asyncRoute
   await audit(actor.id, 'DELETE', 'User', user.id, { name: user.name, role: user.role })
   res.status(204).end()
 }))
-app.get('/api/admin/discernment', authenticate, allowRoles('ADMIN'), asyncRoute(async (_req, res) => {
+app.get('/api/admin/discernment', authenticate, asyncRoute(async (req, res) => {
+  if (!await authorizeStaffPermission(req, res, 'canManageUsers')) return
   const members = await prisma.user.findMany({ where: { role: 'USER', isActive: true }, select: { id: true } })
   if (members.length) {
     await prisma.discernment.createMany({ data: members.map(({ id }) => ({ userId: id })), skipDuplicates: true })
   }
-  const [criteria, discerners] = await Promise.all([
-    getDiscernmentCriteria(),
-    prisma.discernment.findMany({
-      where: { user: { isActive: true } },
-      orderBy: { updatedAt: 'desc' },
-      select: {
-        id: true, userId: true, stage: true, monastery: true, updatedAt: true,
-        user: { select: { name: true, email: true, discernmentTrackingConsentAt: true } },
-      },
-    }),
-  ])
-  const withMetrics = await Promise.all(discerners.map(async (record) => {
-    const trackingEnabled = Boolean(record.user.discernmentTrackingConsentAt)
-    const metrics = trackingEnabled
-      ? await getDiscernmentMetrics(record.userId, criteria, record.user.discernmentTrackingConsentAt!)
-      : null
-    return {
-      userId: record.userId,
-      stage: record.stage,
-      monastery: record.monastery,
-      updatedAt: record.updatedAt,
-      user: { name: record.user.name, email: record.user.email },
-      trackingEnabled,
-      metrics,
-    }
-  }))
-  res.json({ discerners: withMetrics, criteria })
+  const discerners = await prisma.discernment.findMany({
+    where: { user: { isActive: true } },
+    orderBy: { updatedAt: 'desc' },
+    select: {
+      id: true, userId: true, stage: true, monastery: true, updatedAt: true,
+      user: { select: { name: true, email: true } },
+    },
+  })
+  res.json({ discerners })
 }))
 const discernmentStageSchema = z.object({ stage: z.enum(discernmentStages) })
-app.patch('/api/admin/discernment/:userId/stage', authenticate, allowRoles('ADMIN'), asyncRoute(async (req, res) => {
+app.patch('/api/admin/discernment/:userId/stage', authenticate, asyncRoute(async (req, res) => {
+  if (!await authorizeStaffPermission(req, res, 'canManageUsers')) return
   const parsed = validate(discernmentStageSchema, req.body)
   if (parsed.error) return res.status(400).json({ error: 'Choose a valid discernment stage.' })
   const userId = routeParam(req, 'userId')

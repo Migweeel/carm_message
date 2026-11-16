@@ -328,7 +328,7 @@ const memberSessionKey = 'carmel-member-session'
 const memberSessionUpdatedEvent = 'carmel-member-session-updated'
 const directThreadsUpdatedEvent = 'carmel-direct-threads-updated'
 type MemberGender = 'MALE' | 'FEMALE' | 'ANONYMOUS'
-type MemberAccount = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: 'USER'; prototype?: boolean; demo?: true; discernmentTrackingEnabled?: boolean }
+type MemberAccount = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: 'USER'; prototype?: boolean; demo?: true }
 function useMemberFavorites(member: MemberAccount | null) {
   const [favorites, setFavorites] = useState<string[]>([])
   const [loading, setLoading] = useState(Boolean(member))
@@ -406,36 +406,11 @@ const discernmentStages: Array<{ id: DiscernmentStage; label: string; descriptio
   { id: 'IN_CONVERSATION', label: 'Discerning with a Community', description: 'Talking with the sisters about your questions and possible next steps.' },
 ]
 const discernmentUpdatedEvent = 'carmel-discernment-updated'
-const discernmentTrackingEvent = 'carmel-discernment-tracking-updated'
-const discernmentCriteriaDefault = {
-  readingWordsPerMinute: 200,
-  readingCompletionPercent: 80,
-  transitions: [
-    { activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 },
-    { activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 },
-    { activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 },
-  ],
-}
-type DiscernmentCriteria = typeof discernmentCriteriaDefault
-type DiscernmentMetrics = { activeSiteMinutes: number; completedTeachings: number; prayerReflections: number; communityMessages: number }
-type DiscernmentMilestone = { label: string; value: number; target: number; unit: string }
-type MemberDiscernmentProgress = { discernment: MemberDiscernment; criteria: DiscernmentCriteria; metrics: DiscernmentMetrics; trackingEnabled: boolean }
 function normalizeDiscernmentStage(stage: string): DiscernmentStage {
   const normalized = stage.toUpperCase().replaceAll(' ', '_')
   if (normalized === 'IN_CONVERSATION_WITH_A_COMMUNITY') return 'IN_CONVERSATION'
   if (normalized === 'PRAYING_AND_LEARNING' || normalized === 'READY_TO_VISIT' || normalized === 'IN_CONVERSATION') return normalized
   return 'EXPLORING'
-}
-function getDiscernmentMilestones(stage: DiscernmentStage, criteria: DiscernmentCriteria, metrics: DiscernmentMetrics): DiscernmentMilestone[] {
-  const stageIndex = discernmentStages.findIndex((item) => item.id === stage)
-  const currentCriteria = criteria.transitions[stageIndex]
-  if (!currentCriteria) return []
-  return [
-    { label: 'Active time on the website', value: metrics.activeSiteMinutes, target: currentCriteria.activeSiteMinutes, unit: 'minutes' },
-    { label: 'Teachings read', value: metrics.completedTeachings, target: currentCriteria.completedTeachings, unit: 'teachings' },
-    { label: 'Prayer or reflection check-ins', value: metrics.prayerReflections, target: currentCriteria.prayerReflections, unit: 'check-ins' },
-    { label: 'Messages sent to the Federation', value: metrics.communityMessages, target: currentCriteria.communityMessages, unit: 'messages' },
-  ]
 }
 function readMemberSession(): MemberAccount | null {
   try {
@@ -443,6 +418,10 @@ function readMemberSession(): MemberAccount | null {
       localStorage.removeItem(key)
     }
     const account = JSON.parse(localStorage.getItem(memberSessionKey) || 'null') as MemberAccount | null
+    if (account?.demo === true) {
+      localStorage.removeItem(memberSessionKey)
+      return null
+    }
     if (account?.prototype && account.demo !== true) {
       localStorage.removeItem(memberSessionKey)
       return null
@@ -454,128 +433,6 @@ function saveMemberSession(account: MemberAccount | null) {
   if (account) localStorage.setItem(memberSessionKey, JSON.stringify(account))
   else localStorage.removeItem(memberSessionKey)
   window.dispatchEvent(new Event(memberSessionUpdatedEvent))
-}
-function useCurrentMember() {
-  const [member, setMember] = useState(readMemberSession)
-  useEffect(() => {
-    const refresh = () => setMember(readMemberSession())
-    window.addEventListener(memberSessionUpdatedEvent, refresh)
-    window.addEventListener('storage', refresh)
-    return () => {
-      window.removeEventListener(memberSessionUpdatedEvent, refresh)
-      window.removeEventListener('storage', refresh)
-    }
-  }, [])
-  return member
-}
-function useDiscernmentTrackingEnabled(member: MemberAccount | null) {
-  const [status, setStatus] = useState(() => ({
-    email: member?.email || '',
-    enabled: Boolean(member?.discernmentTrackingEnabled),
-  }))
-  const memberEmail = member?.email || ''
-  const enabled = Boolean(memberEmail && status.email === memberEmail && status.enabled)
-  useEffect(() => {
-    let active = true
-    if (!memberEmail || member?.prototype) return
-    const refresh = (event?: Event) => {
-      if (event instanceof CustomEvent && typeof event.detail === 'boolean') {
-        setStatus({ email: memberEmail, enabled: event.detail })
-        return
-      }
-      void fetch('/api/discernment/tracking-status', { credentials: 'include' }).then(async (response) => {
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || 'Discernment tracking status could not be loaded.')
-        if (active) setStatus({ email: memberEmail, enabled: result.enabled === true })
-      }).catch((error: unknown) => {
-        if (active) setStatus({ email: memberEmail, enabled: false })
-        console.error('Unable to load discernment tracking status.', error)
-      })
-    }
-    refresh()
-    window.addEventListener(discernmentTrackingEvent, refresh)
-    return () => {
-      active = false
-      window.removeEventListener(discernmentTrackingEvent, refresh)
-    }
-  }, [memberEmail, member?.prototype])
-  return enabled
-}
-function useDiscernmentActivityTimer(enabled: boolean, type: 'SITE_TIME' | 'READING_TIME', readingId?: string) {
-  useEffect(() => {
-    if (!enabled || (type === 'READING_TIME' && !readingId)) return
-    const idleTimeout = 10 * 60 * 1000
-    const flushInterval = 30_000
-    let lastCountedAt = Date.now()
-    let activeUntil = document.visibilityState === 'visible' ? lastCountedAt + idleTimeout : 0
-    let pendingMilliseconds = 0
-    function accumulate(now: number) {
-      if (!activeUntil) return
-      const end = Math.min(now, activeUntil)
-      if (end > lastCountedAt) pendingMilliseconds += end - lastCountedAt
-      lastCountedAt = Math.max(lastCountedAt, end)
-      if (now >= activeUntil) activeUntil = 0
-    }
-    function sendPending() {
-      const seconds = Math.min(60, Math.floor(pendingMilliseconds / 1000))
-      if (!seconds) return
-      pendingMilliseconds -= seconds * 1000
-      void fetch('/api/discernment/activity', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type,
-          seconds,
-          dedupeKey: crypto.randomUUID(),
-          ...(type === 'READING_TIME' ? { readingId } : {}),
-        }),
-      }).then(async (response) => {
-        if (!response.ok) throw new Error((await response.json()).error || 'Discernment activity could not be recorded.')
-      }).catch((error: unknown) => console.error('Unable to record discernment activity.', error))
-    }
-    function onInteraction() {
-      const now = Date.now()
-      accumulate(now)
-      lastCountedAt = now
-      activeUntil = document.visibilityState === 'visible' ? now + idleTimeout : 0
-    }
-    function onVisibilityChange() {
-      const now = Date.now()
-      if (document.visibilityState === 'hidden') {
-        accumulate(now)
-        activeUntil = 0
-        lastCountedAt = now
-        sendPending()
-      } else {
-        lastCountedAt = now
-        activeUntil = 0
-      }
-    }
-    const timer = window.setInterval(() => {
-      accumulate(Date.now())
-      sendPending()
-    }, flushInterval)
-    for (const eventName of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) {
-      document.addEventListener(eventName, onInteraction, { passive: true })
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => {
-      accumulate(Date.now())
-      sendPending()
-      window.clearInterval(timer)
-      for (const eventName of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) {
-        document.removeEventListener(eventName, onInteraction)
-      }
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    }
-  }, [enabled, type, readingId])
-}
-function DiscernmentSiteActivityTracker() {
-  const member = useCurrentMember()
-  const trackingEnabled = useDiscernmentTrackingEnabled(member)
-  useDiscernmentActivityTimer(trackingEnabled, 'SITE_TIME')
-  return null
 }
 function memberDonationKey(email: string) { return `carmel-member-donations:${email.toLowerCase()}` }
 function memberFavoriteKey(email: string) { return `carmel-member-favorites:${email.toLowerCase()}` }
@@ -1507,7 +1364,6 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false)
   const [saintFilterOpen, setSaintFilterOpen] = useState(false)
   const member = readMemberSession()
-  const trackingEnabled = useDiscernmentTrackingEnabled(member)
   const navigate = useNavigate()
   const { favorites, error: favoriteError, setFavorite } = useMemberFavorites(member)
   const [popularTeachings, setPopularTeachings] = useState<PopularTeaching[]>([])
@@ -1567,7 +1423,6 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       if (!response.ok) throw new Error((await response.json()).error || 'The reading view could not be recorded.')
     }).catch((error: unknown) => console.error('Unable to record Carmelights view.', error))
   }, [isLife, kind, selectedId])
-  useDiscernmentActivityTimer(trackingEnabled && !isLife && kind !== 'updates' && Boolean(selectedId), 'READING_TIME', selectedId || undefined)
   if (kind === 'updates') return <LegacyStoryPage kind={kind} />
   function toggleFavorite(id: string) {
     if (!member) { navigate('/account/login'); return }
@@ -1786,10 +1641,6 @@ function DonationsPage() {
   function next() { setError(''); if (step === 0 && amount < 50) return setError('Please choose an amount of at least ₱50.'); if (step === 2 && !gift.anonymous && (!gift.name.trim() || !gift.email.includes('@'))) return setError('Please provide your name and a valid email address.'); if (step === 2 && gift.receipt && !gift.email.trim().includes('@')) return setError('Enter a valid email address for your acknowledgment receipt.'); setStep(Math.min(step + 1, 3)) }
   async function complete() {
     setError('')
-    if (isLocalDemoSession()) {
-      setError('Local demo accounts cannot submit or create donations. Sign out to make a real donation.')
-      return
-    }
     const fund = giftLabels[giftAmounts.indexOf(amount)] || 'Federation formation program'
     if (xenditEnabled) {
       setCheckoutStarting(true)
@@ -1839,11 +1690,6 @@ const demoAdminProfileKey = 'carmel-prototype-admin-profile'
 const permissionRequestEvent = 'carmel-permission-requested'
 const staffUpdatedEvent = 'carmel-staff-updated'
 const prototypeStaffKey = 'carmel-prototype-staff'
-const localDemoAccounts = {
-  admin: { id: 'local-demo-admin', name: 'Demo Administrator', email: 'demo.admin@carmel.test', password: 'DemoAdmin2026!', role: 'ADMIN' as const },
-  formator: { id: 'local-demo-formator', name: 'Demo Staff', email: 'demo.formator@carmel.test', password: 'DemoFormator2026!', role: 'FORMATOR' as const },
-  member: { id: 'local-demo-member', name: 'Demo Member', email: 'demo.member@carmel.test', password: 'DemoMember2026!', role: 'USER' as const, gender: 'ANONYMOUS' as const },
-}
 type PrototypeUser = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: 'USER'; isBlocked: boolean; isActive?: boolean; passwordHash?: string; createdAt?: string; privacyConsentAt?: string; privacyPolicyVersion?: string }
 function readPrototypeUsers(): PrototypeUser[] { localStorage.removeItem(prototypeUsersKey); return [] }
 
@@ -1860,25 +1706,23 @@ function readPrototypeStaff(): PrototypeStaff[] {
 function readPrototypeSession(): PrototypeStaff | null {
   try {
     const account = JSON.parse(localStorage.getItem(prototypeSessionKey) || 'null') as PrototypeStaff | null
-    return account?.demo === true ? account : null
+    if (account?.demo === true) {
+      localStorage.removeItem(prototypeSessionKey)
+      return null
+    }
+    return null
   } catch {
     return null
   }
 }
+readMemberSession()
+readPrototypeSession()
 function isLocalDemoSession() {
   return readPrototypeSession()?.demo === true || readMemberSession()?.demo === true
 }
-function saveDemoStaffSession(account: typeof localDemoAccounts.admin | typeof localDemoAccounts.formator) {
-  const staff: PrototypeStaff = { ...account, prototype: true, demo: true, isActive: true, canManageUsers: true, canManageDetails: true, canManageUpdates: true }
-  localStorage.removeItem(memberSessionKey)
-  window.dispatchEvent(new Event(memberSessionUpdatedEvent))
-  localStorage.setItem(prototypeSessionKey, JSON.stringify(staff))
-  window.dispatchEvent(new Event(staffSessionUpdatedEvent))
-}
-
 type AuthApiResponse = {
   error?: string
-  user?: { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: string; discernmentTrackingEnabled?: boolean; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
+  user?: { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: string; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
 }
 async function readAuthResponse(response: Response): Promise<AuthApiResponse> {
   const retryAfter = Number(response.headers.get('Retry-After'))
@@ -1934,11 +1778,6 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [accountType, setAccountType] = useState<'admin' | 'staff'>('staff')
-  function fillDemoCredentials(email: string, password: string) {
-    setLoginEmail(email)
-    setLoginPassword(password)
-    setError('')
-  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -1962,23 +1801,6 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       const email = String(form.get('email') || '').trim().toLowerCase()
       const password = String(form.get('password') || '')
       const expectedRole = role === 'admin' ? 'ADMIN' : 'FORMATOR'
-      const demoAccount = Object.values(localDemoAccounts).find((account) => account.email === email && account.role !== 'USER')
-      if (demoAccount) {
-        if (demoAccount.password !== password) {
-          setError('The demo password is incorrect.')
-          setPending(false)
-          return
-        }
-        if (demoAccount.role !== expectedRole) {
-          setError(`Select ${demoAccount.role === 'FORMATOR' ? 'Staff' : 'Administrator'} to use this demo account.`)
-          setPending(false)
-          return
-        }
-        saveDemoStaffSession(demoAccount)
-        navigate('/admin', { replace: true })
-        setPending(false)
-        return
-      }
       try {
         const response = await fetch('/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
         const result = await readAuthResponse(response)
@@ -2008,25 +1830,12 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const phone = String(form.get('phone') || '').trim()
     const address = String(form.get('address') || '').trim()
     const password = String(form.get('password') || '')
-    if (!isSignup && email === localDemoAccounts.member.email) {
-      if (password !== localDemoAccounts.member.password) {
-        setError('The demo password is incorrect.')
-        setPending(false)
-        return
-      }
-      localStorage.removeItem(prototypeSessionKey)
-      window.dispatchEvent(new Event(staffSessionUpdatedEvent))
-      saveMemberSession({ id: localDemoAccounts.member.id, name: localDemoAccounts.member.name, email: localDemoAccounts.member.email, role: 'USER', gender: localDemoAccounts.member.gender, prototype: true, demo: true })
-      navigate('/', { replace: true })
-      setPending(false)
-      return
-    }
     try {
       const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password, privacyConsent: form.get('privacyConsent') === 'on' } : { email, password }) })
       const result = await readAuthResponse(response)
       if (!response.ok) throw new Error(result.error || 'Unable to continue.')
       if (!result.user || result.user.role !== 'USER') throw new Error('Staff accounts use the Federation staff sign-in page.')
-      saveMemberSession({ id: result.user.id, name: result.user.name, email: result.user.email, gender: result.user.gender || gender, phone: result.user.phone, address: result.user.address, role: 'USER', discernmentTrackingEnabled: result.user.discernmentTrackingEnabled === true })
+      saveMemberSession({ id: result.user.id, name: result.user.name, email: result.user.email, gender: result.user.gender || gender, phone: result.user.phone, address: result.user.address, role: 'USER' })
       navigate('/', { replace: true })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to connect to the account service.')
@@ -2048,17 +1857,6 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
           <label><input type="radio" name="accountType" value="admin" checked={accountType === 'admin'} onChange={() => { setAccountType('admin'); setLoginEmail(''); setLoginPassword('') }} /><span>Administrator</span></label>
         </div>
       </fieldset>}
-      {!isSignup && (isStaff ? <div className="local-demo-card">
-        <strong>Local demo account</strong>
-        <p>Browser-only preview; not a real or secure account. Data is not shared or saved to the server.</p>
-        {accountType === 'admin'
-          ? <button type="button" onClick={() => fillDemoCredentials(localDemoAccounts.admin.email, localDemoAccounts.admin.password)}><span>Administrator</span><small>{localDemoAccounts.admin.email} · {localDemoAccounts.admin.password}</small></button>
-          : <button type="button" onClick={() => fillDemoCredentials(localDemoAccounts.formator.email, localDemoAccounts.formator.password)}><span>Staff</span><small>{localDemoAccounts.formator.email} · {localDemoAccounts.formator.password}</small></button>}
-      </div> : <div className="local-demo-card">
-        <strong>Local demo account</strong>
-        <p>Browser-only preview; not a real or secure account. Data is not shared or saved to the server.</p>
-        <button type="button" onClick={() => fillDemoCredentials(localDemoAccounts.member.email, localDemoAccounts.member.password)}><span>Member</span><small>{localDemoAccounts.member.email} · {localDemoAccounts.member.password}</small></button>
-      </div>)}
       {isSignup && <>
         <label>Full name<input name="name" required minLength={2} maxLength={100} autoComplete="name" placeholder="Name, Initial, Surname" /></label>
         <label>Gender<select className="member-gender-select" name="gender" required defaultValue=""><option value="" disabled>Select gender</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="ANONYMOUS">Anonymous</option></select></label>
@@ -2089,14 +1887,14 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     <p>Carmel's in Communion is committed to protecting your personal information. This notice explains how information is collected, used, stored, and protected when you register, sign in, and use the website, including its LightFM recommendation feature. Our practices are guided by the Philippine Data Privacy Act of 2012 (Republic Act No. 10173).</p>
     <h3>1. Information we collect</h3><p>When you register, we collect your full name, gender choice (including Anonymous), contact number, address, email address, and password. These details are used to create and manage your account and communicate with you. Passwords are hashed for authentication and are not stored as plain text. The confirmation-password field is checked in your browser; it is not sent to the server or retained in your account record.</p>
     <h3>2. LightFM recommendations</h3><p>For signed-in members, teaching views and current bookmarks may be linked to the account and used to learn reading preferences and provide relevant Carmelights suggestions. The recommendation service receives an internal account identifier and reading-interaction data, not your password or login credentials. Anonymous teaching views may contribute to overall popularity counts, but are not linked to an account or used to train LightFM. Recommendations may use a popularity-based fallback when personalization is unavailable or the model has insufficient data.</p>
-    <h3>3. How we use information</h3><p>We use account information to create and maintain accounts, authenticate sign-ins, maintain resident records, provide website features, communicate important account-related information, support password recovery, provide relevant recommendations, and improve website functionality. Discernment activity tracking is a separate optional feature that you can enable or turn off in your account.</p>
+    <h3>3. How we use information</h3><p>We use account information to create and maintain accounts, authenticate sign-ins, maintain resident records, provide website features, communicate important account-related information, support password recovery, provide relevant recommendations, and improve website functionality.</p>
     <h3>4. Protection and access</h3><p>Reasonable organizational, physical, and technical measures are used to protect personal information against unauthorized access, disclosure, alteration, loss, or misuse. Access is limited to authorized personnel who need the information for their responsibilities. Passwords are not recommendation-system inputs.</p>
     <h3>5. Sharing</h3><p>We do not sell personal information. Authorized administrators and technical service providers may access information as necessary for website hosting, maintenance, security, and operation, subject to appropriate safeguards. Information may also be disclosed when required or permitted by law.</p>
     <h3>6. Retention</h3><p>Information is retained for as long as needed for the purposes described in this notice, account administration, and applicable legal or operational requirements. Interaction records are retained for account features and recommendation purposes. For questions or requests about your information, contact the website administrator using the details below.</p>
     <h3>7. Your rights</h3><p>Subject to applicable law, you may ask to be informed about processing, access or correct your personal information, object to or withdraw consent where applicable, request deletion or blocking, or raise a concern about how your information is handled. Contact the website administrator to make a request.</p>
     <h3>8. Changes to this notice</h3><p>This notice may be updated when our practices or requirements change. Significant changes affecting how information is processed will be communicated through the website or other appropriate means.</p>
     <h3>9. Contact</h3><p>For questions, concerns, or privacy requests, contact the website administrator or designated Data Protection Officer at <a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a>.</p>
-    <h3>10. Consent</h3><p>By creating an account and selecting the consent checkbox, you acknowledge that you have read and understood this notice and agree to the collection and use of information for the purposes described above. You retain the rights available to you under the Data Privacy Act of 2012. Optional discernment tracking can be controlled separately in your account.</p>
+    <h3>10. Consent</h3><p>By creating an account and selecting the consent checkbox, you acknowledge that you have read and understood this notice and agree to the collection and use of information for the purposes described above. You retain the rights available to you under the Data Privacy Act of 2012.</p>
   </div><footer><button className="button button-outline" type="button" onClick={closePrivacyNotice}>Close</button></footer></section></div>}
   </>
 }
@@ -2212,8 +2010,16 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
   return <form className="member-account-form member-profile-form" onSubmit={save}><div className="member-section-heading"><span className="eyebrow">YOUR ACCOUNT</span><h2>Profile details</h2><p>Keep your contact details current for messages from the Federation.</p></div><label>Full name<input required minLength={2} maxLength={100} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /></label><label>Gender<select value={gender} onChange={(event) => setGender(parseMemberGender(event.target.value))}><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="ANONYMOUS">Anonymous</option></select></label><label>Contact number<input required type="tel" minLength={7} maxLength={30} autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="e.g. +63 912 345 6789" /></label><label>Email address<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Address<textarea required minLength={5} maxLength={300} rows={3} autoComplete="street-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Your complete address" /></label><div className="member-account-form-actions">{error && <p className="form-error" role="alert">{error}</p>}{saved && <p className="member-success form-success" role="status" aria-live="polite">Profile details updated successfully.</p>}<button className="button button-dark" type="submit">Save profile</button></div></form>
 }
 
+function DiscernmentStageProgress({ stage, compact = false, label = 'Your discernment stages', updatedAt }: { stage: DiscernmentStage; compact?: boolean; label?: string; updatedAt?: string }) {
+  const stageIndex = discernmentStages.findIndex((item) => item.id === stage)
+  return <section className={`discernment-progress${compact ? ' compact' : ''}`} aria-label={label}>
+    <div className="discernment-progress-heading"><div><span className="eyebrow">CURRENT STAGE</span><h3>{discernmentStages[stageIndex]?.label}</h3></div><div className="discernment-progress-meta"><span>{stageIndex + 1} of {discernmentStages.length}</span>{compact && updatedAt && <small>Updated {new Date(updatedAt).toLocaleDateString()}</small>}</div></div>
+    <ol>{discernmentStages.map((item, index) => <li className={index < stageIndex ? 'complete' : index === stageIndex ? 'current' : ''} key={item.id}><span className="discernment-stage-marker">{index < stageIndex ? <Check size={13} /> : index + 1}</span><div><b>{item.label}</b>{!compact && <small>{item.description}</small>}</div></li>)}</ol>
+  </section>
+}
+
 function MemberDiscernmentSummary({ member }: { member: MemberAccount }) {
-  const [progress, setProgress] = useState<MemberDiscernmentProgress | null>(null)
+  const [stage, setStage] = useState<DiscernmentStage | null>(null)
   const [loading, setLoading] = useState(!member.prototype)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -2229,42 +2035,42 @@ function MemberDiscernmentSummary({ member }: { member: MemberAccount }) {
             note: typeof details.note === 'string' ? details.note : '',
           }
           if (active) {
-            setProgress({ discernment, criteria: discernmentCriteriaDefault, metrics: { activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 }, trackingEnabled: false })
+            setStage(discernment.stage)
             setError('')
           }
           return
         }
         const response = await fetch('/api/discernment/mine', { credentials: 'include' })
-        const result = await readApiResponse<MemberDiscernmentProgress>(response, 'Loading discernment progress')
+        const result = await readApiResponse<{ discernment: MemberDiscernment }>(response, 'Loading discernment progress')
         if (active) {
-          setProgress({ ...result, discernment: { ...result.discernment, stage: normalizeDiscernmentStage(result.discernment.stage) } })
+          setStage(normalizeDiscernmentStage(result.discernment.stage))
           setError('')
         }
       } catch (reason) {
         if (active) {
-          setProgress(null)
+          setStage(null)
           setError(reason instanceof Error ? reason.message : 'Discernment progress could not be loaded.')
         }
       } finally {
         if (active) setLoading(false)
       }
     }
-    void loadProgress()
-    return () => { active = false }
+    const refresh = () => { void loadProgress() }
+    refresh()
+    const timer = member.prototype ? null : window.setInterval(refresh, 10_000)
+    window.addEventListener('focus', refresh)
+    return () => {
+      active = false
+      if (timer !== null) window.clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+    }
   }, [member.email, member.id, member.prototype])
-  if (loading) return <p className="member-discernment-summary-status" role="status">Loading discernment summary…</p>
-  if (error) return <section className="member-discernment-summary"><div className="member-discernment-summary-heading"><span className="eyebrow">YOUR JOURNEY</span><h2>Discernment</h2></div><p className="form-error" role="alert">{error}</p><Link className="text-link" to="/account/discernment">Open discernment details <ArrowRight size={14} /></Link></section>
-  if (!progress) return null
-  const stageIndex = discernmentStages.findIndex((stage) => stage.id === progress.discernment.stage)
-  const currentStage = discernmentStages[stageIndex]
-  const milestones = getDiscernmentMilestones(progress.discernment.stage, progress.criteria, progress.metrics)
-  const hasMilestones = stageIndex < discernmentStages.length - 1 && milestones.some((milestone) => milestone.target > 0)
-  return <section className="member-discernment-summary" aria-labelledby="member-discernment-summary-title">
-    <div className="member-discernment-summary-heading"><div><span className="eyebrow">YOUR JOURNEY</span><h2 id="member-discernment-summary-title">Discernment</h2></div><span>{stageIndex + 1} of {discernmentStages.length} stages</span></div>
-    <p className="member-discernment-current"><span className="eyebrow">CURRENT STAGE</span><b>{currentStage?.label || discernmentStages[0].label}</b></p>
-    <ol className="member-discernment-stages" aria-label="Discernment stages">{discernmentStages.map((stage, index) => <li className={index < stageIndex ? 'complete' : index === stageIndex ? 'current' : ''} key={stage.id}><span>{index < stageIndex ? <Check size={12} /> : index + 1}</span><b>{stage.label}</b></li>)}</ol>
-    {member.prototype ? <p className="member-discernment-note">Demo progress is saved in this browser. Activity milestones are available for real accounts.</p> : stageIndex === discernmentStages.length - 1 ? <p className="member-discernment-note">Continue discerning with your community. Your stage is updated as the Federation’s milestones are met.</p> : hasMilestones ? <div className="member-discernment-milestones"><h3>Next: {discernmentStages[stageIndex + 1].label}</h3>{progress.trackingEnabled ? <ul>{milestones.map(({ label, value, target, unit }) => <li key={label}><span>{label}</span><b>{target > 0 ? `${unit === 'minutes' ? value.toFixed(1) : value} / ${target} ${unit}` : 'Not required'}</b></li>)}</ul> : <p>Optional activity tracking is off. Enable it in your discernment details to see milestone progress.</p>}</div> : <p className="member-discernment-note">The Federation has not set milestones for the next stage yet.</p>}
-    <Link className="button button-outline member-discernment-summary-link" to="/account/discernment">View full discernment progress <ArrowRight size={14} /></Link>
+  return <section className="member-account-section discernment-form">
+    <div className="member-section-heading"><span className="eyebrow">YOUR JOURNEY</span><h2>Discernment</h2><p>Your current stage reflects your conversations and journey with the Federation. It is not a measure of spiritual readiness.</p><Link className="text-link" to="/discernment">Read discernment guides <ArrowRight size={14} /></Link></div>
+    {loading && <p className="discernment-loading" role="status">Loading your discernment progress…</p>}
+    {stage && <DiscernmentStageProgress stage={stage} />}
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <div className="discernment-contact"><p>Have a question about your journey? Send the Federation staff a private message.</p><Link className="button button-dark" to="/account/messages"><MessageCircle size={16} />Contact admin</Link></div>
   </section>
 }
 
@@ -2309,11 +2115,6 @@ function MemberDiscernmentView({ member }: { member: MemberAccount }) {
   const [details, setDetails] = useState<MemberDiscernment>(() => ({ monastery: '', stage: 'EXPLORING', note: '' }))
   const [loading, setLoading] = useState(!member.prototype)
   const [error, setError] = useState('')
-  const [criteria, setCriteria] = useState<DiscernmentCriteria>(discernmentCriteriaDefault)
-  const [metrics, setMetrics] = useState<DiscernmentMetrics>({ activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 })
-  const [trackingEnabled, setTrackingEnabled] = useState(Boolean(member.discernmentTrackingEnabled))
-  const [savingActivity, setSavingActivity] = useState(false)
-  const [savedActivity, setSavedActivity] = useState(false)
   useEffect(() => {
     let active = true
     if (member.prototype) {
@@ -2335,90 +2136,21 @@ function MemberDiscernmentView({ member }: { member: MemberAccount }) {
       if (!response.ok) throw new Error(result.error || 'Unable to load your discernment progress.')
       if (active) {
         setDetails({ ...result.discernment, stage: normalizeDiscernmentStage(result.discernment.stage) })
-        setCriteria(result.criteria)
-        setMetrics(result.metrics)
-        setTrackingEnabled(result.trackingEnabled === true)
         setError('')
       }
     }
     void loadProgress().catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Unable to load your discernment progress.') }).finally(() => { if (active) setLoading(false) })
-    const timer = window.setInterval(() => {
+    const refresh = () => {
       void loadProgress().catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Unable to refresh your discernment progress.') })
-    }, 30_000)
-    return () => { active = false; window.clearInterval(timer) }
+    }
+    const timer = window.setInterval(refresh, 10_000)
+    window.addEventListener('focus', refresh)
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
   }, [member.email, member.prototype])
-  async function setActivityTracking(enabled: boolean) {
-    setError('')
-    try {
-      const response = await fetch('/api/discernment/tracking-consent', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled }),
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Your tracking preference could not be saved.')
-      setTrackingEnabled(enabled)
-      if (!enabled) setMetrics({ activeSiteMinutes: 0, completedTeachings: 0, prayerReflections: 0, communityMessages: 0 })
-      saveMemberSession({ ...member, discernmentTrackingEnabled: enabled })
-      window.dispatchEvent(new CustomEvent<boolean>(discernmentTrackingEvent, { detail: enabled }))
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Your tracking preference could not be saved.')
-    }
-  }
-  async function recordReflection() {
-    setSavingActivity(true)
-    setSavedActivity(false)
-    setError('')
-    try {
-      const response = await fetch('/api/discernment/activity', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'REFLECTION', dedupeKey: crypto.randomUUID() }),
-      })
-      const result = response.status === 204 ? {} : await response.json()
-      if (!response.ok) throw new Error(result.error || 'Your reflection check-in could not be recorded.')
-      setMetrics((current) => ({ ...current, prayerReflections: current.prayerReflections + 1 }))
-      setSavedActivity(true)
-      const progressResponse = await fetch('/api/discernment/mine', { credentials: 'include' })
-      const progress = await progressResponse.json()
-      if (!progressResponse.ok) throw new Error(progress.error || 'Your updated discernment progress could not be loaded.')
-      setDetails({ ...progress.discernment, stage: normalizeDiscernmentStage(progress.discernment.stage) })
-      setCriteria(progress.criteria)
-      setMetrics(progress.metrics)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Your reflection check-in could not be recorded.')
-    } finally {
-      setSavingActivity(false)
-    }
-  }
-  const currentStageIndex = discernmentStages.findIndex((stage) => stage.id === details.stage)
-  const milestones = getDiscernmentMilestones(details.stage, criteria, metrics)
-  const hasMilestones = milestones.some((milestone) => milestone.target > 0)
   return <section className="member-account-section discernment-form">
-    <div className="member-section-heading"><span className="eyebrow">YOUR JOURNEY</span><h2>Discernment</h2><p>Your stage advances automatically when the Federation’s published milestones are met. These are guideposts for engagement, not a judgment of your vocation.</p><Link className="text-link" to="/discernment">Read discernment guides <ArrowRight size={14} /></Link></div>
+    <div className="member-section-heading"><span className="eyebrow">YOUR JOURNEY</span><h2>Discernment</h2><p>Your current stage reflects your conversations and journey with the Federation. It is not a measure of spiritual readiness.</p><Link className="text-link" to="/discernment">Read discernment guides <ArrowRight size={14} /></Link></div>
     {loading && <p className="discernment-loading" role="status">Loading your discernment progress…</p>}
-    <section className="discernment-progress" aria-label="Your discernment stages">
-      <div className="discernment-progress-heading"><div><span className="eyebrow">CURRENT STAGE</span><h3>{discernmentStages[currentStageIndex]?.label}</h3></div><span>{currentStageIndex + 1} of {discernmentStages.length}</span></div>
-      <ol>{discernmentStages.map((stage, index) => <li className={index < currentStageIndex ? 'complete' : index === currentStageIndex ? 'current' : ''} key={stage.id}><span className="discernment-stage-marker">{index < currentStageIndex ? <Check size={13} /> : index + 1}</span><div><b>{stage.label}</b><small>{stage.description}</small></div></li>)}</ol>
-    </section>
-    {!member.prototype && <section className="discernment-milestones" aria-labelledby="discernment-milestones-title">
-      <div><span className="eyebrow">YOUR NEXT STEP</span><h3 id="discernment-milestones-title">{currentStageIndex < 3 ? `Milestones for ${discernmentStages[currentStageIndex + 1].label}` : 'Continue discerning with your community'}</h3>
-        <p>Milestone totals are cumulative. The Federation sets the criteria in Manage Details; meeting them advances your stage automatically. A reflection check-in is self-reported, and your reflection text is never collected.</p>
-      </div>
-      {currentStageIndex < 3 && !hasMilestones && <p className="discernment-milestone-empty">The Federation has not set milestones for the next stage yet.</p>}
-      {currentStageIndex < 3 && hasMilestones && <>
-        <ul>{milestones.map(({ label, value, target, unit }) => <li key={label}><span>{label}</span><b>{target > 0 ? `${unit === 'minutes' ? value.toFixed(1) : value} / ${target} ${unit}` : 'Not required'}</b></li>)}</ul>
-        {!trackingEnabled && <p className="discernment-milestone-empty">Enable optional activity tracking to see your progress and qualify for automatic stage advancement.</p>}
-        {trackingEnabled && <button className="button button-outline" type="button" onClick={() => void recordReflection()} disabled={savingActivity}>{savingActivity ? 'Saving…' : 'I spent time in prayer or reflection'} <Check size={15} /></button>}
-        {savedActivity && <p className="form-success" role="status">Your reflection check-in was recorded. No reflection text is saved.</p>}
-      </>}
-    </section>}
-    {!member.prototype && <section className="discernment-tracking-settings">
-      <div><span className="eyebrow">YOUR PRIVACY</span><h3>{trackingEnabled ? 'Activity tracking is on' : 'Optional progress tracking'}</h3><p>When enabled, we count time on the site and active time reading teachings. The timer pauses when this tab is hidden and stops after 10 minutes without interaction. We record time by teaching to calculate completion; your progress shows totals, not a reading-history list. We also count your reflection check-ins and messages you send to Federation staff, but never collect reflection text or keystrokes. Turning tracking off deletes this discernment activity history; your current stage will not move backward.</p></div>
-      <button className={trackingEnabled ? 'button button-outline' : 'button button-dark'} type="button" onClick={() => void setActivityTracking(!trackingEnabled)}>{trackingEnabled ? 'Turn off and delete activity history' : 'Enable activity tracking'}</button>
-    </section>}
+    <DiscernmentStageProgress stage={details.stage} />
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="discernment-contact"><p>Have a question about your journey? Send the Federation staff a private message.</p><Link className="button button-dark" to="/account/messages"><MessageCircle size={16} />Contact admin</Link></div>
   </section>
@@ -2773,7 +2505,7 @@ function AdminSidebarNav({ user, onNavigate, unreadCount }: { user: PrototypeSta
   const canManageUsers = user.role === 'ADMIN' || user.canManageUsers === true
   const canManageDetails = user.role === 'ADMIN' || user.canManageDetails === true
   const canManageUpdates = user.role === 'ADMIN' || user.canManageUpdates === true
-  return <nav className="admin-navigation"><NavLink to="/admin" end onClick={onNavigate}><Home size={17} />Dashboard</NavLink><NavLink to="/admin/messages" onClick={onNavigate}><MessageCircle size={17} />Messages{unreadCount > 0 && <i className="unread-count">{unreadCount}</i>}</NavLink>{canManageUpdates && <NavLink to="/admin/updates" onClick={onNavigate}><FileText size={17} />Updates</NavLink>}{(canManageUsers || canManageDetails || canManageUpdates || user.role === 'ADMIN') && <div className="admin-nav-label">MANAGEMENT</div>}{canManageUsers && (user.role === 'ADMIN' ? group('users', 'Manage Users', Users, [['Staff', '/admin/users?role=FORMATOR'], ['Users', '/admin/users?role=USER']]) : <NavLink to="/admin/users?role=USER" onClick={onNavigate}><Users size={17} />Manage Users</NavLink>)}{user.role === 'ADMIN' && <NavLink to="/admin/discerners" onClick={onNavigate}><Heart size={17} />Discerners</NavLink>}{user.role === 'ADMIN' && group('donations', 'Donations', HandHeart, [['Verification', '/admin/donations?view=verification'], ['Record Donation', '/admin/donations?view=logs'], ['Transactions', '/admin/donations?view=files']])}{canManageDetails && group('details', 'Manage Details', Image, [['Home', '/admin/content?section=home'], ['Our Monastery', '/admin/content?section=monastery'], ['Carmelife', '/admin/content?section=carmelife'], ['Carmelight', '/admin/content?section=carmelight'], ['About Us', '/admin/content?section=about'], ['Contact Us', '/admin/content?section=contact']])}{user.role === 'ADMIN' && <NavLink to="/admin/system-backup" onClick={onNavigate}><Database size={17} />System Backup</NavLink>}{(user.role === 'ADMIN' || user.role === 'FORMATOR') && <NavLink to="/admin/audit" onClick={onNavigate}><Clipboard size={17} />Audit Logs</NavLink>}</nav>
+  return <nav className="admin-navigation"><NavLink to="/admin" end onClick={onNavigate}><Home size={17} />Dashboard</NavLink><NavLink to="/admin/messages" onClick={onNavigate}><MessageCircle size={17} />Messages{unreadCount > 0 && <i className="unread-count">{unreadCount}</i>}</NavLink>{canManageUpdates && <NavLink to="/admin/updates" onClick={onNavigate}><FileText size={17} />Updates</NavLink>}{(canManageUsers || canManageDetails || canManageUpdates || user.role === 'ADMIN') && <div className="admin-nav-label">MANAGEMENT</div>}{canManageUsers && (user.role === 'ADMIN' ? group('users', 'Manage Users', Users, [['Staff', '/admin/users?role=FORMATOR'], ['Users', '/admin/users?role=USER']]) : <NavLink to="/admin/users?role=USER" onClick={onNavigate}><Users size={17} />Manage Users</NavLink>)}{canManageUsers && <NavLink to="/admin/discerners" onClick={onNavigate}><Heart size={17} />Discerners</NavLink>}{user.role === 'ADMIN' && group('donations', 'Donations', HandHeart, [['Verification', '/admin/donations?view=verification'], ['Record Donation', '/admin/donations?view=logs'], ['Transactions', '/admin/donations?view=files']])}{canManageDetails && group('details', 'Manage Details', Image, [['Home', '/admin/content?section=home'], ['Our Monastery', '/admin/content?section=monastery'], ['Carmelife', '/admin/content?section=carmelife'], ['Carmelight', '/admin/content?section=carmelight'], ['About Us', '/admin/content?section=about'], ['Contact Us', '/admin/content?section=contact']])}{user.role === 'ADMIN' && <NavLink to="/admin/system-backup" onClick={onNavigate}><Database size={17} />System Backup</NavLink>}{(user.role === 'ADMIN' || user.role === 'FORMATOR') && <NavLink to="/admin/audit" onClick={onNavigate}><Clipboard size={17} />Audit Logs</NavLink>}</nav>
 }
 function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; user: PrototypeStaff; onUserUpdated: (user: PrototypeStaff) => void }) {
   const navigate = useNavigate()
@@ -3314,88 +3046,6 @@ type CarmelightsTrainingResult = {
   evaluation: Record<string, unknown>
 }
 
-function DiscernmentCriteriaAdminPage() {
-  const [criteria, setCriteria] = useState<DiscernmentCriteria>(discernmentCriteriaDefault)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  useEffect(() => {
-    let active = true
-    fetch('/api/admin/discernment/criteria', { credentials: 'include' }).then(async (response) => {
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Discernment milestones could not be loaded.')
-      if (active) setCriteria(result.criteria)
-    }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : 'Discernment milestones could not be loaded.')
-    }).finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [])
-  function updateTransition(index: number, field: keyof DiscernmentCriteria['transitions'][number], value: string) {
-    const number = Number(value)
-    setCriteria((current) => ({
-      ...current,
-      transitions: current.transitions.map((transition, transitionIndex) => transitionIndex === index
-        ? { ...transition, [field]: Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0 }
-        : transition),
-    }))
-    setSuccess('')
-  }
-  async function saveCriteria(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSaving(true)
-    setError('')
-    setSuccess('')
-    try {
-      const response = await fetch('/api/admin/discernment/criteria', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(criteria),
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Discernment milestones could not be saved.')
-      setCriteria(result.criteria)
-      setSuccess('Discernment milestones saved. Users can now see these requirements and their progress.')
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Discernment milestones could not be saved.')
-    } finally {
-      setSaving(false)
-    }
-  }
-  const transitionNames = [
-    ['Exploring the Call', 'Prayerful Discernment'],
-    ['Prayerful Discernment', 'Preparing to Meet a Community'],
-    ['Preparing to Meet a Community', 'Discerning with a Community'],
-  ]
-  return <main className="discernment-criteria-admin">
-    <div className="admin-title-row"><div><span className="eyebrow">DISCERNERS</span><h1>Milestone settings</h1><p>Set the measurable engagement criteria users will see in the discernment guide and their account.</p></div></div>
-    <form className="admin-panel discernment-criteria-form" onSubmit={(event) => void saveCriteria(event)}>
-      <section className="discernment-criteria-reading">
-        <div className="panel-heading"><div><h2>Teaching completion</h2><p>A teaching is complete after the user spends enough active reading time based on its word count.</p></div></div>
-        <div className="discernment-criteria-fields">
-          <label>Estimated reading speed (words per minute)<input type="number" min={80} max={500} step={1} required value={criteria.readingWordsPerMinute} onChange={(event) => { const value = Number(event.target.value); setCriteria((current) => ({ ...current, readingWordsPerMinute: Number.isFinite(value) ? Math.floor(value) : 0 })); setSuccess('') }} /></label>
-          <label>Minimum share of estimated reading time (%)<input type="number" min={50} max={100} step={1} required value={criteria.readingCompletionPercent} onChange={(event) => { const value = Number(event.target.value); setCriteria((current) => ({ ...current, readingCompletionPercent: Number.isFinite(value) ? Math.floor(value) : 0 })); setSuccess('') }} /></label>
-        </div>
-        <p className="discernment-criteria-note">The active-time timer pauses when a tab is hidden and stops after 10 minutes without interaction. Reading time is accumulated separately for each teaching.</p>
-      </section>
-      {criteria.transitions.map((transition, index) => <section className="discernment-criteria-transition" key={transitionNames[index][0]}>
-        <div className="panel-heading"><div><span className="eyebrow">STAGE {index + 1} → {index + 2}</span><h2>{transitionNames[index][0]} to {transitionNames[index][1]}</h2><p>Set cumulative totals. Every non-zero requirement must be met. Use 0 for a milestone that is not required.</p></div></div>
-        <div className="discernment-criteria-fields">
-          <label>Active website minutes<input type="number" min={0} max={100000} step={1} value={transition.activeSiteMinutes} onChange={(event) => updateTransition(index, 'activeSiteMinutes', event.target.value)} /></label>
-          <label>Completed teachings<input type="number" min={0} max={10000} step={1} value={transition.completedTeachings} onChange={(event) => updateTransition(index, 'completedTeachings', event.target.value)} /></label>
-          <label>Prayer/reflection check-ins<input type="number" min={0} max={10000} step={1} value={transition.prayerReflections} onChange={(event) => updateTransition(index, 'prayerReflections', event.target.value)} /></label>
-          <label>Messages sent to the Federation<input type="number" min={0} max={10000} step={1} value={transition.communityMessages} onChange={(event) => updateTransition(index, 'communityMessages', event.target.value)} /></label>
-        </div>
-      </section>)}
-      <p className="discernment-criteria-note">Milestones are engagement indicators, not a measure of spiritual readiness. Progress is opt-in and self-reported reflection check-ins do not include private text. The final stage has no automatic next stage.</p>
-      {error && <p className="form-error" role="alert">{error}</p>}
-      {success && <p className="form-success" role="status">{success}</p>}
-      <button className="button button-dark" type="submit" disabled={saving || loading}>{saving ? 'Saving…' : loading ? 'Loading…' : 'Save discernment milestones'} <Check size={15} /></button>
-    </form>
-  </main>
-}
-
 function ContentAdminPage() {
   const location = useLocation()
   const section = new URLSearchParams(location.search).get('section') || 'home'
@@ -3452,7 +3102,7 @@ function ContentAdminPage() {
     document.addEventListener('pointerdown', closeOnOutsidePointer, true)
     return () => document.removeEventListener('pointerdown', closeOnOutsidePointer, true)
   }, [saintSuggestionsOpen, categorySuggestionsOpen])
-  const sectionTitle = section === 'discernment' ? 'Discernment milestones' : isMonastery ? 'Our Monastery' : isLife ? 'Carmelife' : isSaints ? 'Carmelights' : section === 'contact' ? 'Contact Us' : section === 'about' ? 'About Us' : 'Home'
+  const sectionTitle = isMonastery ? 'Our Monastery' : isLife ? 'Carmelife' : isSaints ? 'Carmelights' : section === 'contact' ? 'Contact Us' : section === 'about' ? 'About Us' : 'Home'
   function updateContactDetails(key: keyof ManagedContactDetails, value: string) {
     setContactDetails((current) => ({ ...current, [key]: value }))
     setSuccess('')
@@ -3946,7 +3596,7 @@ function ContentAdminPage() {
   const updateMonastery = (key: keyof ManagedMonastery, value: string) => { setSuccess(''); setMonastery((current) => ({ ...current, [key]: value })) }
   const updateArticle = (key: keyof ManagedArticle, value: string) => { setSuccess(''); setArticle((current) => ({ ...current, [key]: value })) }
 
-  if (section === 'discernment') return <Navigate to="/admin/discerners?section=milestones" replace />
+  if (section === 'discernment') return <Navigate to="/discernment" replace />
 
   return <>
     <div className="admin-title-row">
@@ -3957,7 +3607,7 @@ function ContentAdminPage() {
       </div>
     </div>
     <nav className="content-admin-tabs" aria-label="Website sections">
-      { [['Home', 'home'], ['Our Monastery', 'monastery'], ['Carmelife', 'carmelife'], ['Carmelights', 'carmelight'], ['Discernment', 'discernment']].map(([label, key]) =>
+      { [['Home', 'home'], ['Our Monastery', 'monastery'], ['Carmelife', 'carmelife'], ['Carmelights', 'carmelight']].map(([label, key]) =>
         <Link className={section === key ? 'active' : ''} key={key} to={`/admin/content?section=${key}`}>{label}</Link>,
       )}
     </nav>
@@ -5182,14 +4832,13 @@ function FormatorUsersPage() {
 
 function RoleAwareUsersPage({ user }: { user: PrototypeStaff }) { return user.role === 'ADMIN' ? <ManageUsersPage /> : <FormatorUsersPage /> }
 
-type AdminDiscerner = { userId: string; name: string; email: string; monastery: string; stage: DiscernmentStage; updatedAt: string; trackingEnabled: boolean; metrics: DiscernmentMetrics | null }
+type AdminDiscerner = { userId: string; name: string; email: string; monastery: string; stage: DiscernmentStage; updatedAt: string }
 function AdminDiscernmentListPage() {
   const [records, setRecords] = useState<AdminDiscerner[]>([])
   const [query, setQuery] = useState('')
   const [pendingUserId, setPendingUserId] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [criteria, setCriteria] = useState<DiscernmentCriteria>(discernmentCriteriaDefault)
   useEffect(() => {
     let active = true
     const load = () => {
@@ -5197,16 +4846,13 @@ function AdminDiscernmentListPage() {
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Unable to load discerners.')
         if (active) {
-          setCriteria(result.criteria || discernmentCriteriaDefault)
-          setRecords((result.discerners || []).map((record: { userId: string; monastery: string; stage: string; updatedAt: string; trackingEnabled: boolean; metrics: DiscernmentMetrics | null; user: { name: string; email: string } }) => ({
+          setRecords((result.discerners || []).map((record: { userId: string; monastery: string; stage: string; updatedAt: string; user: { name: string; email: string } }) => ({
             userId: record.userId,
             name: record.user.name,
             email: record.user.email,
             monastery: record.monastery,
             stage: normalizeDiscernmentStage(record.stage),
             updatedAt: record.updatedAt,
-            trackingEnabled: record.trackingEnabled,
-            metrics: record.metrics,
           })))
         }
       }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Unable to load discerners.') }).finally(() => { if (active) setLoading(false) })
@@ -5229,35 +4875,16 @@ function AdminDiscernmentListPage() {
   }
   const filtered = records.filter((record) => `${record.name} ${record.email} ${record.monastery}`.toLowerCase().includes(query.toLowerCase()))
   return <main className="user-admin-page discerner-admin-page">
-    <header className="user-admin-heading"><div><span className="eyebrow">VOCATION JOURNEY</span><h1>Discerning users</h1><p>Stages advance automatically when configured milestones are met; staff can adjust the record when needed.</p></div><span className="discerner-total">{records.length} {records.length === 1 ? 'discerner' : 'discerners'}</span></header>
+    <header className="user-admin-heading"><div><span className="eyebrow">VOCATION JOURNEY</span><h1>Discerning users</h1><p>Administrators and staff with user-management access can update each member’s stage.</p></div><span className="discerner-total">{records.length} {records.length === 1 ? 'discerner' : 'discerners'}</span></header>
     <div className="discerner-stage-summary">{discernmentStages.map((stage, index) => <div key={stage.id}><span>0{index + 1}</span><b>{records.filter((record) => record.stage === stage.id).length}</b><small>{stage.label}</small></div>)}</div>
     <div className="discerner-toolbar"><label><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, email, or community" aria-label="Search discerners" /></label><span>Stage changes are visible in the user’s account.</span></div>
     {error && <p className="form-error" role="alert">{error}</p>}
     {loading ? <div className="staff-empty">Loading discerners…</div> : filtered.length ? <section className="discerner-list">
-      <div className="discerner-columns-heading" aria-hidden="true"><span>Discerner</span><span>Current stage</span><span>Milestone progress &amp; analytics</span><span>Update stage</span></div>
+      <div className="discerner-columns-heading" aria-hidden="true"><span>Discerner</span><span>Journey progress</span><span>Update stage</span></div>
       {filtered.map((record) => {
-        const stageIndex = discernmentStages.findIndex((stage) => stage.id === record.stage)
-        const targets = criteria.transitions[stageIndex]
-        const analyticRows = [
-          { key: 'activeSiteMinutes' as const, label: 'Active website time', target: targets?.activeSiteMinutes || 0, unit: 'min' },
-          { key: 'completedTeachings' as const, label: 'Teachings completed', target: targets?.completedTeachings || 0, unit: '' },
-          { key: 'prayerReflections' as const, label: 'Prayer/reflection check-ins', target: targets?.prayerReflections || 0, unit: '' },
-          { key: 'communityMessages' as const, label: 'Messages to staff', target: targets?.communityMessages || 0, unit: '' },
-        ]
         return <article className="discerner-row" key={record.userId}>
           <div className="discerner-identity"><span className="managed-avatar user-avatar">{record.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><h2>{record.name}</h2><p>{record.email}</p>{record.monastery && <small>{record.monastery}</small>}</div></div>
-          <div className="discerner-stage"><span className="eyebrow">CURRENT STAGE</span><b>{discernmentStages[stageIndex]?.label}</b><small>{record.updatedAt ? `Updated ${new Date(record.updatedAt).toLocaleDateString()}` : 'Not updated yet'}</small></div>
-          <div className="discerner-analytics">
-            {!record.trackingEnabled || !record.metrics ? <p>Activity analytics are unavailable because optional tracking is off.</p> : stageIndex >= 3 ? <p>Final stage reached. Activity totals: {record.metrics.activeSiteMinutes.toFixed(1)} active minutes, {record.metrics.completedTeachings} teachings, {record.metrics.prayerReflections} check-ins, {record.metrics.communityMessages} messages.</p> : analyticRows.map((row) => {
-              const value = record.metrics![row.key]
-              const progress = row.target > 0 ? Math.min(100, value / row.target * 100) : 0
-              return <div className="discerner-analytics-row" key={row.key}>
-                <div><span>{row.label}</span><b>{row.target > 0 ? `${row.key === 'activeSiteMinutes' ? value.toFixed(1) : value} / ${row.target}${row.unit ? ` ${row.unit}` : ''}` : `${row.key === 'activeSiteMinutes' ? value.toFixed(1) : value} · not required`}</b></div>
-                {row.target > 0 && <span className="discerner-progress-track"><i style={{ width: `${progress}%` }} /></span>}
-              </div>
-            })}
-            {record.trackingEnabled && stageIndex < 3 && !analyticRows.some((row) => row.target > 0) && <small>Milestones for the next stage have not been configured.</small>}
-          </div>
+          <DiscernmentStageProgress stage={record.stage} compact label={`Discernment progress for ${record.name}`} updatedAt={record.updatedAt} />
           <label className="discerner-stage-edit"><span>Update stage</span><select value={record.stage} onChange={(event) => void updateStage(record, event.target.value as DiscernmentStage)} disabled={pendingUserId === record.userId}>{discernmentStages.map((stage) => <option value={stage.id} key={stage.id}>{stage.label}</option>)}</select></label>
         </article>
       })}
@@ -5266,15 +4893,7 @@ function AdminDiscernmentListPage() {
 }
 
 function AdminDiscernmentPage() {
-  const location = useLocation()
-  const section = new URLSearchParams(location.search).get('section') || 'progress'
-  return <>
-    <nav className="discerner-admin-tabs" aria-label="Discerners sections">
-      <Link className={section === 'progress' ? 'active' : ''} to="/admin/discerners">Progress &amp; analytics</Link>
-      <Link className={section === 'milestones' ? 'active' : ''} to="/admin/discerners?section=milestones">Milestone settings</Link>
-    </nav>
-    {section === 'milestones' ? <DiscernmentCriteriaAdminPage /> : <AdminDiscernmentListPage />}
-  </>
+  return <AdminDiscernmentListPage />
 }
 
 function AdminPage() {
@@ -5308,7 +4927,7 @@ function AdminPage() {
   if (!user && sessionError) return <div className="admin-loading" role="alert"><p>{sessionError}</p><button className="button button-dark" type="button" onClick={() => { setChecking(true); setSessionError(''); setRetrySessionCheck((attempt) => attempt + 1) }}>Retry session check</button><Link className="button button-outline" to="/staff/login">Return to sign in</Link></div>
   if (!user) return <Navigate to="/staff/login" replace />
   void MessagesPage
-  return <AdminShell user={user} onUserUpdated={setUser}><Routes><Route index element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /><Route path="messages" element={<DirectMessagesPage user={user} />} /><Route path="updates" element={user.role === 'ADMIN' || user.canManageUpdates ? <UpdatesAdminPage /> : <Navigate to="/admin" replace />} /><Route path="users" element={user.role === 'ADMIN' || user.canManageUsers ? <RoleAwareUsersPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="discerners" element={user.role === 'ADMIN' ? <AdminDiscernmentPage /> : <Navigate to="/admin" replace />} /><Route path="donations" element={user.role === 'ADMIN' ? <DonationAdminPage /> : <Navigate to="/admin" replace />} /><Route path="content" element={user.role === 'ADMIN' || user.canManageDetails ? <GenericAdmin title="Manage details" /> : <Navigate to="/admin" replace />} /><Route path="system-backup" element={user.role === 'ADMIN' ? <SystemBackupPage /> : <Navigate to="/admin" replace />} /><Route path="audit" element={user.role === 'ADMIN' || user.role === 'FORMATOR' ? <AuditLogsPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="*" element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /></Routes></AdminShell>
+  return <AdminShell user={user} onUserUpdated={setUser}><Routes><Route index element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /><Route path="messages" element={<DirectMessagesPage user={user} />} /><Route path="updates" element={user.role === 'ADMIN' || user.canManageUpdates ? <UpdatesAdminPage /> : <Navigate to="/admin" replace />} /><Route path="users" element={user.role === 'ADMIN' || user.canManageUsers ? <RoleAwareUsersPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="discerners" element={user.role === 'ADMIN' || user.canManageUsers ? <AdminDiscernmentPage /> : <Navigate to="/admin" replace />} /><Route path="donations" element={user.role === 'ADMIN' ? <DonationAdminPage /> : <Navigate to="/admin" replace />} /><Route path="content" element={user.role === 'ADMIN' || user.canManageDetails ? <GenericAdmin title="Manage details" /> : <Navigate to="/admin" replace />} /><Route path="system-backup" element={user.role === 'ADMIN' ? <SystemBackupPage /> : <Navigate to="/admin" replace />} /><Route path="audit" element={user.role === 'ADMIN' || user.role === 'FORMATOR' ? <AuditLogsPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="*" element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /></Routes></AdminShell>
 }
 function AppRoutes() {
   return <Routes>
@@ -5336,4 +4955,4 @@ function AppRoutes() {
     <Route path="*" element={<PublicLayout><section className="content-page section-wrap"><h1>This page has <em>gone quiet.</em></h1><Link className="button button-dark" to="/">Return home <ArrowRight size={15} /></Link></section></PublicLayout>} />
   </Routes>
 }
-export default function CarmelApp() { return <BrowserRouter><DiscernmentSiteActivityTracker /><AppRoutes /><PermissionConfirmationHost /></BrowserRouter> }
+export default function CarmelApp() { return <BrowserRouter><AppRoutes /><PermissionConfirmationHost /></BrowserRouter> }
