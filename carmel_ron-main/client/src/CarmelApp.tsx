@@ -28,6 +28,7 @@ import './carmelights-reference.css'
 import './mobile-experience.css'
 import HomepageReference from './HomepageReference'
 import { homeSectionCards, type HomeSectionKey } from './home-section-cards'
+import RouteMetadata from './RouteMetadata'
 
 const DonationChart = lazy(() => import('./DonationChart'))
 
@@ -4977,7 +4978,9 @@ function AdminPage() {
   return <AdminShell user={user} onUserUpdated={setUser}><Routes><Route index element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /><Route path="messages" element={<DirectMessagesPage user={user} />} /><Route path="updates" element={user.role === 'ADMIN' || user.canManageUpdates ? <UpdatesAdminPage /> : <Navigate to="/admin" replace />} /><Route path="users" element={user.role === 'ADMIN' || user.canManageUsers ? <RoleAwareUsersPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="discerners" element={user.role === 'ADMIN' || user.canManageUsers ? <AdminDiscernmentPage /> : <Navigate to="/admin" replace />} /><Route path="donations" element={user.role === 'ADMIN' ? <DonationAdminPage /> : <Navigate to="/admin" replace />} /><Route path="content" element={user.role === 'ADMIN' || user.canManageDetails ? <GenericAdmin title="Manage details" /> : <Navigate to="/admin" replace />} /><Route path="system-backup" element={user.role === 'ADMIN' ? <SystemBackupPage /> : <Navigate to="/admin" replace />} /><Route path="audit" element={user.role === 'ADMIN' || user.role === 'FORMATOR' ? <AuditLogsPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="*" element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /></Routes></AdminShell>
 }
 function AppRoutes() {
-  return <Routes>
+  return <>
+    <RouteMetadata />
+    <Routes>
     <Route path="/" element={<PublicLayout><HomepageReference /></PublicLayout>} />
     <Route path="/search" element={<PublicLayout><SiteSearchPage /></PublicLayout>} />
     <Route path="/about" element={<PublicLayout><AboutPage /></PublicLayout>} />
@@ -5001,6 +5004,7 @@ function AppRoutes() {
     <Route path="/signup" element={<Navigate to="/account/login" replace />} />
     <Route path="/admin/*" element={<AdminPage />} />
     <Route path="*" element={<PublicLayout><section className="content-page section-wrap"><h1>This page has <em>gone quiet.</em></h1><Link className="button button-dark" to="/">Return home <ArrowRight size={15} /></Link></section></PublicLayout>} />
-  </Routes>
+    </Routes>
+  </>
 }
 export default function CarmelApp() { return <BrowserRouter><AppRoutes /><PermissionConfirmationHost /></BrowserRouter> }
