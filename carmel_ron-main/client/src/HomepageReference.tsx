@@ -58,7 +58,7 @@ export default function HomepageReference() {
     if (heroImages.length < 2) return
     const interval = window.setInterval(() => {
       setActiveHeroIndex((current) => (current + 1) % heroImages.length)
-    }, 3000)
+    }, 5000)
     return () => window.clearInterval(interval)
   }, [heroImages.length])
 
