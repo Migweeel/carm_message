@@ -30,9 +30,21 @@ function homepageContentForResponse(pageKey: string, content: NonNullable<Awaite
   if (pageKey !== 'HOME_HERO_IMAGE') return content
   const blocks = content.blocks
   if (!blocks || typeof blocks !== 'object' || Array.isArray(blocks)) return content
-  const image = 'image' in blocks ? blocks.image : null
-  if (typeof image !== 'string' || !image.startsWith('data:image/') || image.length <= homepageInlineImageMaxChars) return content
-  return { ...content, blocks: { ...blocks, image: homepageHeroImageFallback } }
+  const savedImages = 'images' in blocks && Array.isArray(blocks.images)
+    ? blocks.images
+    : 'image' in blocks && typeof blocks.image === 'string'
+      ? [blocks.image]
+      : []
+  const displayImages = savedImages.filter((image): image is string =>
+    typeof image === 'string' && Boolean(image.trim()) && (!image.startsWith('data:image/') || image.length <= homepageInlineImageMaxChars))
+  return {
+    ...content,
+    blocks: {
+      ...blocks,
+      images: displayImages,
+      image: displayImages[0] || homepageHeroImageFallback,
+    },
+  }
 }
 const configuredProductionOrigin = process.env.PUBLIC_APP_URL
   || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN.replace(/^https?:\/\//, '')}` : '')
@@ -1499,7 +1511,17 @@ async function persistManagedContentRecord(
     FROM changed
   `)
 }
-const homeHeroImageSchema = z.object({ image: z.string().trim().min(1).max(3_000_000) })
+const homeHeroImageSchema = z.object({
+  images: z.array(z.string().trim().min(1).max(3_000_000)).max(8).optional(),
+  image: z.string().trim().min(1).max(3_000_000).optional(),
+}).refine((value) => value.images !== undefined || value.image !== undefined, {
+  message: 'Provide at least one homepage image value.',
+}).superRefine((value, context) => {
+  const images = value.images ?? (value.image ? [value.image] : [])
+  if (images.reduce((total, image) => total + image.length, 0) > 12_000_000) {
+    context.addIssue({ code: 'custom', message: 'The homepage image collection is too large.' })
+  }
+})
 const homeSectionImageSchema = z.object({
   section: z.enum(['about', 'carmelife', 'carmelights', 'updates', 'monasteries', 'donations', 'contact']),
   image: z.string().trim().min(1).max(3_000_000),
@@ -1542,11 +1564,13 @@ app.delete('/api/admin/content/SITE_UPDATES/:id', authenticate, asyncRoute(async
 app.put('/api/admin/content/home-hero-image', authenticate, asyncRoute(async (req, res) => {
   if (!await authorizeStaffPermission(req, res, 'canManageDetails')) return
   const parsed = validate(homeHeroImageSchema, req.body)
-  if (parsed.error) return res.status(400).json({ error: 'Provide a valid homepage image.' })
+  if (parsed.error) return res.status(400).json({ error: 'Provide up to 8 valid homepage images with a combined size under 12 MB.' })
+  const images = parsed.data!.images ?? (parsed.data!.image ? [parsed.data!.image] : [])
+  const blocks = { images, image: images[0] || homepageHeroImageFallback }
   const content = await prisma.pageContent.upsert({
     where: { pageKey: 'HOME_HERO_IMAGE' },
-    update: { blocks: { image: parsed.data!.image } },
-    create: { pageKey: 'HOME_HERO_IMAGE', blocks: { image: parsed.data!.image } },
+    update: { blocks },
+    create: { pageKey: 'HOME_HERO_IMAGE', blocks },
   })
   homepageContentCache.set('HOME_HERO_IMAGE', { content, expiresAt: Date.now() + homepageContentCacheTtlMs })
   await audit(req.auth!.id, 'UPDATE_CONTENT', 'PageContent', content.id, { pageKey: 'HOME_HERO_IMAGE' })

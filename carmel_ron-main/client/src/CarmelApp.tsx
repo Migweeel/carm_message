@@ -28,6 +28,7 @@ import './carmelights-reference.css'
 import './mobile-experience.css'
 import HomepageReference from './HomepageReference'
 import { homeSectionCards, type HomeSectionKey } from './home-section-cards'
+import { cacheHomepageHeroImages, getHomepageHeroImages, readCachedHomepageHeroImages } from './homepage-hero-images'
 import RouteMetadata from './RouteMetadata'
 
 const DonationChart = lazy(() => import('./DonationChart'))
@@ -2676,23 +2677,38 @@ type DashboardData = {
   recentDonations: DashboardDonation[]
 }
 
-async function optimizeUploadedImage(file: File) {
+async function optimizeUploadedImage(file: File, maxBytes?: number) {
   const image = await createImageBitmap(file)
   let blob: Blob
   try {
     const scale = Math.min(1, 1600 / image.width, 900 / image.height)
+    let width = Math.round(image.width * scale)
+    let height = Math.round(image.height * scale)
+    let quality = 0.82
     const canvas = document.createElement('canvas')
-    canvas.width = Math.round(image.width * scale)
-    canvas.height = Math.round(image.height * scale)
     const context = canvas.getContext('2d')
     if (!context) throw new Error('The image could not be optimized in this browser.')
-    context.drawImage(image, 0, 0, canvas.width, canvas.height)
-    blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((result) => {
-        if (result) resolve(result)
-        else reject(new Error('The optimized image could not be created.'))
-      }, 'image/jpeg', 0.82)
-    })
+    while (true) {
+      canvas.width = width
+      canvas.height = height
+      context.drawImage(image, 0, 0, width, height)
+      blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((result) => {
+          if (result) resolve(result)
+          else reject(new Error('The optimized image could not be created.'))
+        }, 'image/jpeg', quality)
+      })
+      if (!maxBytes || blob.size <= maxBytes) break
+      if (quality > 0.52) {
+        quality = Math.max(0.5, quality - 0.1)
+      } else if (Math.max(width, height) > 480) {
+        width = Math.max(1, Math.round(width * 0.85))
+        height = Math.max(1, Math.round(height * 0.85))
+        quality = 0.72
+      } else {
+        throw new Error('This image could not be optimized to a small enough size. Try a different image.')
+      }
+    }
   } finally {
     image.close()
   }
@@ -3125,7 +3141,9 @@ function ContentAdminPage() {
   const articleFormRef = useRef<HTMLFormElement>(null)
   const saintFieldRef = useRef<HTMLDivElement>(null)
   const categoryFieldRef = useRef<HTMLDivElement>(null)
-  const [image, setImage] = useState(content.homeHeroImage)
+  const [homeHeroImages, setHomeHeroImages] = useState<string[]>(() => isLocalDemoSession()
+    ? readCachedHomepageHeroImages(content.homeHeroImage)
+    : [content.homeHeroImage])
   const [contactDetails, setContactDetails] = useState<ManagedContactDetails>(content.contactDetails)
   const [aboutImages, setAboutImages] = useState<ManagedAboutImages>(content.aboutImages)
   const [homeSectionImages, setHomeSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>({})
@@ -3319,7 +3337,7 @@ function ContentAdminPage() {
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'The saved homepage image could not be loaded.')
         const blocks = result.content?.blocks
-        if (active && blocks && typeof blocks === 'object' && !Array.isArray(blocks) && typeof blocks.image === 'string' && blocks.image) setImage(blocks.image)
+        if (active && blocks && typeof blocks === 'object' && !Array.isArray(blocks)) setHomeHeroImages(getHomepageHeroImages(blocks))
         if (active) setHomeImageState({ section, ready: true })
       } catch (loadError) {
         if (active) setError(loadError instanceof Error ? loadError.message : 'The saved homepage image could not be loaded.')
@@ -3372,14 +3390,17 @@ function ContentAdminPage() {
     void loadHomeSectionImages()
     return () => { active = false }
   }, [section])
-  function chooseImage(event: ChangeEvent<HTMLInputElement>, target: 'home' | 'monastery' | 'article' | 'contact') {
+  function chooseImage(event: ChangeEvent<HTMLInputElement>, target: 'home' | 'monastery' | 'article' | 'contact', homeImageIndex?: number) {
     const file = event.target.files?.[0]
     if (!file) return
     if (file.size > 2_000_000) { setError('Choose an image smaller than 2 MB.'); return }
     setSuccess('')
     if (target === 'home' || target === 'monastery' || target === 'contact') {
-      void optimizeUploadedImage(file).then((value) => {
-        if (target === 'home') setImage(value)
+      void optimizeUploadedImage(file, target === 'home' ? 175_000 : undefined).then((value) => {
+        if (target === 'home') {
+          if (homeImageIndex === undefined) setHomeHeroImages([value])
+          else setHomeHeroImages((current) => current.map((currentImage, index) => index === homeImageIndex ? value : currentImage))
+        }
         else if (target === 'monastery') setMonastery((current) => ({ ...current, image: value }))
         else updateContactDetails('heroImage', value)
         setError('')
@@ -3425,18 +3446,19 @@ function ContentAdminPage() {
   }
   async function saveHomeImage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!homeImageReady) { setError('The saved homepage image is still loading. Please try again.'); return }
-    if (!image.trim()) { setError('Add an image URL or upload an image first.'); return }
+    if (!homeImageReady) { setError('The saved homepage images are still loading. Please try again.'); return }
+    if (homeHeroImages.length > 8) { setError('A maximum of 8 homepage images can be saved.'); return }
+    if (homeHeroImages.some((image) => !image.trim())) { setError('Complete or remove each empty image before saving.'); return }
+    const images = homeHeroImages.map((image) => image.trim())
     setSuccess('')
     setSavingImage(true)
     try {
       if (isLocalDemoSession()) {
-        const nextContent = { ...content, homeHeroImage: image.trim() }
+        const nextContent = { ...content, homeHeroImage: images[0] || defaultManagedContent.homeHeroImage }
         cacheManagedContent(nextContent)
-        if (image.trim().length <= 350_000) localStorage.setItem('carmel-home-hero-image-v2', image.trim())
-        else localStorage.removeItem('carmel-home-hero-image-v2')
+        cacheHomepageHeroImages(images)
         setError('')
-        setSuccess('Homepage background image saved in this browser.')
+        setSuccess('Homepage images saved in this browser.')
         window.dispatchEvent(new Event('carmel-home-hero-updated'))
         return
       }
@@ -3444,15 +3466,15 @@ function ContentAdminPage() {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: image.trim() }),
+        body: JSON.stringify({ images }),
       })
       const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'The homepage image could not be saved.')
+      if (!response.ok) throw new Error(result.error || 'The homepage images could not be saved.')
       window.dispatchEvent(new Event('carmel-home-hero-updated'))
       setError('')
-      setSuccess('Homepage background image saved successfully.')
+      setSuccess('Homepage images saved successfully.')
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'The homepage image could not be saved.')
+      setError(saveError instanceof Error ? saveError.message : 'The homepage images could not be saved.')
     } finally {
       setSavingImage(false)
     }
@@ -3840,12 +3862,16 @@ function ContentAdminPage() {
           <button type="button" aria-label={`Delete ${item.title}`} onClick={() => setPendingRemoval({ kind: 'article', id: item.id, label: item.title })}><X size={16} /></button>
         </article>)}
       </section>
-    </div> : <form className="admin-panel content-editor content-image-editor" onSubmit={saveHomeImage}>
-      <div className="panel-heading"><div><h2>Replace the site background image</h2><p>{isLocalDemoSession() ? 'This image is saved only in this browser and is not included in website builds.' : 'This image is saved for every visitor on the home hero.'}</p></div></div>
-      <label>Image URL<input value={image.startsWith('data:') ? '' : image} onChange={(event) => { setImage(event.target.value); setSuccess(''); setError('') }} placeholder="https://..." /></label>
-      <label className="content-image-picker">Or upload an image<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'home')} />{image && <img src={image} alt="Current background preview" />}<small>Uploaded backgrounds are optimized automatically for faster loading.</small></label>
+    </div> : <form className="admin-panel content-editor content-image-editor home-hero-image-editor" onSubmit={saveHomeImage}>
+      <div className="panel-heading"><div><h2>Homepage hero images</h2><p>{isLocalDemoSession() ? 'Images are saved only in this browser and are not included in website builds.' : 'Images rotate automatically every 3 seconds on the home hero. Save to publish your changes.'}</p></div></div>
+      {homeHeroImages.map((image, index) => <div className="home-hero-image-card" key={`home-hero-image-${index}`}>
+        <div className="home-hero-image-heading"><b>Image {index + 1}</b><button type="button" className="home-hero-image-remove" aria-label={`Remove homepage image ${index + 1}`} onClick={() => { setHomeHeroImages((current) => current.filter((_, currentIndex) => currentIndex !== index)); setSuccess(''); setError('') }}><X size={15} />Remove</button></div>
+        <label>Image URL<input value={image.startsWith('data:') ? '' : image} onChange={(event) => { setHomeHeroImages((current) => current.map((currentImage, currentIndex) => currentIndex === index ? event.target.value : currentImage)); setSuccess(''); setError('') }} placeholder="https://..." /></label>
+        <label className="content-image-picker">Upload or replace image<input type="file" accept="image/*" onChange={(event) => void chooseImage(event, 'home', index)} />{image && <img src={image} alt={`Homepage image ${index + 1} preview`} />}<small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
+      </div>)}
+      <button type="button" className="button button-outline home-hero-image-add" disabled={savingImage || homeHeroImages.length >= 8} onClick={() => { setHomeHeroImages((current) => [...current, '']); setSuccess(''); setError('') }}><Plus size={15} />Add an image{homeHeroImages.length >= 8 ? ' (maximum reached)' : ''}</button>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="button button-dark" type="submit" disabled={savingImage}>{savingImage ? 'Saving…' : 'Save background image'}</button>
+      <button className="button button-dark" type="submit" disabled={savingImage || !homeImageReady}>{savingImage ? 'Saving…' : !homeImageReady ? 'Loading…' : 'Save homepage images'}</button>
     </form>}
     {isSaints && <section className="admin-panel carmelights-analytics" aria-labelledby="carmelights-analytics-title">
       <div className="panel-heading carmelights-analytics-heading">

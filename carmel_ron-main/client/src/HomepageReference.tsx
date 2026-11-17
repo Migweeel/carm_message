@@ -2,34 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { homeSectionCards, type HomeSectionKey } from './home-section-cards'
+import { cacheHomepageHeroImages, getHomepageHeroImages, homepageHeroImageFallback, readCachedHomepageHeroImages } from './homepage-hero-images'
 import './homepage-reference.css'
 
 const cities = ['Angeles', 'Bacolod', 'Baguio', 'Cagayan de Oro', 'Castillejos', 'Cebu', 'Davao', 'Gumaca', 'Infanta']
-const heroImageCacheKey = 'carmel-home-hero-image-v2'
-const heroImageFallback = '/assets/images/home-hero.jpg'
 const maxInlineHeroImageLength = 350_000
-
-function getCachedHeroImage() {
-  try {
-    return localStorage.getItem(heroImageCacheKey) || heroImageFallback
-  } catch (error) {
-    console.error('Unable to read the cached homepage image.', error)
-    return heroImageFallback
-  }
-}
-
-function cacheHeroImage(image: string | null) {
-  try {
-    if (image && image.length <= maxInlineHeroImageLength) localStorage.setItem(heroImageCacheKey, image)
-    else localStorage.removeItem(heroImageCacheKey)
-  } catch (error) {
-    console.error('Unable to cache the homepage image.', error)
-  }
-}
 
 export default function HomepageReference() {
   const cards = useRef<HTMLDivElement>(null)
-  const [heroImage, setHeroImage] = useState(getCachedHeroImage)
+  const [heroImages, setHeroImages] = useState(readCachedHomepageHeroImages)
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0)
   const [sectionImages, setSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>(() => {
     try {
       return JSON.parse(localStorage.getItem('carmel-home-section-images-v2') || '{}') as Partial<Record<HomeSectionKey, string>>
@@ -43,30 +25,22 @@ export default function HomepageReference() {
     cards.current?.scrollBy({ left: direction * 280, behavior: 'smooth' })
   }
 
+  const activeHeroImage = heroImages[activeHeroIndex] || homepageHeroImageFallback
+
   useEffect(() => {
     let active = true
     async function loadHeroImage() {
       try {
         const response = await fetch('/api/content/HOME_HERO_IMAGE')
-        if (response.status === 404) {
-          if (active) {
-            setHeroImage(heroImageFallback)
-            cacheHeroImage(null)
-          }
-          return
-        }
+        if (response.status === 404) return
         if (!response.ok) throw new Error('The saved homepage image could not be loaded.')
         const result: { content?: { blocks?: unknown } } = await response.json()
-        const blocks = result.content?.blocks
-        const savedImage = blocks && typeof blocks === 'object' && !Array.isArray(blocks) && 'image' in blocks && typeof blocks.image === 'string' && blocks.image.trim()
-          ? blocks.image
-          : null
-        const displayImage = savedImage && (!savedImage.startsWith('data:image/') || savedImage.length <= maxInlineHeroImageLength)
-          ? savedImage
-          : null
+        const savedImages = getHomepageHeroImages(result.content?.blocks)
+        const displayImages = savedImages.filter((image) => !image.startsWith('data:image/') || image.length <= maxInlineHeroImageLength)
         if (active) {
-          setHeroImage(displayImage || heroImageFallback)
-          cacheHeroImage(displayImage)
+          setHeroImages(displayImages)
+          setActiveHeroIndex(0)
+          cacheHomepageHeroImages(displayImages)
         }
       } catch (error) {
         console.error('Unable to load the saved homepage image.', error)
@@ -79,6 +53,20 @@ export default function HomepageReference() {
       window.removeEventListener('carmel-home-hero-updated', loadHeroImage)
     }
   }, [])
+
+  useEffect(() => {
+    if (heroImages.length < 2) return
+    const interval = window.setInterval(() => {
+      setActiveHeroIndex((current) => (current + 1) % heroImages.length)
+    }, 3000)
+    return () => window.clearInterval(interval)
+  }, [heroImages.length])
+
+  useEffect(() => {
+    if (heroImages.length < 2) return
+    const nextImage = new window.Image()
+    nextImage.src = heroImages[(activeHeroIndex + 1) % heroImages.length]
+  }, [activeHeroIndex, heroImages])
 
   useEffect(() => {
     let active = true
@@ -114,7 +102,7 @@ export default function HomepageReference() {
 
   return <div className="reference-home">
     <section className="reference-hero" id="home">
-      <img src={heroImage} alt="Nuns gathered together in prayer" loading="eager" fetchPriority="high" decoding="sync" />
+      <img key={activeHeroImage} className="reference-hero-image" src={activeHeroImage} alt="" aria-hidden="true" loading={activeHeroIndex === 0 ? 'eager' : 'lazy'} fetchPriority={activeHeroIndex === 0 ? 'high' : 'auto'} decoding="async" />
       <div className="reference-hero-overlay" />
       <div className="reference-hero-content">
         <p className="reference-kicker">A HOME FOR THE SEEKING HEART</p>
