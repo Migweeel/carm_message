@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, RotateCw, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
 import attractedByTheVeilImage from './assets/attracted-by-the-veil.jpg'
 import vocationHeroImage from '../../assets/image_carmelife/vocation-to-carmel.png'
 import seekingFaceImage from '../../assets/image_carmelife/seeking-the-face.png'
@@ -43,12 +43,15 @@ function PasswordInput(props: PasswordInputProps) {
   </span>
 }
 
-function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an image', maxBytes = 2_000_000 }: { onImage: (file: File) => void; accept?: string; ariaLabel?: string; maxBytes?: number }) {
+function ImageCropInput({ onImage, currentImage, accept = 'image/*', ariaLabel = 'Choose an image', maxBytes = 2_000_000 }: { onImage: (file: File) => void; currentImage?: string; accept?: string; ariaLabel?: string; maxBytes?: number }) {
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [zoom, setZoom] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const [aspectRatio, setAspectRatio] = useState<'square' | 'portrait' | 'landscape' | 'original'>('square')
+  const [rotation, setRotation] = useState(0)
+  const [loadingExisting, setLoadingExisting] = useState(false)
   const [error, setError] = useState('')
   const [uploadError, setUploadError] = useState('')
   const drag = useRef<{ pointerId: number; x: number; y: number; offsetX: number; offsetY: number } | null>(null)
@@ -75,6 +78,18 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
     setPreviewUrl('')
     setFile(null)
   }
+  function openCrop(selected: File) {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    previewUrlRef.current = URL.createObjectURL(selected)
+    setPreviewUrl(previewUrlRef.current)
+    setZoom(1)
+    setOffset({ x: 0, y: 0 })
+    setRotation(0)
+    setAspectRatio('square')
+    setDimensions({ width: 0, height: 0 })
+    setError('')
+    setFile(selected)
+  }
   function chooseFile(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0]
     event.target.value = ''
@@ -92,20 +107,51 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
       setUploadError('This image is larger than the 20 MB adjustment limit. Choose a smaller image.')
       return
     }
-    setError('')
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
-    previewUrlRef.current = URL.createObjectURL(selected)
-    setPreviewUrl(previewUrlRef.current)
-    setZoom(1)
-    setOffset({ x: 0, y: 0 })
-    setDimensions({ width: 0, height: 0 })
-    setFile(selected)
+    openCrop(selected)
+  }
+  async function adjustCurrentImage() {
+    if (!currentImage || loadingExisting) return
+    setUploadError('')
+    setLoadingExisting(true)
+    try {
+      const response = await fetch(currentImage)
+      if (!response.ok) throw new Error('The current image could not be loaded for adjustment.')
+      const blob = await response.blob()
+      if (!blob.type.startsWith('image/')) throw new Error('The current file is not an image.')
+      if (blob.size > 20_000_000) throw new Error('This image is larger than the 20 MB adjustment limit.')
+      const name = currentImage.startsWith('data:') ? 'current-image' : decodeURIComponent(currentImage.split('/').pop()?.split(/[?#]/)[0] || 'current-image')
+      openCrop(new File([blob], name, { type: blob.type, lastModified: Date.now() }))
+    } catch (reason) {
+      setUploadError(reason instanceof Error ? reason.message : 'The current image could not be loaded for adjustment.')
+    } finally {
+      setLoadingExisting(false)
+    }
   }
   function cropFrameSize() {
-    const ratio = dimensions.width / dimensions.height
+    const rawRatio = dimensions.width / dimensions.height
+    const ratio = aspectRatio === 'square' ? 1 : aspectRatio === 'portrait' ? 3 / 4 : aspectRatio === 'landscape' ? 4 / 3 : (rotation % 180 ? 1 / rawRatio : rawRatio)
     const maxWidth = Math.max(120, Math.min(360, window.innerWidth - 72))
     const maxHeight = Math.max(120, Math.min(320, window.innerHeight - 300))
     return { width: Math.min(maxWidth, maxHeight * ratio), height: Math.min(maxHeight, maxWidth / ratio) }
+  }
+  function previewImageSize(frame: { width: number; height: number }) {
+    const ratio = rotation % 180 ? dimensions.height / dimensions.width : dimensions.width / dimensions.height
+    const width = Math.max(frame.width, frame.height * ratio)
+    const height = Math.max(frame.height, frame.width / ratio)
+    return { width, height }
+  }
+  function maxOffset(frame: { width: number; height: number }, nextZoom = zoom) {
+    const imageSize = previewImageSize(frame)
+    return {
+      x: Math.max(0, (imageSize.width * nextZoom - frame.width) / 2),
+      y: Math.max(0, (imageSize.height * nextZoom - frame.height) / 2),
+    }
+  }
+  function cropStageSize(frame: { width: number; height: number }) {
+    return {
+      width: Math.min(Math.max(260, window.innerWidth - 80), Math.max(frame.width + 140, 400)),
+      height: Math.min(Math.max(240, window.innerHeight - 320), Math.max(frame.height + 96, 320)),
+    }
   }
   function onDragStart(event: ReactPointerEvent<HTMLDivElement>) {
     event.preventDefault()
@@ -116,11 +162,10 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
     const start = drag.current
     if (!start || start.pointerId !== event.pointerId) return
     const frame = cropFrameSize()
-    const maxX = frame.width * (zoom - 1) / 2
-    const maxY = frame.height * (zoom - 1) / 2
+    const max = maxOffset(frame)
     setOffset({
-      x: Math.max(-maxX, Math.min(maxX, start.offsetX + event.clientX - start.x)),
-      y: Math.max(-maxY, Math.min(maxY, start.offsetY + event.clientY - start.y)),
+      x: Math.max(-max.x, Math.min(max.x, start.offsetX + event.clientX - start.x)),
+      y: Math.max(-max.y, Math.min(max.y, start.offsetY + event.clientY - start.y)),
     })
   }
   async function saveCrop() {
@@ -129,23 +174,34 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
     try {
       const image = imagePreviewRef.current
       if (!image?.complete || !image.naturalWidth || !image.naturalHeight) throw new Error('The selected image is not ready to be adjusted.')
-      const scale = Math.min(1, 1600 / image.naturalWidth, 1600 / image.naturalHeight)
-      let outputWidth = Math.max(1, Math.round(image.naturalWidth * scale))
-      let outputHeight = Math.max(1, Math.round(image.naturalHeight * scale))
+      const rotatedWidth = rotation % 180 ? image.naturalHeight : image.naturalWidth
+      const rotatedHeight = rotation % 180 ? image.naturalWidth : image.naturalHeight
+      const frame = cropFrameSize()
+      const coverScale = Math.max(frame.width / rotatedWidth, frame.height / rotatedHeight)
+      const sourceWidth = frame.width / (coverScale * zoom)
+      const sourceHeight = frame.height / (coverScale * zoom)
+      const sourceX = rotatedWidth / 2 - sourceWidth / 2 - offset.x / (coverScale * zoom)
+      const sourceY = rotatedHeight / 2 - sourceHeight / 2 - offset.y / (coverScale * zoom)
+      const scale = Math.min(1, 1600 / frame.width, 1600 / frame.height)
+      let outputWidth = Math.max(1, Math.round(frame.width * scale))
+      let outputHeight = Math.max(1, Math.round(frame.height * scale))
       let quality = 0.9
+      const rotatedCanvas = document.createElement('canvas')
+      rotatedCanvas.width = rotatedWidth
+      rotatedCanvas.height = rotatedHeight
+      const rotatedContext = rotatedCanvas.getContext('2d')
+      if (!rotatedContext) throw new Error('The image could not be rotated in this browser.')
+      rotatedContext.translate(rotatedWidth / 2, rotatedHeight / 2)
+      rotatedContext.rotate(rotation * Math.PI / 180)
+      rotatedContext.drawImage(image, -image.naturalWidth / 2, -image.naturalHeight / 2)
       const canvas = document.createElement('canvas')
       const context = canvas.getContext('2d')
       if (!context) throw new Error('The image could not be cropped in this browser.')
-      const frame = cropFrameSize()
-      const sourceWidth = image.naturalWidth / zoom
-      const sourceHeight = image.naturalHeight / zoom
-      const sourceX = image.naturalWidth / 2 - sourceWidth / 2 - offset.x * image.naturalWidth / (frame.width * zoom)
-      const sourceY = image.naturalHeight / 2 - sourceHeight / 2 - offset.y * image.naturalHeight / (frame.height * zoom)
       let blob: Blob
       while (true) {
         canvas.width = outputWidth
         canvas.height = outputHeight
-        context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height)
+        context.drawImage(rotatedCanvas, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height)
         blob = await new Promise<Blob>((resolve, reject) => {
           canvas.toBlob((result) => result ? resolve(result) : reject(new Error('The cropped image could not be created.')), 'image/jpeg', quality)
         })
@@ -168,26 +224,45 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
     }
   }
   const frame = dimensions.width ? cropFrameSize() : null
+  const stage = frame ? cropStageSize(frame) : null
+  const imageSize = frame ? previewImageSize(frame) : null
   return <>
     <input type="file" accept={accept} aria-label={ariaLabel} onChange={chooseFile} />
     <small className="image-crop-hint">Select an image to crop, reposition, and zoom before uploading.</small>
+    {currentImage && <button className="image-crop-adjust-button" type="button" onClick={() => void adjustCurrentImage()} disabled={loadingExisting}>{loadingExisting ? 'Loading image…' : 'Adjust current image'}</button>}
     {uploadError && <small className="form-error" role="alert">{uploadError}</small>}
     {file && previewUrl && createPortal(<div className="image-crop-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeCrop() }}>
       <section className="image-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="image-crop-title">
-        <header><div><h2 id="image-crop-title">Adjust your image</h2><p>Drag the photo to reposition it, then zoom in or out.</p></div><button type="button" className="icon-button" aria-label="Cancel image adjustment" onClick={closeCrop}><X size={20} /></button></header>
+        <header><button type="button" className="image-crop-back" aria-label="Cancel image adjustment" onClick={closeCrop}><ArrowLeft size={22} /></button><h2 id="image-crop-title">Crop &amp; rotate</h2><button type="button" className="image-crop-close" aria-label="Close image adjustment" onClick={closeCrop}><X size={20} /></button></header>
         <div className="image-crop-workspace">
-          <div className="image-crop-frame" style={frame ? { width: frame.width, height: frame.height } : undefined} onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
-            <img ref={imagePreviewRef} src={previewUrl} alt="Image crop preview" draggable={false} onLoad={(event) => setDimensions({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setError('This image could not be opened for adjustment.')} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }} />
+          <div className="image-crop-stage" style={stage ? { width: stage.width, height: stage.height } : undefined} onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
+            <img ref={imagePreviewRef} src={previewUrl} alt="Image crop preview" draggable={false} onLoad={(event) => setDimensions({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setError('This image could not be opened for adjustment.')} style={frame && imageSize ? {
+              width: rotation % 180 ? imageSize.height : imageSize.width,
+              height: rotation % 180 ? imageSize.width : imageSize.height,
+              transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) rotate(${rotation}deg) scale(${zoom})`,
+            } : undefined} />
+            {frame && <div className="image-crop-frame" style={{ width: frame.width, height: frame.height }} aria-hidden="true"><span /></div>}
           </div>
-          <label className="image-crop-zoom">Zoom<input aria-label="Zoom image" type="range" min="1" max="3" step="0.01" value={zoom} disabled={!dimensions.width} onChange={(event) => {
+          <div className="image-crop-tools">
+            <label className="image-crop-ratio">Aspect ratio<select aria-label="Crop aspect ratio" value={aspectRatio} disabled={!dimensions.width} onChange={(event) => {
+              const nextRatio = event.target.value
+              if (nextRatio !== 'square' && nextRatio !== 'portrait' && nextRatio !== 'landscape' && nextRatio !== 'original') return
+              setAspectRatio(nextRatio)
+              setOffset({ x: 0, y: 0 })
+              setZoom(1)
+            }}><option value="square">Square</option><option value="portrait">Portrait</option><option value="landscape">Landscape</option><option value="original">Original</option></select></label>
+            <button type="button" className="image-crop-rotate" onClick={() => { setRotation((current) => (current + 90) % 360); setOffset({ x: 0, y: 0 }); setZoom(1) }} disabled={!dimensions.width}><RotateCw size={18} />Rotate</button>
+          </div>
+          <label className="image-crop-zoom">Zoom<input aria-label="Zoom image" type="range" min="1" max="4" step="0.01" value={zoom} disabled={!dimensions.width} onChange={(event) => {
             const nextZoom = Number(event.target.value)
             const nextFrame = cropFrameSize()
+            const max = maxOffset(nextFrame, nextZoom)
             setZoom(nextZoom)
-            setOffset((current) => ({ x: Math.max(-nextFrame.width * (nextZoom - 1) / 2, Math.min(nextFrame.width * (nextZoom - 1) / 2, current.x)), y: Math.max(-nextFrame.height * (nextZoom - 1) / 2, Math.min(nextFrame.height * (nextZoom - 1) / 2, current.y)) }))
+            setOffset((current) => ({ x: Math.max(-max.x, Math.min(max.x, current.x)), y: Math.max(-max.y, Math.min(max.y, current.y)) }))
           }} /></label>
         </div>
         {error && <p className="form-error" role="alert">{error}</p>}
-        <footer><button type="button" className="button button-outline" onClick={closeCrop}>Cancel</button><button type="button" className="button button-dark" onClick={() => void saveCrop()} disabled={!dimensions.width}>Use this image</button></footer>
+        <footer><button type="button" className="button button-outline" onClick={closeCrop}>Cancel</button><button type="button" className="image-crop-apply" onClick={() => void saveCrop()} disabled={!dimensions.width}>Apply crop</button></footer>
       </section>
     </div>, document.body)}
   </>
@@ -3372,7 +3447,7 @@ function UpdatesAdminPage() {
         {videoMode === 'link' && <div className="update-video-field"><label htmlFor="update-video-url">Video URL</label><input id="update-video-url" type="url" value={videoUrl} onChange={(event) => setVideoUrl(event.target.value)} placeholder="https://youtu.be/... or https://vimeo.com/..." /><small>Use a supported YouTube or Vimeo video link.</small>{videoUrl && updateVideoEmbedUrl(videoUrl) && <UpdateVideoPlayer className="update-video-preview" source={videoUrl} title={title || 'Video preview'} />}</div>}
         <label className="update-feature-toggle"><input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />Feature this post in highlights</label>
         <label>Message<textarea value={body} onChange={(event) => setBody(event.target.value)} rows={8} placeholder="Write the update for your communities..." /></label>
-        <label className="update-image-picker">Add a picture <small>Optional</small><ImageCropInput onImage={chooseImage} ariaLabel="Choose update image" />{image && <img src={image} alt="Selected update preview" />}</label>
+        <label className="update-image-picker">Add a picture <small>Optional</small><ImageCropInput onImage={chooseImage} currentImage={image} ariaLabel="Choose update image" />{image && <img src={image} alt="Selected update preview" />}</label>
         {error && !editingUpdate && <p className="form-error" role="alert">{error}</p>}
         {success && <p className="form-success" role="status" aria-live="polite">{success}</p>}
         <button className="button button-dark" type="submit" disabled={saving || !updatesReady}>{saving ? 'Saving…' : !updatesReady ? 'Loading…' : 'Publish update'} <ArrowUpRight size={15} /></button>
@@ -3403,7 +3478,7 @@ function UpdatesAdminPage() {
           {editDraft.videoMode === 'link' && <div className="update-video-field"><label htmlFor="edit-update-video-url">Video URL</label><input id="edit-update-video-url" type="url" value={editDraft.videoUrl} onChange={(event) => setEditDraft({ ...editDraft, videoUrl: event.target.value })} placeholder="https://youtu.be/... or https://vimeo.com/..." /><small>Use a supported YouTube or Vimeo video link.</small>{editDraft.videoUrl && updateVideoEmbedUrl(editDraft.videoUrl) && <UpdateVideoPlayer className="update-video-preview" source={editDraft.videoUrl} title={editDraft.title || 'Video preview'} />}</div>}
           <label className="update-feature-toggle"><input type="checkbox" checked={editDraft.featured} onChange={(event) => setEditDraft({ ...editDraft, featured: event.target.checked })} />Feature this post in highlights</label>
           <label>Message<textarea value={editDraft.body} onChange={(event) => setEditDraft({ ...editDraft, body: event.target.value })} rows={7} placeholder="Write the update for your communities..." required /></label>
-          <label className="update-image-picker">Picture <small>Optional</small><ImageCropInput onImage={chooseEditImage} ariaLabel="Choose update image" />{editDraft.image && <img src={editDraft.image} alt="Update image preview" />}</label>
+          <label className="update-image-picker">Picture <small>Optional</small><ImageCropInput onImage={chooseEditImage} currentImage={editDraft.image} ariaLabel="Choose update image" />{editDraft.image && <img src={editDraft.image} alt="Update image preview" />}</label>
           {editDraft.image && <button className="button button-outline update-edit-remove-image" type="button" onClick={() => setEditDraft({ ...editDraft, image: '' })}>Remove picture</button>}
           {error && <p className="form-error" role="alert">{error}</p>}
           <footer className="update-edit-actions"><button className="button button-outline" type="button" onClick={() => setEditingUpdate(null)} disabled={saving}>Cancel</button><button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'} <Check size={15} /></button></footer>
@@ -4034,7 +4109,7 @@ function ContentAdminPage() {
       <div className="about-image-editor-grid">
         {aboutImageFields.map(({ key, label }) => <div className="about-image-editor-card" key={key}>
           <label>{label} image URL<input value={aboutImages[key].startsWith('data:') ? '' : aboutImages[key]} onChange={(event) => updateAboutImage(key, event.target.value)} placeholder="https://..." /></label>
-          <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseAboutImage(file, key)} ariaLabel={`Choose ${label} image`} /><img src={aboutImages[key]} alt={`${label} preview`} /><small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
+          <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseAboutImage(file, key)} currentImage={aboutImages[key]} ariaLabel={`Choose ${label} image`} /><img src={aboutImages[key]} alt={`${label} preview`} /><small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
         </div>)}
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -4042,7 +4117,7 @@ function ContentAdminPage() {
     </form> : isContact ? <form className="admin-panel content-editor contact-details-editor" onSubmit={saveContactDetails}>
       <div className="panel-heading"><div><h2>Contact Us content</h2><p>Change the page image and update the phone, email, Facebook link, and location shown on the public website.</p></div></div>
       <label>Contact Us page image URL<input value={contactDetails.heroImage.startsWith('data:') ? '' : contactDetails.heroImage} onChange={(event) => updateContactDetails('heroImage', event.target.value)} placeholder="https://..." /></label>
-      <label className="content-image-picker">Upload or replace Contact Us page image<ImageCropInput onImage={(file) => chooseImage(file, 'contact')} ariaLabel="Choose Contact Us page image" /><img src={contactDetails.heroImage} alt="Contact Us page image preview" /><small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
+      <label className="content-image-picker">Upload or replace Contact Us page image<ImageCropInput onImage={(file) => chooseImage(file, 'contact')} currentImage={contactDetails.heroImage} ariaLabel="Choose Contact Us page image" /><img src={contactDetails.heroImage} alt="Contact Us page image preview" /><small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
       <label>Phone number<input required value={contactDetails.phone} onChange={(event) => updateContactDetails('phone', event.target.value)} placeholder="0921 419 2267" /></label>
       <label>Email address<input required type="email" value={contactDetails.email} onChange={(event) => updateContactDetails('email', event.target.value)} placeholder="name@example.com" /></label>
       <label>Facebook link text<input required value={contactDetails.facebookLabel} onChange={(event) => updateContactDetails('facebookLabel', event.target.value)} placeholder="Carmels in Communion on Facebook" /></label>
@@ -4058,7 +4133,7 @@ function ContentAdminPage() {
         <label>City<input required value={monastery.city} onChange={(event) => updateMonastery('city', event.target.value)} placeholder="City or province" /></label>
         <label>Community details<textarea rows={3} value={monastery.description} onChange={(event) => updateMonastery('description', event.target.value)} placeholder="A short introduction to this community" /></label>
         <label>Image URL<input value={monastery.image.startsWith('data:') ? '' : monastery.image} onChange={(event) => updateMonastery('image', event.target.value)} placeholder="https://..." /></label>
-        <label className="content-image-picker">Upload image<ImageCropInput onImage={(file) => chooseImage(file, 'monastery')} ariaLabel="Choose monastery image" />{monastery.image && <img src={monasteryImageFor(monastery)} alt="Monastery preview" />}<small>Uploaded monastery images are optimized automatically for faster loading.</small></label>
+        <label className="content-image-picker">Upload image<ImageCropInput onImage={(file) => chooseImage(file, 'monastery')} currentImage={monastery.image} ariaLabel="Choose monastery image" />{monastery.image && <img src={monasteryImageFor(monastery)} alt="Monastery preview" />}<small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="content-editor-actions">
           <button className="button button-dark" type="submit" disabled={savingManagedContent}>{savingManagedContent ? 'Saving…' : editingMonastery ? 'Save changes' : 'Add monastery'}</button>
@@ -4169,7 +4244,7 @@ function ContentAdminPage() {
         </>}
         <label>Story<textarea required rows={7} value={article.body} onChange={(event) => updateArticle('body', event.target.value)} placeholder="Write the entry shown on the public page" /></label>
         <label>{isLife ? 'Story image URL' : 'Teaching image URL'}<input value={article.image.startsWith('data:') ? '' : article.image} onChange={(event) => updateArticle('image', event.target.value)} placeholder="https://..." /></label>
-        <label className="content-image-picker">{isLife ? 'Upload story image' : 'Upload teaching image'}<ImageCropInput onImage={(file) => chooseImage(file, 'article')} ariaLabel={isLife ? 'Choose story image' : 'Choose teaching image'} />{article.image && <img src={articleImageFor(article.image, '')} alt="Entry image preview" />}</label>
+        <label className="content-image-picker">{isLife ? 'Upload story image' : 'Upload teaching image'}<ImageCropInput onImage={(file) => chooseImage(file, 'article')} currentImage={article.image} ariaLabel={isLife ? 'Choose story image' : 'Choose teaching image'} />{article.image && <img src={articleImageFor(article.image, '')} alt="Entry image preview" />}</label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="content-editor-actions">
           <button className="button button-dark" type="submit" disabled={savingManagedContent}>{savingManagedContent ? 'Saving…' : editingArticle ? 'Save changes' : 'Publish entry'}</button>
@@ -4191,7 +4266,7 @@ function ContentAdminPage() {
       {homeHeroImages.map((image, index) => <div className="home-hero-image-card" key={`home-hero-image-${index}`}>
         <div className="home-hero-image-heading"><b>Image {index + 1}</b><button type="button" className="home-hero-image-remove" aria-label={`Remove homepage image ${index + 1}`} onClick={() => { setHomeHeroImages((current) => current.filter((_, currentIndex) => currentIndex !== index)); setSuccess(''); setError('') }}><X size={15} />Remove</button></div>
         <label>Image URL<input value={image.startsWith('data:') ? '' : image} onChange={(event) => { setHomeHeroImages((current) => current.map((currentImage, currentIndex) => currentIndex === index ? event.target.value : currentImage)); setSuccess(''); setError('') }} placeholder="https://..." /></label>
-        <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseImage(file, 'home', index)} ariaLabel={`Choose homepage image ${index + 1}`} />{image && <img src={image} alt={`Homepage image ${index + 1} preview`} />}<small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
+        <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseImage(file, 'home', index)} currentImage={image} ariaLabel={`Choose homepage image ${index + 1}`} />{image && <img src={image} alt={`Homepage image ${index + 1} preview`} />}<small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
       </div>)}
       <button type="button" className="button button-outline home-hero-image-add" disabled={savingImage || homeHeroImages.length >= 8} onClick={() => { setHomeHeroImages((current) => [...current, '']); setSuccess(''); setError('') }}><Plus size={15} />Add an image{homeHeroImages.length >= 8 ? ' (maximum reached)' : ''}</button>
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -4240,7 +4315,7 @@ function ContentAdminPage() {
           return <form className="home-thumbnail-card" key={card.key} onSubmit={(event) => { void saveHomeSectionImage(event, card.key) }}>
             <div className="home-thumbnail-heading"><h3>{card.sectionLabel}</h3><p>Card: {card.label}</p></div>
             <label>Image URL<input value={sectionImage.startsWith('data:') ? '' : sectionImage} onChange={(event) => { setHomeSectionImages((current) => ({ ...current, [card.key]: event.target.value })); setSuccess(''); setError('') }} placeholder="https://..." /></label>
-            <label className="content-image-picker">Or upload an image<ImageCropInput onImage={(file) => chooseHomeSectionImage(file, card.key)} ariaLabel={`Choose ${card.sectionLabel} thumbnail`} /><img src={sectionImage || card.image} alt={`${card.sectionLabel} thumbnail preview`} /></label>
+            <label className="content-image-picker">Or upload an image<ImageCropInput onImage={(file) => chooseHomeSectionImage(file, card.key)} currentImage={sectionImage || card.image} ariaLabel={`Choose ${card.sectionLabel} thumbnail`} /><img src={sectionImage || card.image} alt={`${card.sectionLabel} thumbnail preview`} /></label>
             <button className="button button-dark" type="submit" disabled={!homeSectionImagesReady || savingSectionImage !== null}>{savingSectionImage === card.key ? 'Saving…' : `Save ${card.sectionLabel} thumbnail`}</button>
           </form>
         })}
