@@ -181,6 +181,15 @@
   display: block;
 }
 
+.password-visibility-field {
+  width: 100%;
+}
+
+.password-visibility-field input {
+  width: 100%;
+  padding-right: 50px;
+}
+
 .auth-reference-form > label .auth-password-field input {
   padding-right: 50px;
 }

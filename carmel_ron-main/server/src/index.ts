@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken'
 import { Prisma, PrismaClient } from '@prisma/client'
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { TextReader, TextWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader, ZipWriter } from '@zip.js/zip.js'
@@ -183,9 +184,13 @@ async function authenticate(req: AuthRequest, res: Response, next: NextFunction)
   try {
     const user = await prisma.user.findUnique({
       where: { id: claims.id as string },
-      select: { id: true, role: true, isActive: true, canManageUsers: true, canManageDetails: true, canManageUpdates: true },
+      select: { id: true, role: true, isActive: true, sessionVersion: true, sessionExpiresAt: true, canManageUsers: true, canManageDetails: true, canManageUpdates: true },
     })
     if (!user?.isActive) return res.status(401).json({ error: 'This account is inactive or no longer exists.' })
+    if (typeof claims.sessionVersion !== 'number' || claims.sessionVersion !== user.sessionVersion
+      || !user.sessionExpiresAt || user.sessionExpiresAt <= new Date()) {
+      return res.status(401).json({ error: 'Your session has ended. Please sign in again.' })
+    }
     req.auth = {
       id: user.id,
       role: user.role,
@@ -495,8 +500,9 @@ app.post('/api/auth/register', asyncRoute(async (req, res) => {
   if (retiredDemoAccountEmails.has(parsed.data!.email)) return res.status(403).json({ error: 'This email address is not available for registration.' })
   const passwordHash = await bcrypt.hash(parsed.data!.password, 12)
   try {
-    const user = await prisma.user.create({ data: { name: parsed.data!.name, email: parsed.data!.email, gender: parsed.data!.gender, phone: parsed.data!.phone, address: parsed.data!.address, passwordHash, role: 'USER', privacyConsentAt: new Date(), privacyPolicyVersion: memberPrivacyVersion, discernment: { create: {} } }, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, role: true } })
-    const token = jwt.sign({ id: user.id, role: user.role }, jwtSecret, { expiresIn: '8h' })
+    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
+    const user = await prisma.user.create({ data: { name: parsed.data!.name, email: parsed.data!.email, gender: parsed.data!.gender, phone: parsed.data!.phone, address: parsed.data!.address, passwordHash, role: 'USER', sessionVersion: 1, sessionExpiresAt: expiresAt, privacyConsentAt: new Date(), privacyPolicyVersion: memberPrivacyVersion, discernment: { create: {} } }, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, role: true, sessionVersion: true } })
+    const token = jwt.sign({ id: user.id, role: user.role, sessionVersion: user.sessionVersion }, jwtSecret, { expiresIn: '8h' })
     res.cookie('carmel_session', token, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 })
     res.status(201).json({ user })
   } catch (error) {
@@ -507,6 +513,7 @@ app.post('/api/auth/register', asyncRoute(async (req, res) => {
 const loginSchema = z.object({
   email: z.email().trim().toLowerCase(),
   password: z.string().min(1).max(128),
+  replaceExistingSession: z.boolean().optional(),
 })
 app.post('/api/auth/login', asyncRoute(async (req, res) => {
   const parsed = validate(loginSchema, req.body)
@@ -516,8 +523,21 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { email: input.email } })
   if (user) {
     if (!user.isActive || !(await bcrypt.compare(input.password, user.passwordHash))) return res.status(401).json({ error: 'Email or password is incorrect.' })
-    if (user.role === 'ADMIN' || user.role === 'FORMATOR') await audit(user.id, 'LOGIN', 'Session', user.id, { role: user.role })
-    const token = jwt.sign({ id: user.id, role: user.role }, jwtSecret, { expiresIn: '8h' })
+    if (user.sessionExpiresAt && user.sessionExpiresAt > new Date() && !input.replaceExistingSession) {
+      return res.status(409).json({ code: 'ACTIVE_SESSION', error: 'This account is already signed in on another device.' })
+    }
+    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
+    const sessionUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { sessionVersion: { increment: 1 }, sessionExpiresAt: expiresAt },
+      select: { sessionVersion: true },
+    })
+    if (user.role === 'ADMIN' || user.role === 'FORMATOR') {
+      void audit(user.id, 'LOGIN', 'Session', user.id, { role: user.role }).catch((error: unknown) => {
+        console.error('Unable to record the sign-in audit event.', error)
+      })
+    }
+    const token = jwt.sign({ id: user.id, role: user.role, sessionVersion: sessionUser.sessionVersion }, jwtSecret, { expiresIn: '8h' })
     res.cookie('carmel_session', token, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 })
     return res.json({ user: { id: user.id, name: user.name, email: user.email, gender: user.gender, phone: user.phone, address: user.address, role: user.role, canManageUsers: user.canManageUsers, canManageDetails: user.canManageDetails, canManageUpdates: user.canManageUpdates } })
   }
@@ -576,7 +596,7 @@ app.post('/api/auth/password-reset/confirm', passwordResetRateLimit, asyncRoute(
       where: { id: reset.id, expiresAt: { gt: new Date() } },
     })
     if (consumed.count !== 1) return false
-    await transaction.user.update({ where: { id: reset.userId }, data: { passwordHash } })
+    await transaction.user.update({ where: { id: reset.userId }, data: { passwordHash, sessionVersion: { increment: 1 }, sessionExpiresAt: null } })
     await transaction.passwordResetToken.deleteMany({ where: { userId: reset.userId } })
     return true
   })
@@ -589,15 +609,17 @@ app.post('/api/auth/logout', asyncRoute(async (req, res) => {
   if (token) {
     try {
       const verified = jwt.verify(token, jwtSecret)
-      const id = typeof verified === 'string' ? null : verified.id
-      if (typeof id === 'string') {
-        const user = await prisma.user.findUnique({ where: { id }, select: { role: true, isActive: true } })
-        if (user?.isActive && (user.role === 'ADMIN' || user.role === 'FORMATOR')) {
-          await audit(id, 'LOGOUT', 'Session', id, { role: user.role })
+      if (typeof verified !== 'string' && typeof verified.id === 'string' && typeof verified.sessionVersion === 'number') {
+        const revoked = await prisma.user.updateMany({
+          where: { id: verified.id, sessionVersion: verified.sessionVersion },
+          data: { sessionVersion: { increment: 1 }, sessionExpiresAt: null },
+        })
+        if (revoked.count && (verified.role === 'ADMIN' || verified.role === 'FORMATOR')) {
+          await audit(verified.id, 'LOGOUT', 'Session', verified.id, { role: verified.role })
         }
       }
     } catch (error) {
-      if (!(error instanceof jwt.JsonWebTokenError)) throw error
+      if (!(error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError)) throw error
     }
   }
   res.status(204).end()
@@ -627,9 +649,13 @@ app.patch('/api/auth/me', authenticate, allowRoles('ADMIN', 'FORMATOR', 'USER'),
   if (input.gender !== undefined) data.gender = input.gender
   if (input.phone !== undefined) data.phone = input.phone
   if (input.address !== undefined) data.address = input.address
-  if (input.newPassword) data.passwordHash = await bcrypt.hash(input.newPassword, 12)
+  if (input.newPassword) {
+    data.passwordHash = await bcrypt.hash(input.newPassword, 12)
+    data.sessionVersion = { increment: 1 }
+    data.sessionExpiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  }
   try {
-    const user = await prisma.user.update({ where: { id: currentUser.id }, data, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, role: true, isActive: true } })
+    const user = await prisma.user.update({ where: { id: currentUser.id }, data, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, role: true, isActive: true, sessionVersion: true } })
     await audit(user.id, 'UPDATE_PROFILE', 'User', user.id, {
       nameChanged: currentUser.name !== user.name,
       emailChanged: currentUser.email !== user.email,
@@ -638,7 +664,12 @@ app.patch('/api/auth/me', authenticate, allowRoles('ADMIN', 'FORMATOR', 'USER'),
       addressChanged: currentUser.address !== user.address,
       passwordChanged: Boolean(input.newPassword),
     })
-    res.json({ user })
+    const { sessionVersion, ...publicUser } = user
+    if (input.newPassword) {
+      const token = jwt.sign({ id: user.id, role: user.role, sessionVersion }, jwtSecret, { expiresIn: '8h' })
+      res.cookie('carmel_session', token, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 })
+    }
+    res.json({ user: publicUser })
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return res.status(409).json({ error: 'An account with this email already exists.' })
     throw error
@@ -1380,6 +1411,7 @@ const managedSiteContentSchema = z.object({
   aboutImages: z.object({
     spirituality: z.string().max(3_000_000),
     assembly: z.string().max(3_000_000),
+    assemblyCaption: z.string().trim().min(1).max(1000),
     officers: z.string().max(3_000_000),
     purposeOne: z.string().max(3_000_000),
     purposeTwo: z.string().max(3_000_000),
@@ -2098,31 +2130,36 @@ app.patch('/api/admin/users/:id', authenticate, asyncRoute(async (req, res) => {
   if (actor.role === 'FORMATOR' && (current.role !== 'USER' || Object.keys(parsed.data!).some((key) => key !== 'isActive'))) {
     return res.status(403).json({ error: 'Formators can only change community user account status.' })
   }
-  const user = await prisma.user.update({ where: { id }, data: parsed.data!, select: managedUserSelect })
+  const updateData: Prisma.UserUpdateInput = { ...parsed.data! }
+  if (parsed.data!.isActive === false) {
+    updateData.sessionVersion = { increment: 1 }
+    updateData.sessionExpiresAt = null
+  }
+  const user = await prisma.user.update({ where: { id }, data: updateData, select: managedUserSelect })
   await audit(actor.id, 'UPDATE', 'User', user.id, parsed.data! as Prisma.InputJsonValue)
   res.json({ user })
 }))
 const managedPasswordSchema = z.object({ password: z.string().min(10).max(128) })
-app.post('/api/admin/users/:id/password', authenticate, allowRoles('ADMIN'), asyncRoute(async (req, res) => {
-  const actor = await authorizeManagedAccounts(req, res, false)
+app.post('/api/admin/users/:id/password', authenticate, asyncRoute(async (req, res) => {
+  const actor = await authorizeManagedAccounts(req, res, true)
   if (!actor) return
   const parsed = validate(managedPasswordSchema, req.body)
   if (parsed.error) return res.status(400).json({ error: 'The new password must be between 10 and 128 characters.', details: parsed.error })
   const id = routeParam(req, 'id')
   const current = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true } })
-  if (!current || (current.role !== 'USER' && current.role !== 'FORMATOR')) return res.status(404).json({ error: 'Managed account not found.' })
+  if (!current || (actor.role === 'FORMATOR' ? current.role !== 'USER' : current.role === 'ADMIN')) return res.status(404).json({ error: 'Managed account not found.' })
   const passwordHash = await bcrypt.hash(parsed.data!.password, 12)
-  await prisma.user.update({ where: { id }, data: { passwordHash } })
+  await prisma.user.update({ where: { id }, data: { passwordHash, sessionVersion: { increment: 1 }, sessionExpiresAt: null } })
   await audit(actor.id, 'RESET_PASSWORD', 'User', id, { role: current.role })
   res.json({ message: 'Account password updated successfully.' })
 }))
-app.delete('/api/admin/users/:id', authenticate, allowRoles('ADMIN'), asyncRoute(async (req, res) => {
-  const actor = await authorizeManagedAccounts(req, res, false)
+app.delete('/api/admin/users/:id', authenticate, asyncRoute(async (req, res) => {
+  const actor = await authorizeManagedAccounts(req, res, true)
   if (!actor) return
   const id = routeParam(req, 'id')
   if (id === actor.id) return res.status(400).json({ error: 'You cannot delete your own account.' })
   const user = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true, name: true } })
-  if (!user || user.role === 'ADMIN') return res.status(404).json({ error: 'Managed account not found.' })
+  if (!user || (actor.role === 'FORMATOR' ? user.role !== 'USER' : user.role === 'ADMIN')) return res.status(404).json({ error: 'Managed account not found.' })
   await prisma.user.delete({ where: { id } })
   await audit(actor.id, 'DELETE', 'User', user.id, { name: user.name, role: user.role })
   res.status(204).end()
@@ -2363,6 +2400,59 @@ const clientBuildDirectory = clientBuildDirectoryCandidates.find((directory) => 
 if (!clientBuildDirectory) {
   throw new Error('Client build not found. Build client/dist and run the server from the application deployment root.')
 }
+function escapeHtmlAttribute(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character]!)
+}
+function setHtmlMeta(html: string, key: string, value: string, attribute: 'name' | 'property') {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const tag = `<meta ${attribute}="${key}" content="${escapeHtmlAttribute(value)}" data-rh="true" />`
+  const pattern = new RegExp(`<meta\\s+${attribute}="${escapedKey}"[^>]*>`, 'i')
+  return pattern.test(html) ? html.replace(pattern, tag) : html.replace('</head>', `    ${tag}\n  </head>`)
+}
+app.get('/updates/:id', asyncRoute(async (req, res) => {
+  let html = await readFile(resolve(clientBuildDirectory, 'index.html'), 'utf8')
+  const id = routeParam(req, 'id')
+  const content = await prisma.pageContent.findUnique({ where: { pageKey: 'SITE_UPDATES' }, select: { blocks: true } })
+  const updates = Array.isArray(content?.blocks) ? content.blocks : []
+  const update = updates.find((entry): entry is { id: string; title: string; body: string; image?: string } =>
+    Boolean(entry && typeof entry === 'object' && 'id' in entry && entry.id === id
+      && 'title' in entry && typeof entry.title === 'string'
+      && 'body' in entry && typeof entry.body === 'string'))
+  if (update) {
+    const title = `${update.title} | Carmels in Communion`
+    const description = update.body.replace(/\s+/g, ' ').trim().slice(0, 300)
+    const canonical = new URL(`/updates/${encodeURIComponent(id)}`, productionOrigin).toString()
+    let image = new URL('/assets/images/home-hero.jpg', productionOrigin).toString()
+    if (typeof update.image === 'string' && !update.image.startsWith('data:')) {
+      try {
+        const candidate = new URL(update.image, productionOrigin)
+        if (candidate.protocol === 'https:' || candidate.protocol === 'http:') image = candidate.toString()
+      } catch {
+        image = new URL('/assets/images/home-hero.jpg', productionOrigin).toString()
+      }
+    }
+    html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtmlAttribute(title)}</title>`)
+    html = setHtmlMeta(html, 'description', description, 'name')
+    html = setHtmlMeta(html, 'og:title', title, 'property')
+    html = setHtmlMeta(html, 'og:description', description, 'property')
+    html = setHtmlMeta(html, 'og:url', canonical, 'property')
+    html = setHtmlMeta(html, 'og:image', image, 'property')
+    html = setHtmlMeta(html, 'og:image:alt', update.title, 'property')
+    html = setHtmlMeta(html, 'twitter:title', title, 'name')
+    html = setHtmlMeta(html, 'twitter:description', description, 'name')
+    html = setHtmlMeta(html, 'twitter:image', image, 'name')
+    html = html.replace(/<link\s+rel="canonical"[^>]*>/i, `<link rel="canonical" href="${escapeHtmlAttribute(canonical)}" data-rh="true" />`)
+  } else {
+    res.status(404)
+  }
+  res.type('html').send(html)
+}))
 app.use(express.static(clientBuildDirectory))
 app.get('*', (req, res, next) => {
   if (req.path === '/api' || req.path.startsWith('/api/')) return next()

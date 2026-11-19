@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
-import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react'
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
 import attractedByTheVeilImage from './assets/attracted-by-the-veil.jpg'
 import vocationHeroImage from '../../assets/image_carmelife/vocation-to-carmel.png'
@@ -33,17 +33,32 @@ import RouteMetadata from './RouteMetadata'
 
 const DonationChart = lazy(() => import('./DonationChart'))
 
+type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>
+function PasswordInput(props: PasswordInputProps) {
+  const [visible, setVisible] = useState(false)
+  return <span className="auth-password-field password-visibility-field">
+    <input {...props} type={visible ? 'text' : 'password'} />
+    <button className="auth-password-toggle" type="button" aria-label={visible ? 'Hide password' : 'Show password'} aria-pressed={visible} onClick={() => setVisible((current) => !current)}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+  </span>
+}
+
 const cities = ['Angeles', 'Bacolod', 'Baguio', 'Cagayan de Oro', 'Castillejos', 'Cebu', 'Davao', 'Gumaca', 'Infanta']
 const nav = [['Home', '/'], ['Our Monastery', '/monasteries'], ['Carmelife', '/carmelife'], ['Discernment', '/discernment'], ['Carmelights', '/carmelights'], ['Donations', '/donations'], ['Updates', '/updates'], ['Contact us', '/contact'], ['About us', '/about']]
 const managedContentKey = 'carmel-prototype-site-content'
 const managedContentEvent = 'carmel-site-content-updated'
+function requestServerLogout() {
+  void fetch('/api/auth/logout', { method: 'POST', credentials: 'include', keepalive: true }).then((response) => {
+    if (!response.ok) console.error(`Sign-out request failed with HTTP ${response.status}.`)
+  }).catch((error: unknown) => console.error('Sign-out request could not reach the account service.', error))
+}
 const carmelightsCategories = ['Prayer', 'Trust', 'Love', 'Simplicity', 'The Cross', 'Saints']
 const carmeliteSaints = ['St. Teresa of Avila', 'St. John of the Cross', 'St. Thérèse of Lisieux', 'St. Teresa Benedicta of the Cross']
 type ManagedMonastery = { id: string; name: string; city: string; description: string; image: string }
 type ManagedArticle = { id: string; title: string; author: string; body: string; image: string; category?: string }
 type PopularTeaching = ManagedArticle & { views: number }
 type ManagedContactDetails = { phone: string; email: string; facebookLabel: string; facebookUrl: string; location: string; heroImage: string }
-type ManagedAboutImages = { spirituality: string; assembly: string; officers: string; purposeOne: string; purposeTwo: string; purposeThree: string; purposeFour: string; quote: string }
+type ManagedAboutImages = { spirituality: string; assembly: string; assemblyCaption: string; officers: string; purposeOne: string; purposeTwo: string; purposeThree: string; purposeFour: string; quote: string }
+type ManagedAboutImageKey = keyof Omit<ManagedAboutImages, 'assemblyCaption'>
 type ManagedSiteContent = { homeHeroImage: string; monasteries: ManagedMonastery[]; monasteriesVersion?: number; carmelife: ManagedArticle[]; carmelights: ManagedArticle[]; contactDetails: ManagedContactDetails; aboutImages: ManagedAboutImages }
 type SiteUpdate = { id: string; title: string; date: string; category: string; image: string; body: string; video?: string; featured?: boolean }
 const monasteryCities = ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo', 'Bacolod', 'Cebu', 'Iloilo', 'Cagayan de Oro', 'Davao', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Zamboanga', 'Kuching']
@@ -187,6 +202,7 @@ const defaultManagedContent: ManagedSiteContent = {
   aboutImages: {
     spirituality: photo.flower,
     assembly: aboutAssemblyImage,
+    assemblyCaption: '14th General Assembly of the Philippine Federation of Discalced Carmelite Nuns\nMere Monique Home, La Paz, Iloilo City\nNovember 7–12, 2022',
     officers: aboutOfficersImage,
     purposeOne: purposeOneImage,
     purposeTwo: purposeTwoImage,
@@ -250,13 +266,15 @@ function readManagedContent(): ManagedSiteContent {
       }
     }).concat(savedMonasteries.filter((monastery) => !monasteryCities.some((city) => city.toLowerCase() === monastery.city.toLowerCase()) && monastery.city.toLowerCase() !== 'ozamis'))
     const content = { ...defaultManagedContent, ...stored, aboutImages: { ...defaultManagedContent.aboutImages, ...stored?.aboutImages }, contactDetails: { ...defaultManagedContent.contactDetails, ...stored?.contactDetails }, monasteries, monasteriesVersion: 2, carmelife: stored?.carmelife || defaultManagedContent.carmelife, carmelights: stored?.carmelights || defaultManagedContent.carmelights }
-    if (stored && stored.monasteriesVersion !== 2) localStorage.setItem(managedContentKey, JSON.stringify(content))
+    if (isLocalDemoSession() && stored && stored.monasteriesVersion !== 2) localStorage.setItem(managedContentKey, JSON.stringify(content))
     if (stored && localStorage.getItem(mainVocationStorySeedKey) !== 'true') {
       const existingIndex = content.carmelife.findIndex((article) => article.id === mainVocationStory.id)
       if (existingIndex < 0) content.carmelife = [mainVocationStory, ...content.carmelife]
       else content.carmelife[existingIndex] = mainVocationStory
-      localStorage.setItem(managedContentKey, JSON.stringify(content))
-      localStorage.setItem(mainVocationStorySeedKey, 'true')
+      if (isLocalDemoSession()) {
+        localStorage.setItem(managedContentKey, JSON.stringify(content))
+        localStorage.setItem(mainVocationStorySeedKey, 'true')
+      }
     }
     return content
   } catch { return defaultManagedContent }
@@ -275,12 +293,20 @@ async function saveManagedContent(content: ManagedSiteContent) {
   })
   const result = await response.json()
   if (!response.ok) throw new Error(result.error || 'Website content could not be saved.')
-  localStorage.setItem(managedContentKey, JSON.stringify(result.content.blocks))
-  window.dispatchEvent(new Event(managedContentEvent))
+  cacheManagedContent(result.content.blocks)
 }
 function cacheManagedContent(content: ManagedSiteContent) {
-  localStorage.setItem(managedContentKey, JSON.stringify(content))
-  window.dispatchEvent(new Event(managedContentEvent))
+  if (isLocalDemoSession()) {
+    try {
+      localStorage.setItem(managedContentKey, JSON.stringify(content))
+    } catch (error) {
+      if (error instanceof DOMException && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+        throw new Error('This browser is out of local storage. Use a smaller image or sign in with a staff account to publish changes.')
+      }
+      throw error
+    }
+  }
+  window.dispatchEvent(new CustomEvent<ManagedSiteContent>(managedContentEvent, { detail: content }))
 }
 async function saveManagedContentRecord(
   collection: 'monasteries' | 'carmelife' | 'carmelights',
@@ -301,7 +327,10 @@ async function saveManagedContentRecord(
 function useManagedContent() {
   const [content, setContent] = useState<ManagedSiteContent>(readManagedContent)
   useEffect(() => {
-    const refresh = () => setContent(readManagedContent())
+    const refresh = (event?: Event) => {
+      const eventContent = event instanceof CustomEvent ? event.detail as ManagedSiteContent | undefined : undefined
+      setContent(eventContent || readManagedContent())
+    }
     let active = true
     async function load() {
       if (isLocalDemoSession()) return
@@ -311,8 +340,12 @@ function useManagedContent() {
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Saved website content could not be loaded.')
         if (active && result.content?.blocks) {
-          localStorage.setItem(managedContentKey, JSON.stringify(result.content.blocks))
-          setContent(readManagedContent())
+          setContent({
+            ...defaultManagedContent,
+            ...result.content.blocks,
+            aboutImages: { ...defaultManagedContent.aboutImages, ...result.content.blocks.aboutImages },
+            contactDetails: { ...defaultManagedContent.contactDetails, ...result.content.blocks.contactDetails },
+          })
         }
       } catch (error) {
         console.error('Unable to load saved website content.', error)
@@ -520,7 +553,7 @@ function Navbar() {
   function signOut() {
     if (profile?.role === 'USER') saveMemberSession(null)
     else { localStorage.removeItem(prototypeSessionKey); window.dispatchEvent(new Event(staffSessionUpdatedEvent)) }
-    if (!profile?.prototype) navigator.sendBeacon('/api/auth/logout')
+    if (!profile?.prototype) requestServerLogout()
     setProfileOpen(false)
     setOpen(false)
     navigate('/')
@@ -795,7 +828,7 @@ function HomePage() {
 }
 void HomePage
 const purposes = ['To respond to the desire of St. Teresa that her Carmels be bound together by evangelical friendship.', 'To realize the desire of the Church and the Order to have close beneficial ties among the member monasteries.', 'To help each other live more faithfully the Teresian ideal of the canonical contemplative life.', 'To facilitate communication and mutual assistance in formation, government, practical skills, material and economic needs, and transfer of nuns among member monasteries. (VDQ no.30)']
-const aboutImageFields: Array<{ key: keyof ManagedAboutImages; label: string; alt: string }> = [
+const aboutImageFields: Array<{ key: ManagedAboutImageKey; label: string; alt: string }> = [
   { key: 'spirituality', label: 'Our Spirituality card', alt: 'A field of flowers in the sunlight' },
   { key: 'assembly', label: 'General Assembly', alt: 'Carmelite community gathered together' },
   { key: 'officers', label: 'Elected Officers', alt: 'Elected Carmelite officers with Church leaders' },
@@ -846,7 +879,7 @@ function AboutPage() {
     <section className="about-reference-photo-section">
       <div className="about-reference-container">
         <img src={aboutImages.assembly} alt="Carmelite community gathered together" />
-        <p>14th General Assembly of the Philippine Federation of Discalced Carmelite Nuns<br />Mere Monique Home, La Paz, Iloilo City<br />November 7–12, 2022</p>
+        <p>{aboutImages.assemblyCaption.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
       </div>
     </section>
 
@@ -1026,11 +1059,9 @@ function readSiteUpdates(): SiteUpdate[] {
     const stored = JSON.parse(localStorage.getItem(prototypeUpdatesKey) || 'null') as SiteUpdate[] | null
     if (!stored) return defaultSiteUpdates
     if (isLegacySeededUpdates(stored)) {
-      localStorage.setItem(prototypeUpdatesKey, JSON.stringify(defaultSiteUpdates))
       return defaultSiteUpdates
     }
     const updates = addDefaultUpdateHighlights(stored)
-    if (JSON.stringify(updates) !== JSON.stringify(stored)) localStorage.setItem(prototypeUpdatesKey, JSON.stringify(updates))
     return updates
   } catch { return defaultSiteUpdates }
 }
@@ -1047,14 +1078,12 @@ async function fetchSiteUpdates(migrateLegacy = false): Promise<SiteUpdate[] | n
   const savedUpdates = updates as SiteUpdate[]
   if (isLegacySeededUpdates(savedUpdates)) {
     if (migrateLegacy) return persistSiteUpdates(defaultSiteUpdates)
-    localStorage.setItem(prototypeUpdatesKey, JSON.stringify(defaultSiteUpdates))
     return defaultSiteUpdates
   }
   const updatesWithHighlights = addDefaultUpdateHighlights(savedUpdates)
   if (migrateLegacy && savedUpdates.some((update) => typeof update.featured !== 'boolean')) {
     return persistSiteUpdates(updatesWithHighlights)
   }
-  localStorage.setItem(prototypeUpdatesKey, JSON.stringify(updatesWithHighlights))
   return updatesWithHighlights
 }
 async function persistSiteUpdates(updates: SiteUpdate[]): Promise<SiteUpdate[]> {
@@ -1072,7 +1101,6 @@ async function persistSiteUpdates(updates: SiteUpdate[]): Promise<SiteUpdate[]> 
   const result = await response.json()
   if (!response.ok) throw new Error(result.error || 'Updates could not be saved.')
   const savedUpdates = result.content.blocks as SiteUpdate[]
-  localStorage.setItem(prototypeUpdatesKey, JSON.stringify(savedUpdates))
   window.dispatchEvent(new Event('carmel-updates-updated'))
   return savedUpdates
 }
@@ -1112,7 +1140,17 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   }, [kind, location.search])
   useEffect(() => {
     let active = true
-    const refresh = () => setUpdates(readSiteUpdates())
+    const refresh = () => {
+      if (isLocalDemoSession()) {
+        setUpdates(readSiteUpdates())
+        return
+      }
+      void fetchSiteUpdates().then((saved) => {
+        if (active && saved) setUpdates(saved)
+      }).catch((error: unknown) => {
+        if (active) setLoadError(error instanceof Error ? error.message : 'Saved updates could not be loaded.')
+      })
+    }
     void fetchSiteUpdates().then((saved) => { if (active && saved) setUpdates(saved) }).catch((error) => { if (active) setLoadError(error instanceof Error ? error.message : 'Saved updates could not be loaded.') })
     window.addEventListener('storage', refresh)
     window.addEventListener('carmel-updates-updated', refresh)
@@ -1180,7 +1218,7 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
           }
           highlightTouchStart.current = null
         }}>
-          <button type="button" className="featured-update" onClick={() => setSelectedArticle(featuredUpdate.id)} aria-label={`Read featured update: ${featuredUpdate.title}`}>
+          <Link className="featured-update" to={`/updates/${encodeURIComponent(featuredUpdate.id)}`} aria-label={`Read featured update: ${featuredUpdate.title}`}>
             {featuredUpdate.video?.startsWith('data:video/') ? <video src={featuredUpdate.video} poster={featuredUpdate.image || undefined} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" /> : featuredUpdate.image ? <img src={featuredUpdate.image} alt="" /> : <span className="featured-update-placeholder" aria-hidden="true">{featuredUpdate.video ? <Play size={38} /> : <HandHeart size={38} />}</span>}
             <span className="featured-update-shade" />
             <span className="featured-update-content">
@@ -1188,7 +1226,7 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
               <span className="featured-update-title">{featuredUpdate.title}</span>
               <span className="featured-update-link">Read update <ArrowRight size={16} /></span>
             </span>
-          </button>
+          </Link>
           {featuredUpdates.length > 1 && <div className="featured-update-controls" aria-label="Featured updates">
             <button type="button" onClick={showPreviousHighlight} aria-label="Previous featured update"><ChevronLeft size={17} /></button>
             <span>{activeHighlight + 1} / {featuredUpdates.length}</span>
@@ -1199,7 +1237,7 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
         const date = new Date(`${update.date}T12:00:00`)
         const dateTime = Number.isNaN(date.getTime()) ? update.date : date.toISOString().slice(0, 10)
         const displayDate = Number.isNaN(date.getTime()) ? update.date : date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-        return <article className="update-post" key={update.id}>{update.video ? <UpdateVideoPlayer className="update-post-video" source={update.video} title={update.title} poster={update.image || undefined} /> : update.image ? <img src={update.image} alt="" /> : <div className="update-no-image"><HandHeart size={30} /><span>Carmels in<br />Communion</span></div>}<div className="update-post-body"><h2>{update.title}</h2><p>{update.body}</p><div className="update-post-footer"><button type="button" className="update-read-link" onClick={() => setSelectedArticle(update.id)}>{update.id === 'papal-address' ? 'View more' : 'View update'} <ArrowRight size={15} /></button><time dateTime={dateTime}><CalendarDays size={13} />{displayDate}</time></div></div></article>
+        return <article className="update-post" key={update.id}>{update.video ? <UpdateVideoPlayer className="update-post-video" source={update.video} title={update.title} poster={update.image || undefined} /> : update.image ? <img src={update.image} alt="" /> : <div className="update-no-image"><HandHeart size={30} /><span>Carmels in<br />Communion</span></div>}<div className="update-post-body"><h2>{update.title}</h2><p>{update.body}</p><div className="update-post-footer"><Link className="update-read-link" to={`/updates/${encodeURIComponent(update.id)}`}>{update.id === 'papal-address' ? 'View more' : 'View update'} <ArrowRight size={15} /></Link><time dateTime={dateTime}><CalendarDays size={13} />{displayDate}</time></div></div></article>
         })}</div>}
         {regularUpdates.length > 0 && visibleNews.length === 0 && <p className="updates-age-empty" role="status">No {newsAge === 'recent' ? 'recent' : 'older'} news to show. Choose All news to see every update.</p>}
       </> : <div className="updates-empty"><Search size={25} /><h2>No updates found</h2><p>Try a different search or category.</p></div>}
@@ -1209,6 +1247,35 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   }
   return <section className="content-page section-wrap"><div className="story-page-intro"><div><span className="eyebrow">{kind === 'life' ? 'A CONTEMPLATIVE WAY' : 'VOICES FROM CARMEL'}</span><h1>{title}</h1></div><p className="page-lead">{desc}</p></div><div className="story-grid">{articles.map((article, i) => <article className="story-card" key={article}><img src={[photo.garden, photo.flower, photo.chapel][i]} alt="A glimpse of Carmelite life" /><div><span className="eyebrow">CARMELITE LIFE</span><h3>{article}</h3><p>In the quiet rhythm of community life, every day offers a new way to listen and to love.</p><a className="text-link" href="#read">Read story <ArrowRight size={15} /></a></div></article>)}</div></section>
 }
+function UpdateDetailPage() {
+  const { id = '' } = useParams()
+  const [update, setUpdate] = useState<SiteUpdate | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    void fetchSiteUpdates().then((updates) => {
+      if (active) setUpdate(updates?.find((item) => item.id === id) || null)
+    }).catch((reason) => {
+      if (active) setError(reason instanceof Error ? reason.message : 'This update could not be loaded.')
+    }).finally(() => {
+      if (active) setLoading(false)
+    })
+    return () => { active = false }
+  }, [id])
+  if (loading) return <PublicLayout><section className="content-page section-wrap"><p role="status">Loading update…</p></section></PublicLayout>
+  if (!update) return <PublicLayout><section className="content-page section-wrap"><span className="eyebrow">CARMELS IN COMMUNION</span><h1>Update not found</h1>{error && <p className="form-error" role="alert">{error}</p>}<Link className="button button-outline" to="/updates">Back to updates</Link></section></PublicLayout>
+  return <PublicLayout><article className="content-page section-wrap story-modal-body update-detail-page">
+    <Link className="text-link" to="/updates"><ArrowLeft size={15} /> All updates</Link>
+    <span className="eyebrow">{update.category.toUpperCase()} · {update.date}</span>
+    <h1>{update.title}</h1>
+    {update.image && <img className="update-detail-image" src={update.image} alt={update.title} />}
+    {update.video && <UpdateVideoPlayer className="update-post-video" source={update.video} title={update.title} poster={update.image || undefined} />}
+    <div className="story-full-copy">{update.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+    <Link className="button button-outline" to="/updates">More updates</Link>
+  </article></PublicLayout>
+}
+
 const vocationQuotes = [
   { quote: '“Vocation, more than our own choice, is a response to the Lord’s unmerited call.”', attribution: 'Pope Francis', source: 'Letter to Priests · August 4, 2019' },
   { quote: '“Let nothing disturb you, let nothing frighten you; all things are passing. God never changes.”', attribution: 'St. Teresa of Jesus', source: 'The Way of Perfection' },
@@ -1795,6 +1862,7 @@ function isLocalDemoSession() {
 }
 type AuthApiResponse = {
   error?: string
+  code?: string
   user?: { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: string; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
 }
 async function readAuthResponse(response: Response): Promise<AuthApiResponse> {
@@ -1843,16 +1911,17 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const isSignup = mode === 'signup'
   const isStaff = mode === 'staff'
   const [error, setError] = useState('')
+  const [sessionConflict, setSessionConflict] = useState(false)
+  const [replaceExistingSession, setReplaceExistingSession] = useState(false)
   const [pending, setPending] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [privacyChecked, setPrivacyChecked] = useState(false)
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [accountType, setAccountType] = useState<'admin' | 'staff'>('staff')
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setSessionConflict(false)
     const form = new FormData(event.currentTarget)
     if (isSignup) {
       if (form.get('privacyConsent') !== 'on') {
@@ -1875,9 +1944,12 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       const password = String(form.get('password') || '')
       const expectedRole = role === 'admin' ? 'ADMIN' : 'FORMATOR'
       try {
-        const response = await fetch('/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
+        const response = await fetch('/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, replaceExistingSession }) })
         const result = await readAuthResponse(response)
-        if (!response.ok) throw new Error(result.error || 'Unable to sign in.')
+        if (!response.ok) {
+          setSessionConflict(response.status === 409 && result.code === 'ACTIVE_SESSION')
+          throw new Error(result.error || 'Unable to sign in.')
+        }
         const authenticatedUser = result.user
         if (!authenticatedUser || !['ADMIN', 'FORMATOR'].includes(authenticatedUser.role)) throw new Error('This account does not have administration access.')
         if (authenticatedUser.role !== expectedRole) throw new Error(`Select ${authenticatedUser.role === 'FORMATOR' ? 'Staff' : 'Admin'} to sign in with this account.`)
@@ -1904,9 +1976,12 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const address = String(form.get('address') || '').trim()
     const password = String(form.get('password') || '')
     try {
-      const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password, privacyConsent: form.get('privacyConsent') === 'on' } : { email, password }) })
+      const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password, privacyConsent: form.get('privacyConsent') === 'on' } : { email, password, replaceExistingSession }) })
       const result = await readAuthResponse(response)
-      if (!response.ok) throw new Error(result.error || 'Unable to continue.')
+      if (!response.ok) {
+        setSessionConflict(response.status === 409 && result.code === 'ACTIVE_SESSION')
+        throw new Error(result.error || 'Unable to continue.')
+      }
       if (!result.user || result.user.role !== 'USER') throw new Error('Staff accounts use the Federation staff sign-in page.')
       saveMemberSession({ id: result.user.id, name: result.user.name, email: result.user.email, gender: result.user.gender || gender, phone: result.user.phone, address: result.user.address, role: 'USER' })
       navigate('/', { replace: true })
@@ -1937,14 +2012,19 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         <label>Address<textarea name="address" required minLength={5} maxLength={300} rows={2} autoComplete="street-address" placeholder="Your complete address" /></label>
       </>}
       <label>Email address<input name="email" type="email" required autoComplete="email" placeholder="name@example.com" value={isSignup ? undefined : loginEmail} onChange={isSignup ? undefined : (event) => setLoginEmail(event.target.value)} /></label>
-      <label>Password<span className="auth-password-field"><input name="password" type={showPassword ? 'text' : 'password'} required minLength={isSignup ? 10 : 1} maxLength={128} autoComplete={isSignup ? 'new-password' : 'current-password'} placeholder={isSignup ? 'At least 10 characters' : 'Enter your password'} value={isSignup ? undefined : loginPassword} onChange={isSignup ? undefined : (event) => setLoginPassword(event.target.value)} /><button className="auth-password-toggle" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></span></label>
-      {isSignup && <label>Confirm password<span className="auth-password-field"><input name="confirmPassword" type={showConfirmPassword ? 'text' : 'password'} required minLength={10} maxLength={128} autoComplete="new-password" placeholder="Re-enter your password" /><button className="auth-password-toggle" type="button" aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'} aria-pressed={showConfirmPassword} onClick={() => setShowConfirmPassword(!showConfirmPassword)}>{showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></span></label>}
+      <label>Password<PasswordInput name="password" required minLength={isSignup ? 10 : 1} maxLength={128} autoComplete={isSignup ? 'new-password' : 'current-password'} placeholder={isSignup ? 'At least 10 characters' : 'Enter your password'} value={isSignup ? undefined : loginPassword} onChange={isSignup ? undefined : (event) => setLoginPassword(event.target.value)} /></label>
+      {isSignup && <label>Confirm password<PasswordInput name="confirmPassword" required minLength={10} maxLength={128} autoComplete="new-password" placeholder="Re-enter your password" /></label>}
       {isSignup && <div className="auth-signup-consent">
         <label><input name="privacyConsent" type="checkbox" required checked={privacyChecked} onChange={(event) => { setPrivacyChecked(event.target.checked); setError('') }} /><span>I have read and agree to the Data Privacy Notice before creating my account.</span></label>
         <button className="auth-privacy-link" type="button" onClick={() => setPrivacyOpen(true)}>Read Data Privacy Notice</button>
       </div>}
       {!isSignup && <Link className="auth-forgot-password-link" to="/account/forgot-password">Forgot password?</Link>}
       {error && <p className="form-error" role="alert">{error}</p>}
+      {sessionConflict && <button className="auth-privacy-link" type="button" onClick={(event) => {
+        const form = event.currentTarget.form
+        setReplaceExistingSession(true)
+        window.setTimeout(() => form?.requestSubmit(), 0)
+      }}>Continue and sign out the other device</button>}
       <button className="button button-dark full-button" disabled={pending || (isSignup && !privacyChecked)}>{pending ? 'Please wait…' : isSignup ? <>Create member account <ArrowRight size={16} /></> : isStaff ? <>Staff sign in <ArrowRight size={16} /></> : <>Login <ArrowRight size={16} /></>}</button>
       {isStaff ? <>
         <p className="auth-staff-account-note">Staff accounts are created by a Federation administrator.</p>
@@ -1980,8 +2060,6 @@ function PasswordRecoveryPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [pending, setPending] = useState(false)
@@ -2031,8 +2109,8 @@ function PasswordRecoveryPage() {
       {!isReset && !message && <label>Email address<input name="email" type="email" autoComplete="email" required maxLength={254} placeholder="name@example.com" value={email} onChange={(event) => setEmail(event.target.value)} /></label>}
       {isReset && !token && <p className="form-error" role="alert">This reset link is missing or invalid. Request a new link to continue.</p>}
       {isReset && token && !message && <>
-        <label>New password<span className="auth-password-field"><input name="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={10} maxLength={128} placeholder="At least 10 characters" value={password} onChange={(event) => setPassword(event.target.value)} /><button className="auth-password-toggle" type="button" aria-label={showPassword ? 'Hide new password' : 'Show new password'} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></span></label>
-        <label>Confirm new password<span className="auth-password-field"><input name="confirmPassword" type={showConfirmPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={10} maxLength={128} placeholder="Enter your new password again" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /><button className="auth-password-toggle" type="button" aria-label={showConfirmPassword ? 'Hide password confirmation' : 'Show password confirmation'} aria-pressed={showConfirmPassword} onClick={() => setShowConfirmPassword(!showConfirmPassword)}>{showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></span></label>
+        <label>New password<PasswordInput name="password" autoComplete="new-password" required minLength={10} maxLength={128} placeholder="At least 10 characters" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+        <label>Confirm new password<PasswordInput name="confirmPassword" autoComplete="new-password" required minLength={10} maxLength={128} placeholder="Enter your new password again" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
       </>}
       {error && <p className="form-error" role="alert">{error}</p>}
       {message && <p className="auth-recovery-message" role="status">{message}</p>}
@@ -2248,7 +2326,7 @@ function MemberSecurityView({ member }: { member: MemberAccount }) {
       setSaved(true)
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to update your password.') }
   }
-  return <div className="member-security-layout"><form className="member-account-form member-security-form" onSubmit={updatePassword}><div className="member-section-heading"><span className="eyebrow">ACCOUNT SECURITY</span><h2>Change password</h2><p>Use at least 10 characters for your new password.</p></div><label>Current password<input required type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label>New password<input required minLength={10} type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>{error && <p className="form-error" role="alert">{error}</p>}{saved && <p className="member-success form-success" role="status" aria-live="polite">Password updated successfully.</p>}<button className="button button-dark" type="submit">Update password</button></form><section className="member-privacy-note"><ShieldCheck size={20} /><div><h3>Privacy</h3><p>Your account profile and credentials are managed by the Federation account service. Favorites and other preferences are saved in this browser.</p></div></section></div>
+  return <div className="member-security-layout"><form className="member-account-form member-security-form" onSubmit={updatePassword}><div className="member-section-heading"><span className="eyebrow">ACCOUNT SECURITY</span><h2>Change password</h2><p>Use at least 10 characters for your new password.</p></div><label>Current password<PasswordInput required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label>New password<PasswordInput required minLength={10} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>{error && <p className="form-error" role="alert">{error}</p>}{saved && <p className="member-success form-success" role="status" aria-live="polite">Password updated successfully.</p>}<button className="button button-dark" type="submit">Update password</button></form><section className="member-privacy-note"><ShieldCheck size={20} /><div><h3>Privacy</h3><p>Your account profile and credentials are managed by the Federation account service. Favorites and other preferences are saved in this browser.</p></div></section></div>
 }
 
 function MemberMessagesView({ member }: { member: MemberAccount }) {
@@ -2491,6 +2569,7 @@ function MemberAccountPage() {
   }, [])
   if (checking) return <div className="member-account-loading">Loading your profile…</div>
   if (!member) return <Navigate to="/account/login" replace state={{ from: location.pathname }} />
+  const isDemoMember = member.demo === true
   const section = location.pathname.split('/').filter(Boolean)[1] || 'profile'
   const tabs = [
     { id: 'donations', label: 'Donation history', icon: HandHeart, path: '/account/donations' },
@@ -2500,7 +2579,7 @@ function MemberAccountPage() {
     { id: 'favorites', label: 'Favorite teachings', icon: Heart, path: '/account/favorites' },
     { id: 'recommendations', label: 'Recommended for You', icon: BookOpen, path: '/account/recommendations' },
   ]
-  function signOut() { saveMemberSession(null); navigator.sendBeacon('/api/auth/logout'); navigate('/') }
+  function signOut() { saveMemberSession(null); if (!isDemoMember) requestServerLogout(); navigate('/') }
   return <section className="member-account-page"><div className="member-account-shell"><aside className="member-account-sidebar"><div className="member-account-identity"><span className="member-account-avatar">{member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><b>{member.name}</b><small>{member.email}</small><Link className="member-edit-profile" to="/account"><Pencil size={13} /> Edit profile</Link></div><nav aria-label="Your account">{tabs.map(({ id, label, icon: Icon, path }) => <NavLink key={id} to={path} end={id === 'profile'} className={({ isActive }) => isActive || section === id ? 'active' : ''}><Icon size={16} />{label}</NavLink>)}</nav><button className="member-signout" type="button" onClick={signOut}><LogOut size={15} />Sign out</button></aside><main className="member-account-main">{sessionWarning && <p className="form-error" role="status">{sessionWarning}</p>}{section === 'profile' && <><MemberProfileDetails key={member.email} member={member} onUpdated={setMember} /><MemberDiscernmentSummary key={`discernment-${member.email}`} member={member} /></>}{section === 'donations' && <MemberDonationsView member={member} />}{section === 'discernment' && <MemberDiscernmentView key={member.email} member={member} />}{section === 'security' && <MemberSecurityView member={member} />}{section === 'messages' && <MemberMessagesView member={member} />}{section === 'favorites' && <MemberFavoritesView member={member} />}{section === 'recommendations' && <MemberRecommendationsView />}</main></div></section>
 }
 
@@ -2601,7 +2680,7 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
   useEffect(() => { if (adminSearchOpen) adminSearchInputRef.current?.focus() }, [adminSearchOpen])
   function signOut() {
     localStorage.removeItem(prototypeSessionKey)
-    navigator.sendBeacon('/api/auth/logout')
+    if (!user.prototype) requestServerLogout()
     window.dispatchEvent(new Event(staffSessionUpdatedEvent))
     navigate('/staff/login', { replace: true })
   }
@@ -2655,7 +2734,7 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
       </header>
       <div className="admin-content">{children}</div>
     </div>
-    {editingProfile && <div className="profile-modal-backdrop"><section className="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title"><header><div><span className="eyebrow">ACCOUNT</span><h2 id="profile-modal-title">Edit account</h2></div><button type="button" aria-label="Close edit account" onClick={() => setEditingProfile(false)}><X size={18} /></button></header><form onSubmit={saveProfile}><label>Full name<input value={profileName} onChange={(event) => setProfileName(event.target.value)} required minLength={2} maxLength={100} /></label><label>Email address<input type="email" value={profileEmail} onChange={(event) => setProfileEmail(event.target.value)} required /></label><div className="profile-password-fields"><span>Change password <small>Leave blank to keep your current password.</small></span><label>Current password<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" /></label><label>New password<input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={10} maxLength={128} autoComplete="new-password" /></label></div>{profileError && <p className="form-error" role="alert">{profileError}</p>}<footer><button className="button button-outline" type="button" onClick={() => setEditingProfile(false)}>Cancel</button><button className="button button-dark" type="submit" disabled={profilePending}>{profilePending ? 'Saving…' : 'Save changes'}</button></footer></form></section></div>}
+    {editingProfile && <div className="profile-modal-backdrop"><section className="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title"><header><div><span className="eyebrow">ACCOUNT</span><h2 id="profile-modal-title">Edit account</h2></div><button type="button" aria-label="Close edit account" onClick={() => setEditingProfile(false)}><X size={18} /></button></header><form onSubmit={saveProfile}><label>Full name<input value={profileName} onChange={(event) => setProfileName(event.target.value)} required minLength={2} maxLength={100} /></label><label>Email address<input type="email" value={profileEmail} onChange={(event) => setProfileEmail(event.target.value)} required /></label><div className="profile-password-fields"><span>Change password <small>Leave blank to keep your current password.</small></span><label>Current password<PasswordInput value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" /></label><label>New password<PasswordInput value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={10} maxLength={128} autoComplete="new-password" /></label></div>{profileError && <p className="form-error" role="alert">{profileError}</p>}<footer><button className="button button-outline" type="button" onClick={() => setEditingProfile(false)}>Cancel</button><button className="button button-dark" type="submit" disabled={profilePending}>{profilePending ? 'Saving…' : 'Save changes'}</button></footer></form></section></div>}
   </div>
 }
 function StatCard({ label, value, sub, tone, badge, icon: Icon = Banknote, trend = '↗ 12.8% this month', to }: { label: string; value: string; sub: string; tone: string; badge?: string; icon?: typeof Banknote; trend?: string; to?: string }) {
@@ -2947,17 +3026,22 @@ function UpdatesAdminPage() {
     setError('')
     setSuccess('Saving changes…')
     setUpdates(next)
-    localStorage.setItem(prototypeUpdatesKey, JSON.stringify(next))
-    window.dispatchEvent(new Event('carmel-updates-updated'))
     try {
+      if (isLocalDemoSession()) localStorage.setItem(prototypeUpdatesKey, JSON.stringify(next))
       if (recordMutation) await persistSiteUpdateRecord(recordMutation.id, recordMutation.update)
       else setUpdates(await persistSiteUpdates(next))
+      window.dispatchEvent(new Event('carmel-updates-updated'))
       setSuccess(isLocalDemoSession() ? 'Updates saved in this browser.' : confirmation)
       return true
     } catch (saveError) {
       setUpdates(updates)
-      localStorage.setItem(prototypeUpdatesKey, JSON.stringify(updates))
-      window.dispatchEvent(new Event('carmel-updates-updated'))
+      if (isLocalDemoSession()) {
+        try {
+          localStorage.setItem(prototypeUpdatesKey, JSON.stringify(updates))
+        } catch (restoreError) {
+          console.error('Unable to restore the previous local updates after a failed save.', restoreError)
+        }
+      }
       setError(saveError instanceof Error ? saveError.message : 'Updates could not be saved.')
       setSuccess('')
       return false
@@ -2968,7 +3052,7 @@ function UpdatesAdminPage() {
   function chooseImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
-    if (file.size > 2_000_000) { setError('Choose an image smaller than 2 MB.'); return }
+    if (file.size > 2_000_000) { event.target.value = ''; setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
     const reader = new FileReader()
     reader.onload = () => setImage(String(reader.result || ''))
     reader.readAsDataURL(file)
@@ -2977,7 +3061,7 @@ function UpdatesAdminPage() {
     const file = event.target.files?.[0]
     if (!file) return
     if (!['video/mp4', 'video/webm', 'video/ogg'].includes(file.type)) { setError('Choose an MP4, WebM, or OGG video.'); return }
-    if (file.size > 2_000_000) { setError('Choose a video smaller than 2 MB, or use a YouTube/Vimeo link.'); return }
+    if (file.size > 2_000_000) { event.target.value = ''; setError('This video exceeds the 2 MB upload limit. Choose a smaller video or use a YouTube/Vimeo link.'); return }
     try {
       setVideoFile(await readUpdateVideoFile(file))
       setVideoMode('upload')
@@ -2990,7 +3074,7 @@ function UpdatesAdminPage() {
     const file = event.target.files?.[0]
     if (!file) return
     if (!['video/mp4', 'video/webm', 'video/ogg'].includes(file.type)) { setError('Choose an MP4, WebM, or OGG video.'); return }
-    if (file.size > 2_000_000) { setError('Choose a video smaller than 2 MB, or use a YouTube/Vimeo link.'); return }
+    if (file.size > 2_000_000) { event.target.value = ''; setError('This video exceeds the 2 MB upload limit. Choose a smaller video or use a YouTube/Vimeo link.'); return }
     try {
       setEditDraft((draft) => ({ ...draft, videoFile: '', videoUrl: '' }))
       const source = await readUpdateVideoFile(file)
@@ -3030,7 +3114,7 @@ function UpdatesAdminPage() {
   function chooseEditImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
-    if (file.size > 2_000_000) { setError('Choose an image smaller than 2 MB.'); return }
+    if (file.size > 2_000_000) { event.target.value = ''; setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
     const reader = new FileReader()
     reader.onload = () => setEditDraft((draft) => ({ ...draft, image: String(reader.result || '') }))
     reader.readAsDataURL(file)
@@ -3258,8 +3342,12 @@ function ContentAdminPage() {
           if (!result.content?.blocks || typeof result.content.blocks !== 'object' || Array.isArray(result.content.blocks)) {
             throw new Error('Saved website content has an invalid format.')
           }
-          localStorage.setItem(managedContentKey, JSON.stringify(result.content.blocks))
-          window.dispatchEvent(new Event(managedContentEvent))
+          cacheManagedContent({
+            ...defaultManagedContent,
+            ...result.content.blocks,
+            aboutImages: { ...defaultManagedContent.aboutImages, ...result.content.blocks.aboutImages },
+            contactDetails: { ...defaultManagedContent.contactDetails, ...result.content.blocks.contactDetails },
+          })
           if (active) setContentReady(true)
           return
         }
@@ -3393,7 +3481,7 @@ function ContentAdminPage() {
   function chooseImage(event: ChangeEvent<HTMLInputElement>, target: 'home' | 'monastery' | 'article' | 'contact', homeImageIndex?: number) {
     const file = event.target.files?.[0]
     if (!file) return
-    if (file.size > 2_000_000) { setError('Choose an image smaller than 2 MB.'); return }
+    if (file.size > 2_000_000) { event.target.value = ''; setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
     setSuccess('')
     if (target === 'home' || target === 'monastery' || target === 'contact') {
       void optimizeUploadedImage(file, target === 'home' ? 175_000 : undefined).then((value) => {
@@ -3421,7 +3509,7 @@ function ContentAdminPage() {
   function chooseAboutImage(event: ChangeEvent<HTMLInputElement>, key: keyof ManagedAboutImages) {
     const file = event.target.files?.[0]
     if (!file) return
-    if (file.size > 2_000_000) { setError('Choose an image smaller than 2 MB.'); return }
+    if (file.size > 2_000_000) { event.target.value = ''; setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
     setSuccess('')
     void optimizeUploadedImage(file).then((value) => {
       updateAboutImage(key, value)
@@ -3434,7 +3522,7 @@ function ContentAdminPage() {
   function chooseHomeSectionImage(event: ChangeEvent<HTMLInputElement>, key: HomeSectionKey) {
     const file = event.target.files?.[0]
     if (!file) return
-    if (file.size > 2_000_000) { setError('Choose an image smaller than 2 MB.'); return }
+    if (file.size > 2_000_000) { event.target.value = ''; setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
     setSuccess('')
     const reader = new FileReader()
     reader.onload = () => {
@@ -3510,8 +3598,8 @@ function ContentAdminPage() {
     setSavingManagedContent(true)
     setError('')
     setSuccess('Saving changes…')
-    cacheManagedContent(nextContent)
     try {
+      cacheManagedContent(nextContent)
       await saveManagedContent(nextContent)
       setContactDetails(savedContactDetails)
       setSuccess(isLocalDemoSession() ? 'Contact details saved in this browser.' : 'Contact details saved successfully.')
@@ -3527,18 +3615,18 @@ function ContentAdminPage() {
     event.preventDefault()
     if (savingManagedContent) return
     if (!contentReady) { setError('Saved website content is still loading. Please try again.'); return }
-    if (aboutImageFields.some(({ key }) => !aboutImages[key].trim())) {
-      setError('Each About Us image needs a URL or uploaded image.')
+    if (aboutImageFields.some(({ key }) => !aboutImages[key].trim()) || !aboutImages.assemblyCaption.trim()) {
+      setError('Each About Us image and the Federation photo caption are required.')
       return
     }
-    const savedAboutImages = { ...aboutImages }
+    const savedAboutImages = { ...aboutImages, assemblyCaption: aboutImages.assemblyCaption.trim() }
     for (const { key } of aboutImageFields) savedAboutImages[key] = aboutImages[key].trim()
     const nextContent = { ...content, aboutImages: savedAboutImages }
     setSavingManagedContent(true)
     setError('')
     setSuccess('Saving changes…')
-    cacheManagedContent(nextContent)
     try {
+      cacheManagedContent(nextContent)
       await saveManagedContent(nextContent)
       setAboutImages(savedAboutImages)
       setSuccess(isLocalDemoSession() ? 'About Us images saved in this browser.' : 'About Us images saved successfully.')
@@ -3599,8 +3687,8 @@ function ContentAdminPage() {
     setSavingManagedContent(true)
     setError('')
     setSuccess('Saving changes…')
-    cacheManagedContent(nextContent)
     try {
+      cacheManagedContent(nextContent)
       await saveManagedContentRecord('monasteries', record.id, record)
       setMonastery({ id: '', name: '', city: '', description: '', image: '' })
       setEditingMonastery(false)
@@ -3627,8 +3715,8 @@ function ContentAdminPage() {
     setSavingManagedContent(true)
     setError('')
     setSuccess('Saving changes…')
-    cacheManagedContent(nextContent)
     try {
+      cacheManagedContent(nextContent)
       await saveManagedContentRecord(articleKey, record.id, record)
       setArticle({ id: '', title: '', author: '', body: '', image: '' })
       setEditingArticle(false)
@@ -3653,8 +3741,8 @@ function ContentAdminPage() {
     setSavingManagedContent(true)
     setError('')
     setSuccess('Saving changes…')
-    cacheManagedContent(nextContent)
     try {
+      cacheManagedContent(nextContent)
       await saveManagedContentRecord('monasteries', id, null)
       setError('')
       setSuccess(isLocalDemoSession() ? 'Monastery removed in this browser.' : 'Monastery removed successfully.')
@@ -3673,8 +3761,8 @@ function ContentAdminPage() {
     setSavingManagedContent(true)
     setError('')
     setSuccess('Saving changes…')
-    cacheManagedContent(nextContent)
     try {
+      cacheManagedContent(nextContent)
       await saveManagedContentRecord(articleKey, id, null)
       setError('')
       setSuccess(isLocalDemoSession() ? 'Entry removed in this browser.' : 'Entry removed successfully.')
@@ -3708,6 +3796,7 @@ function ContentAdminPage() {
     {isAbout ? <form className="admin-panel content-editor about-image-editor" onSubmit={saveAboutImages}>
       <div className="panel-heading"><div><h2>About Us pictures</h2><p>Change the images shown throughout the About Us page. Enter an image URL or upload a replacement.</p></div></div>
       <div className="about-image-editor-grid">
+        <label>Federation photo caption<textarea required rows={3} value={aboutImages.assemblyCaption} onChange={(event) => updateAboutImage('assemblyCaption', event.target.value)} placeholder="Describe the Federation photo shown on About Us." /></label>
         {aboutImageFields.map(({ key, label, alt }) => <div className="about-image-editor-card" key={key}>
           <label>{label} image URL<input value={aboutImages[key].startsWith('data:') ? '' : aboutImages[key]} onChange={(event) => updateAboutImage(key, event.target.value)} placeholder="https://..." /></label>
           <label className="content-image-picker">Upload or replace image<input type="file" accept="image/*" onChange={(event) => chooseAboutImage(event, key)} /><img src={aboutImages[key]} alt={alt} /><small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
@@ -4200,7 +4289,7 @@ function SystemBackupPage() {
         <p className="system-backup-description">The export includes accounts, content, donation records and proof files, messages, reading interactions, and audit history. An export timestamp is included and recorded in the Admin audit log.</p>
         <p className="system-backup-warning">The downloaded ZIP is encrypted with AES-256. Choose a unique password with at least 16 characters, keep it somewhere safe, and use it in a ZIP app that supports AES encryption (such as 7-Zip). The password is not saved by the app.</p>
         <form className="system-backup-form" onSubmit={(event) => void exportBackup(event)}>
-          <label>New backup password<input type="password" value={exportPassword} onChange={(event) => setExportPassword(event.target.value)} minLength={16} maxLength={128} autoComplete="new-password" required /></label>
+          <label>New backup password<PasswordInput value={exportPassword} onChange={(event) => setExportPassword(event.target.value)} minLength={16} maxLength={128} autoComplete="new-password" required /></label>
           <button className="button button-dark" type="submit" disabled={busy !== null}>{busy === 'export' ? 'Exporting…' : 'Export encrypted backup'} <Download size={15} /></button>
         </form>
       </article>
@@ -4209,7 +4298,7 @@ function SystemBackupPage() {
         <p className="system-backup-description">Import adds missing records and updates matching IDs. It never deletes existing records. Records that conflict with an existing unique value are skipped and counted in the import result.</p>
         <form className="system-backup-form" onSubmit={(event) => void importBackup(event)}>
           <label>Backup file<input type="file" accept=".zip,.carmelbackup,application/zip,application/vnd.carmels.backup+json" onChange={(event: ChangeEvent<HTMLInputElement>) => setBackupFile(event.target.files?.[0] || null)} required /></label>
-          <label>Encryption password<input type="password" value={importPassword} onChange={(event) => setImportPassword(event.target.value)} autoComplete="current-password" required /></label>
+          <label>Encryption password<PasswordInput value={importPassword} onChange={(event) => setImportPassword(event.target.value)} autoComplete="current-password" required /></label>
           <button className="button button-dark" type="submit" disabled={busy !== null || !backupFile}>{busy === 'import' ? 'Importing…' : 'Import and merge backup'} <Upload size={15} /></button>
         </form>
       </article>
@@ -4311,7 +4400,7 @@ function LocalManageUsersPage() {
   function saveStaff(next: PrototypeStaff[]) { setStaff(next); localStorage.setItem(prototypeStaffKey, JSON.stringify(next)) }
   function saveUsers(next: PrototypeUser[]) { setUsers(next); localStorage.setItem(prototypeUsersKey, JSON.stringify(next)) }
   async function createFormator(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!name.trim() || !email.trim() || password.length < 10) { setError('Enter a name, email, and password of at least 10 characters.'); return } if (staff.some((member) => member.email === email.trim().toLowerCase())) { setError('A staff member with this email already exists.'); return } saveStaff([{ id: crypto.randomUUID(), name: name.trim(), email: email.trim().toLowerCase(), role: 'FORMATOR', passwordHash: await hashPrototypePassword(password), isActive: true, canManageUsers, canManageDetails }, ...staff]); setName(''); setEmail(''); setPassword(''); setCanManageUsers(false); setCanManageDetails(false); setError(''); setShowCreate(false) }
-  return <><div className="admin-title-row"><div><span className="eyebrow">ACCESS CONTROL</span><h1>Manage users</h1><p>Control staff access and visitor accounts in this prototype.</p></div>{view === 'FORMATOR' && <button className="button button-dark" onClick={() => setShowCreate(!showCreate)}>{showCreate ? 'Cancel' : 'Add Staff'} <Users size={15} /></button>}</div><div className="user-management-tabs"><Link className={view === 'FORMATOR' ? 'active' : ''} to="/admin/users?role=FORMATOR">Staff <span>{staff.length}</span></Link><Link className={view === 'USER' ? 'active' : ''} to="/admin/users?role=USER">User <span>{users.length}</span></Link></div>{view === 'FORMATOR' ? <><section className="admin-panel staff-panel">{showCreate && <form className="create-formator" onSubmit={createFormator}><div><h2>Create Staff account</h2><p>This creates a staff account for the Federation office.</p></div><label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" /></label><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} placeholder="At least 10 characters" /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="button button-dark" type="submit">Create account <ArrowRight size={15} /></button></form>}<div className="panel-heading"><div><h2>Staff members</h2><p>{staff.length} local {staff.length === 1 ? 'account' : 'accounts'}</p></div><span className="staff-role-label">STAFF</span></div>{staff.length ? <div className="staff-table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>ACCESS</th><th>ACTION</th></tr></thead><tbody>{staff.map((member) => <tr key={member.id}><td><b>{member.name}</b></td><td>{member.email}</td><td><span className={`access-status ${member.isActive !== false ? 'enabled' : 'disabled'}`}>{member.isActive !== false ? 'Active' : 'Disabled'}</span></td><td><button className="staff-action" onClick={() => saveStaff(staff.map((item) => item.id === member.id ? { ...item, isActive: item.isActive === false } : item))}>{member.isActive !== false ? 'Disable' : 'Enable'}</button><button className="staff-remove" onClick={() => saveStaff(staff.filter((item) => item.id !== member.id))}>Delete</button></td></tr>)}</tbody></table></div> : <div className="staff-empty"><Users size={24} /><p>No staff accounts yet.</p></div>}</section></> : <section className="admin-panel staff-panel"><div className="panel-heading"><div><h2>User accounts</h2><p>{users.length} visitor {users.length === 1 ? 'account' : 'accounts'}</p></div><span className="staff-role-label">USER</span></div><div className="staff-table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{users.map((member) => <tr key={member.id}><td><b>{member.name}</b></td><td>{member.email}</td><td><span className={`access-status ${member.isBlocked ? 'disabled' : 'enabled'}`}>{member.isBlocked ? 'Blocked' : 'Active'}</span></td><td><button className="staff-action" onClick={() => saveUsers(users.map((item) => item.id === member.id ? { ...item, isBlocked: !item.isBlocked } : item))}>{member.isBlocked ? 'Unblock' : 'Block'}</button><button className="staff-remove" onClick={() => saveUsers(users.filter((item) => item.id !== member.id))}>Delete</button></td></tr>)}</tbody></table></div></section>}</>
+  return <><div className="admin-title-row"><div><span className="eyebrow">ACCESS CONTROL</span><h1>Manage users</h1><p>Control staff access and visitor accounts in this prototype.</p></div>{view === 'FORMATOR' && <button className="button button-dark" onClick={() => setShowCreate(!showCreate)}>{showCreate ? 'Cancel' : 'Add Staff'} <Users size={15} /></button>}</div><div className="user-management-tabs"><Link className={view === 'FORMATOR' ? 'active' : ''} to="/admin/users?role=FORMATOR">Staff <span>{staff.length}</span></Link><Link className={view === 'USER' ? 'active' : ''} to="/admin/users?role=USER">User <span>{users.length}</span></Link></div>{view === 'FORMATOR' ? <><section className="admin-panel staff-panel">{showCreate && <form className="create-formator" onSubmit={createFormator}><div><h2>Create Staff account</h2><p>This creates a staff account for the Federation office.</p></div><label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" /></label><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" /></label><label>Password<PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} placeholder="At least 10 characters" /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="button button-dark" type="submit">Create account <ArrowRight size={15} /></button></form>}<div className="panel-heading"><div><h2>Staff members</h2><p>{staff.length} local {staff.length === 1 ? 'account' : 'accounts'}</p></div><span className="staff-role-label">STAFF</span></div>{staff.length ? <div className="staff-table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>ACCESS</th><th>ACTION</th></tr></thead><tbody>{staff.map((member) => <tr key={member.id}><td><b>{member.name}</b></td><td>{member.email}</td><td><span className={`access-status ${member.isActive !== false ? 'enabled' : 'disabled'}`}>{member.isActive !== false ? 'Active' : 'Disabled'}</span></td><td><button className="staff-action" onClick={() => saveStaff(staff.map((item) => item.id === member.id ? { ...item, isActive: item.isActive === false } : item))}>{member.isActive !== false ? 'Disable' : 'Enable'}</button><button className="staff-remove" onClick={() => saveStaff(staff.filter((item) => item.id !== member.id))}>Delete</button></td></tr>)}</tbody></table></div> : <div className="staff-empty"><Users size={24} /><p>No staff accounts yet.</p></div>}</section></> : <section className="admin-panel staff-panel"><div className="panel-heading"><div><h2>User accounts</h2><p>{users.length} visitor {users.length === 1 ? 'account' : 'accounts'}</p></div><span className="staff-role-label">USER</span></div><div className="staff-table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{users.map((member) => <tr key={member.id}><td><b>{member.name}</b></td><td>{member.email}</td><td><span className={`access-status ${member.isBlocked ? 'disabled' : 'enabled'}`}>{member.isBlocked ? 'Blocked' : 'Active'}</span></td><td><button className="staff-action" onClick={() => saveUsers(users.map((item) => item.id === member.id ? { ...item, isBlocked: !item.isBlocked } : item))}>{member.isBlocked ? 'Unblock' : 'Block'}</button><button className="staff-remove" onClick={() => saveUsers(users.filter((item) => item.id !== member.id))}>Delete</button></td></tr>)}</tbody></table></div></section>}</>
 }
 
 function LegacyManageUsersAdminPage() {
@@ -4352,7 +4441,7 @@ function LegacyManageUsersAdminPage() {
   }
   const saveUsers = (next: PrototypeUser[]) => { setUsers(next); localStorage.setItem(prototypeUsersKey, JSON.stringify(next)) }
   async function createFormator(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!name.trim() || !email.trim() || password.length < 10) return setError('Enter a name, email, and password of at least 10 characters.'); const normalizedEmail = email.trim().toLowerCase(); if (staff.some((member) => member.email === normalizedEmail)) return setError('A staff member with this email already exists.'); saveStaff([{ id: crypto.randomUUID(), name: name.trim(), email: normalizedEmail, role: 'FORMATOR', passwordHash: await hashPrototypePassword(password), isActive: true, canManageUsers, canManageDetails, canManageUpdates }, ...staff]); setName(''); setEmail(''); setPassword(''); setCanManageUsers(false); setCanManageDetails(false); setCanManageUpdates(false); setError(''); setShowCreate(false) }
-  return <><div className="admin-title-row"><div><span className="eyebrow">ACCESS CONTROL</span><h1>Manage users</h1><p>Grant Staff permissions and manage visitor accounts.</p></div>{view === 'FORMATOR' && <button className="button button-dark" onClick={() => setShowCreate(!showCreate)}>{showCreate ? 'Cancel' : 'Add Staff'} <Users size={15} /></button>}</div><div className="user-management-tabs"><Link className={view === 'FORMATOR' ? 'active' : ''} to="/admin/users?role=FORMATOR">Staff <span>{staff.length}</span></Link><Link className={view === 'USER' ? 'active' : ''} to="/admin/users?role=USER">User <span>{users.length}</span></Link></div>{view === 'FORMATOR' ? <section className="admin-panel staff-panel">{showCreate && <form className="create-formator" onSubmit={createFormator}><div><h2>Create Staff account</h2><p>Set the staff member’s account and permissions.</p></div><label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" /></label><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} placeholder="At least 10 characters" /></label><label className="permission-check"><input type="checkbox" checked={canManageUsers} onChange={(event) => setCanManageUsers(event.target.checked)} />Manage Users</label><label className="permission-check"><input type="checkbox" checked={canManageDetails} onChange={(event) => setCanManageDetails(event.target.checked)} />Manage Details</label><label className="permission-check"><input type="checkbox" checked={canManageUpdates} onChange={(event) => setCanManageUpdates(event.target.checked)} />Manage Updates</label>{error && <p className="form-error" role="alert">{error}</p>}<button className="button button-dark" type="submit">Create account <ArrowRight size={15} /></button></form>}<div className="panel-heading"><div><h2>Staff members</h2><p>{staff.length} local {staff.length === 1 ? 'account' : 'accounts'}</p></div><span className="staff-role-label">STAFF</span></div><div className="staff-table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>ACCESS</th><th>PERMISSIONS</th><th>ACTION</th></tr></thead><tbody>{staff.map((member) => <tr key={member.id}><td><b>{member.name}</b></td><td>{member.email}</td><td><span className={`access-status ${member.isActive !== false ? 'enabled' : 'disabled'}`}>{member.isActive !== false ? 'Active' : 'Disabled'}</span></td><td><button className={`permission-pill ${member.canManageUsers ? 'granted' : ''}`} onClick={() => saveStaff(staff.map((item) => item.id === member.id ? { ...item, canManageUsers: !item.canManageUsers } : item))}>Users</button><button className={`permission-pill ${member.canManageDetails ? 'granted' : ''}`} onClick={() => saveStaff(staff.map((item) => item.id === member.id ? { ...item, canManageDetails: !item.canManageDetails } : item))}>Details</button><button className={`permission-pill ${member.canManageUpdates ? 'granted' : ''}`} aria-pressed={!!member.canManageUpdates} onClick={() => saveStaff(staff.map((item) => item.id === member.id ? { ...item, canManageUpdates: !item.canManageUpdates } : item))}>Updates</button></td><td><button className="staff-action" onClick={() => saveStaff(staff.map((item) => item.id === member.id ? { ...item, isActive: item.isActive === false } : item))}>{member.isActive !== false ? 'Disable' : 'Enable'}</button><button className="staff-remove" onClick={() => saveStaff(staff.filter((item) => item.id !== member.id))}>Delete</button></td></tr>)}</tbody></table></div></section> : <section className="admin-panel staff-panel"><div className="panel-heading"><div><h2>User accounts</h2><p>{users.length} visitor accounts</p></div><span className="staff-role-label">USER</span></div><div className="staff-table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{users.map((member) => <tr key={member.id}><td><b>{member.name}</b></td><td>{member.email}</td><td><span className={`access-status ${member.isBlocked ? 'disabled' : 'enabled'}`}>{member.isBlocked ? 'Blocked' : 'Active'}</span></td><td><button className="staff-action" onClick={() => saveUsers(users.map((item) => item.id === member.id ? { ...item, isBlocked: !item.isBlocked } : item))}>{member.isBlocked ? 'Unblock' : 'Block'}</button><button className="staff-remove" onClick={() => saveUsers(users.filter((item) => item.id !== member.id))}>Delete</button></td></tr>)}</tbody></table></div></section>}</>
+  return <><div className="admin-title-row"><div><span className="eyebrow">ACCESS CONTROL</span><h1>Manage users</h1><p>Grant Staff permissions and manage visitor accounts.</p></div>{view === 'FORMATOR' && <button className="button button-dark" onClick={() => setShowCreate(!showCreate)}>{showCreate ? 'Cancel' : 'Add Staff'} <Users size={15} /></button>}</div><div className="user-management-tabs"><Link className={view === 'FORMATOR' ? 'active' : ''} to="/admin/users?role=FORMATOR">Staff <span>{staff.length}</span></Link><Link className={view === 'USER' ? 'active' : ''} to="/admin/users?role=USER">User <span>{users.length}</span></Link></div>{view === 'FORMATOR' ? <section className="admin-panel staff-panel">{showCreate && <form className="create-formator" onSubmit={createFormator}><div><h2>Create Staff account</h2><p>Set the staff member’s account and permissions.</p></div><label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" /></label><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" /></label><label>Password<PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} placeholder="At least 10 characters" /></label><label className="permission-check"><input type="checkbox" checked={canManageUsers} onChange={(event) => setCanManageUsers(event.target.checked)} />Manage Users</label><label className="permission-check"><input type="checkbox" checked={canManageDetails} onChange={(event) => setCanManageDetails(event.target.checked)} />Manage Details</label><label className="permission-check"><input type="checkbox" checked={canManageUpdates} onChange={(event) => setCanManageUpdates(event.target.checked)} />Manage Updates</label>{error && <p className="form-error" role="alert">{error}</p>}<button className="button button-dark" type="submit">Create account <ArrowRight size={15} /></button></form>}<div className="panel-heading"><div><h2>Staff members</h2><p>{staff.length} local {staff.length === 1 ? 'account' : 'accounts'}</p></div><span className="staff-role-label">STAFF</span></div><div className="staff-table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>ACCESS</th><th>PERMISSIONS</th><th>ACTION</th></tr></thead><tbody>{staff.map((member) => <tr key={member.id}><td><b>{member.name}</b></td><td>{member.email}</td><td><span className={`access-status ${member.isActive !== false ? 'enabled' : 'disabled'}`}>{member.isActive !== false ? 'Active' : 'Disabled'}</span></td><td><button className={`permission-pill ${member.canManageUsers ? 'granted' : ''}`} onClick={() => saveStaff(staff.map((item) => item.id === member.id ? { ...item, canManageUsers: !item.canManageUsers } : item))}>Users</button><button className={`permission-pill ${member.canManageDetails ? 'granted' : ''}`} onClick={() => saveStaff(staff.map((item) => item.id === member.id ? { ...item, canManageDetails: !item.canManageDetails } : item))}>Details</button><button className={`permission-pill ${member.canManageUpdates ? 'granted' : ''}`} aria-pressed={!!member.canManageUpdates} onClick={() => saveStaff(staff.map((item) => item.id === member.id ? { ...item, canManageUpdates: !item.canManageUpdates } : item))}>Updates</button></td><td><button className="staff-action" onClick={() => saveStaff(staff.map((item) => item.id === member.id ? { ...item, isActive: item.isActive === false } : item))}>{member.isActive !== false ? 'Disable' : 'Enable'}</button><button className="staff-remove" onClick={() => saveStaff(staff.filter((item) => item.id !== member.id))}>Delete</button></td></tr>)}</tbody></table></div></section> : <section className="admin-panel staff-panel"><div className="panel-heading"><div><h2>User accounts</h2><p>{users.length} visitor accounts</p></div><span className="staff-role-label">USER</span></div><div className="staff-table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{users.map((member) => <tr key={member.id}><td><b>{member.name}</b></td><td>{member.email}</td><td><span className={`access-status ${member.isBlocked ? 'disabled' : 'enabled'}`}>{member.isBlocked ? 'Blocked' : 'Active'}</span></td><td><button className="staff-action" onClick={() => saveUsers(users.map((item) => item.id === member.id ? { ...item, isBlocked: !item.isBlocked } : item))}>{member.isBlocked ? 'Unblock' : 'Block'}</button><button className="staff-remove" onClick={() => saveUsers(users.filter((item) => item.id !== member.id))}>Delete</button></td></tr>)}</tbody></table></div></section>}</>
 }
 
 type DirectMessage = { senderId: string; senderName: string; body: string; time: string }
@@ -4443,7 +4532,7 @@ function FormatorManagerView({ staff, permissions, showCreate, name, email, pass
   function choosePermissionAction(action: PermissionAction) { setPermissionAction(action); setSelectedPermissions([]) }
   function reviewPermissionAction() { if (selected && applicablePermissions.length) requestPermissionAction(selected, applicablePermissions, permissionAction) }
   return <>
-    {showCreate && <form className="create-formator" onSubmit={createFormator}><header><span className="eyebrow">NEW STAFF ACCOUNT</span><h2>Create Staff account</h2><p>Choose which areas this staff member can access.</p></header><div className="create-form-fields"><label>Full name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" required minLength={2} /></label><label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} placeholder="At least 10 characters" required /></label></div><fieldset className="create-permission-group"><legend>Access grants</legend><div>{permissions.map(({ key, label, description }) => <label className="create-permission-option" key={key}><input type="checkbox" checked={key === 'canManageUsers' ? canManageUsers : key === 'canManageDetails' ? canManageDetails : canManageUpdates} onChange={(event) => setCreationPermission(key, event.target.checked)} /><span><b>{label}</b><small>{description}</small></span></label>)}</div></fieldset>{error && <p className="form-error" role="alert">{error}</p>}<footer><button className="button button-dark" type="submit">Create account <ArrowRight size={15} /></button></footer></form>}
+    {showCreate && <form className="create-formator" onSubmit={createFormator}><header><span className="eyebrow">NEW STAFF ACCOUNT</span><h2>Create Staff account</h2><p>Choose which areas this staff member can access.</p></header><div className="create-form-fields"><label>Full name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" required minLength={2} /></label><label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" required /></label><label>Password<PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} placeholder="At least 10 characters" required /></label></div><fieldset className="create-permission-group"><legend>Access grants</legend><div>{permissions.map(({ key, label, description }) => <label className="create-permission-option" key={key}><input type="checkbox" checked={key === 'canManageUsers' ? canManageUsers : key === 'canManageDetails' ? canManageDetails : canManageUpdates} onChange={(event) => setCreationPermission(key, event.target.checked)} /><span><b>{label}</b><small>{description}</small></span></label>)}</div></fieldset>{error && <p className="form-error" role="alert">{error}</p>}<footer><button className="button button-dark" type="submit">Create account <ArrowRight size={15} /></button></footer></form>}
     <section className="managed-section"><header className="managed-section-heading"><div><span className="eyebrow">STAFF ACCESS</span><h2>Staff accounts</h2><p>{staff.length} {staff.length === 1 ? 'account' : 'accounts'} · select an account to view access and actions</p></div></header>
       {staff.length ? <div className="formator-account-grid">{staff.map((member) => { const granted = permissions.filter(({ key }) => member[key] === true); const accessCount = granted.length; return <button type="button" key={member.id} className={`formator-account-tile ${selected?.id === member.id ? 'selected' : ''}`} aria-pressed={selected?.id === member.id} onClick={() => selectAccount(member.id)}><span className="managed-avatar">{member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><span className="formator-tile-status"><i className={member.isActive !== false ? 'active' : ''} />{member.isActive !== false ? 'Active' : 'Disabled'}</span><span className="formator-tile-name">{member.name}</span><span className="formator-tile-email">{member.email}</span><span className="formator-tile-access"><b>{accessCount} of {permissions.length}</b> access areas</span><span className="formator-tile-summary">{granted.length ? granted.map((item) => item.label.replace('Manage ', '')).join(' · ') : 'Basic staff access'}</span></button>})}</div> : <div className="staff-empty"><Users size={24} /><p>No staff accounts yet.</p></div>}
     </section>
@@ -4523,7 +4612,7 @@ function LegacyManageUsersPage() {
     <header className="user-admin-heading"><div><span className="eyebrow">ACCESS CONTROL</span><h1>Manage users</h1><p>Manage accounts and staff access from one place.</p></div>{view === 'FORMATOR' && <button className="button button-dark" onClick={() => setShowCreate(!showCreate)}>{showCreate ? <X size={15} /> : <Users size={15} />}{showCreate ? 'Cancel' : 'Add Staff'}</button>}</header>
     <nav className="user-management-tabs" aria-label="Account type"><Link className={view === 'FORMATOR' ? 'active' : ''} to="/admin/users?role=FORMATOR"><Users size={15} />Staff<span>{staff.length}</span></Link><Link className={view === 'USER' ? 'active' : ''} to="/admin/users?role=USER"><User size={15} />Users<span>{users.length}</span></Link></nav>
     {view === 'FORMATOR' ? <>
-      {showCreate && <form className="create-formator" onSubmit={createFormator}><header><span className="eyebrow">NEW STAFF ACCOUNT</span><h2>Create Staff account</h2><p>Choose which areas this staff member can access.</p></header><div className="create-form-fields"><label>Full name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" required minLength={2} /></label><label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} placeholder="At least 10 characters" required /></label></div><fieldset className="create-permission-group"><legend>Access grants</legend><div>{permissions.map(({ key, label, description }) => <label className="create-permission-option" key={key}><input type="checkbox" checked={key === 'canManageUsers' ? canManageUsers : key === 'canManageDetails' ? canManageDetails : canManageUpdates} onChange={(event) => setCreationPermission(key, event.target.checked)} /><span><b>{label}</b><small>{description}</small></span></label>)}</div></fieldset>{error && <p className="form-error" role="alert">{error}</p>}<footer><button className="button button-dark" type="submit">Create account <ArrowRight size={15} /></button></footer></form>}
+      {showCreate && <form className="create-formator" onSubmit={createFormator}><header><span className="eyebrow">NEW STAFF ACCOUNT</span><h2>Create Staff account</h2><p>Choose which areas this staff member can access.</p></header><div className="create-form-fields"><label>Full name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" required minLength={2} /></label><label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" required /></label><label>Password<PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} placeholder="At least 10 characters" required /></label></div><fieldset className="create-permission-group"><legend>Access grants</legend><div>{permissions.map(({ key, label, description }) => <label className="create-permission-option" key={key}><input type="checkbox" checked={key === 'canManageUsers' ? canManageUsers : key === 'canManageDetails' ? canManageDetails : canManageUpdates} onChange={(event) => setCreationPermission(key, event.target.checked)} /><span><b>{label}</b><small>{description}</small></span></label>)}</div></fieldset>{error && <p className="form-error" role="alert">{error}</p>}<footer><button className="button button-dark" type="submit">Create account <ArrowRight size={15} /></button></footer></form>}
       <section className="managed-section"><header className="managed-section-heading"><div><span className="eyebrow">STAFF ACCESS</span><h2>Staff accounts</h2><p>{staff.length} {staff.length === 1 ? 'account' : 'accounts'} · permissions are managed here</p></div><span className="staff-role-label">STAFF</span></header>{staff.length ? <div className="managed-record-list">{staff.map((member) => <article className="managed-record" key={member.id}><header className="managed-record-identity"><span className="managed-avatar">{member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><h3>{member.name}</h3><p>{member.email}</p></div><span className={`access-status ${member.isActive !== false ? 'enabled' : 'disabled'}`}>{member.isActive !== false ? 'Active' : 'Disabled'}</span></header><section className="managed-permissions"><div className="managed-permissions-heading"><h4>Permissions</h4><p>Select a permission to review and change access.</p></div><div className="managed-permission-grid">{permissions.map(({ key, label, description, icon: Icon }) => { const granted = member[key] === true; return <button type="button" key={key} className={`managed-permission ${granted ? 'granted' : ''}`} aria-pressed={granted} onClick={() => requestPermission(member, key)}><span className="managed-permission-icon"><Icon size={16} /></span><span className="managed-permission-copy"><b>{label}</b><small>{description}</small></span><span className={`managed-permission-state ${granted ? 'granted' : ''}`}>{granted ? 'Granted' : 'Not granted'}</span></button>})}</div></section><footer className="managed-record-actions"><span>Account actions</span><div><button className="staff-action" onClick={() => toggleStaffActive(member)}>{member.isActive !== false ? 'Disable account' : 'Enable account'}</button><button className="staff-remove" onClick={() => deleteStaff(member)}>Delete</button></div></footer></article>)}</div> : <div className="staff-empty"><Users size={24} /><p>No staff accounts yet.</p></div>}</section>
     </> : <section className="managed-section"><header className="managed-section-heading"><div><span className="eyebrow">COMMUNITY ACCESS</span><h2>User accounts</h2><p>{users.length} visitor accounts · manage account status</p></div><span className="staff-role-label">USER</span></header>{users.length ? <div className="managed-user-list">{users.map((member) => <article className="managed-user-row" key={member.id}><span className="managed-avatar user-avatar">{member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div className="managed-user-identity"><h3>{member.name}</h3><p>{member.email}</p></div><span className={`access-status ${member.isBlocked ? 'disabled' : 'enabled'}`}>{member.isBlocked ? 'Blocked' : 'Active'}</span><div className="managed-user-actions"><button className="staff-action" onClick={() => toggleUserBlocked(member)}>{member.isBlocked ? 'Unblock' : 'Block'}</button><button className="staff-remove" onClick={() => deleteUser(member)}>Delete</button></div></article>)}</div> : <div className="staff-empty"><Users size={24} /><p>No community users yet.</p></div>}</section>}
   </main>
@@ -4586,7 +4675,7 @@ function ManagedPasswordResetButton({ account, onChanged }: { account: ManagedAc
 
   return <>
     <button className="staff-action" type="button" onClick={() => { setDialogOpen(true); setError(''); setPassword(''); setConfirmation('') }}>Change password</button>
-    {dialogOpen && <div className="account-confirm-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) closeDialog() }}><section className="account-confirm-dialog managed-password-dialog" role="dialog" aria-modal="true" aria-labelledby={`managed-password-title-${account.id}`}><span className="eyebrow">ACCOUNT SECURITY</span><h2 id={`managed-password-title-${account.id}`}>Change password</h2><p>Set a new password for <strong>{account.name}</strong>. They can use it the next time they sign in.</p><form onSubmit={changePassword}><label>New password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} maxLength={128} autoComplete="new-password" required /></label><label>Confirm new password<input type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} minLength={10} maxLength={128} autoComplete="new-password" required /></label>{error && <p className="form-error" role="alert">{error}</p>}<footer><button className="button button-outline" type="button" onClick={closeDialog} disabled={saving}>Cancel</button><button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Updating…' : 'Update password'}</button></footer></form></section></div>}
+    {dialogOpen && <div className="account-confirm-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) closeDialog() }}><section className="account-confirm-dialog managed-password-dialog" role="dialog" aria-modal="true" aria-labelledby={`managed-password-title-${account.id}`}><span className="eyebrow">ACCOUNT SECURITY</span><h2 id={`managed-password-title-${account.id}`}>Change password</h2><p>Set a new password for <strong>{account.name}</strong>. They can use it the next time they sign in.</p><form onSubmit={changePassword}><label>New password<PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} maxLength={128} autoComplete="new-password" required /></label><label>Confirm new password<PasswordInput value={confirmation} onChange={(event) => setConfirmation(event.target.value)} minLength={10} maxLength={128} autoComplete="new-password" required /></label>{error && <p className="form-error" role="alert">{error}</p>}<footer><button className="button button-outline" type="button" onClick={closeDialog} disabled={saving}>Cancel</button><button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Updating…' : 'Update password'}</button></footer></form></section></div>}
   </>
 }
 
@@ -4716,7 +4805,7 @@ function ManageUsersPage() {
     <nav className="user-management-tabs" aria-label="Account type"><Link className={view === 'FORMATOR' ? 'active' : ''} to="/admin/users?role=FORMATOR"><Users size={15} />Staff<span>{counts.FORMATOR}</span></Link><Link className={view === 'USER' ? 'active' : ''} to="/admin/users?role=USER"><User size={15} />Users<span>{counts.USER}</span></Link></nav>
     {error && <p className="form-error" role="alert">{error}</p>}
     {success && <p className="form-success" role="status" aria-live="polite">{success}</p>}
-    {view === 'FORMATOR' && showCreate && <form className="create-formator" onSubmit={createFormator}><header><span className="eyebrow">NEW STAFF ACCOUNT</span><h2>Create Staff account</h2><p>The account and password are stored securely in PostgreSQL.</p></header><div className="create-form-fields"><label>Full name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" required minLength={2} maxLength={100} /></label><label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} maxLength={128} placeholder="At least 10 characters" required autoComplete="new-password" /></label></div><fieldset className="create-permission-group"><legend>Access grants</legend><div>{permissionOptions.map(({ key, label, description }) => <label className="create-permission-option" key={key}><input type="checkbox" checked={permissions[key]} onChange={(event) => setPermissions((current) => ({ ...current, [key]: event.target.checked }))} /><span><b>{label}</b><small>{description}</small></span></label>)}</div></fieldset><footer><button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create account'} <ArrowRight size={15} /></button></footer></form>}
+    {view === 'FORMATOR' && showCreate && <form className="create-formator" onSubmit={createFormator}><header><span className="eyebrow">NEW STAFF ACCOUNT</span><h2>Create Staff account</h2><p>The account and password are stored securely in PostgreSQL.</p></header><div className="create-form-fields"><label>Full name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" required minLength={2} maxLength={100} /></label><label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" required /></label><label>Password<PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} maxLength={128} placeholder="At least 10 characters" required autoComplete="new-password" /></label></div><fieldset className="create-permission-group"><legend>Access grants</legend><div>{permissionOptions.map(({ key, label, description }) => <label className="create-permission-option" key={key}><input type="checkbox" checked={permissions[key]} onChange={(event) => setPermissions((current) => ({ ...current, [key]: event.target.checked }))} /><span><b>{label}</b><small>{description}</small></span></label>)}</div></fieldset><footer><button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create account'} <ArrowRight size={15} /></button></footer></form>}
     {view === 'FORMATOR' ? <section className="managed-section"><header className="managed-section-heading"><div><span className="eyebrow">STAFF ACCESS</span><h2>Staff accounts</h2><p>{counts.FORMATOR} {counts.FORMATOR === 1 ? 'account' : 'accounts'} · database records</p></div><span className="staff-role-label">STAFF</span></header>{loading ? <div className="staff-empty">Loading staff accounts…</div> : staff.length ? <div className="managed-record-list">{staff.map((member) => <article className="managed-record" key={member.id}><header className="managed-record-identity"><span className="managed-avatar">{member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><h3>{member.name}</h3><p>{member.email}</p><small>{member.phone || 'No phone provided'} · {member.createdAt ? `Joined ${new Date(member.createdAt).toLocaleDateString()}` : 'Join date unavailable'}</small></div><span className={`access-status ${member.isActive ? 'enabled' : 'disabled'}`}>{member.isActive ? 'Active' : 'Disabled'}</span></header><section className="managed-permissions"><div className="managed-permissions-heading"><h4>Permissions</h4><p>Changes are saved to PostgreSQL.</p></div><div className="managed-permission-grid">{permissionOptions.map(({ key, label, description, icon: Icon }) => <button type="button" key={key} className={`managed-permission ${member[key] ? 'granted' : ''}`} aria-pressed={member[key]} disabled={saving} onClick={() => void updateAccount(member, { [key]: !member[key] })}><span className="managed-permission-icon"><Icon size={16} /></span><span className="managed-permission-copy"><b>{label}</b><small>{description}</small></span><span className={`managed-permission-state ${member[key] ? 'granted' : ''}`}>{member[key] ? 'Granted' : 'Not granted'}</span></button>)}</div></section><footer className="managed-record-actions"><span>Account actions</span><div><ManagedPasswordResetButton account={member} onChanged={setSuccess} /><button className="staff-action" disabled={saving} onClick={() => member.isActive ? setPendingAccountAction({ account: member, action: 'disable' }) : void updateAccount(member, { isActive: true })}>{member.isActive ? 'Disable account' : 'Enable account'}</button><button className="staff-remove" disabled={saving} onClick={() => setPendingAccountAction({ account: member, action: 'delete' })}>Delete</button></div></footer></article>)}</div> : <div className="staff-empty"><Users size={24} /><p>No staff accounts in the database yet.</p></div>}</section> : <section className="managed-section"><header className="managed-section-heading"><div><span className="eyebrow">COMMUNITY ACCESS</span><h2>Users and discerners</h2><p>{counts.USER} {counts.USER === 1 ? 'account' : 'accounts'} · contact and discernment details from PostgreSQL</p></div><span className="staff-role-label">USER</span></header>{loading ? <div className="staff-empty">Loading community accounts…</div> : users.length ? <div className="managed-user-list">{users.map((member) => <article className="managed-user-row" key={member.id}><span className="managed-avatar user-avatar">{member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div className="managed-user-identity"><h3>{member.name}</h3><p>{member.email}</p><small>{member.phone || 'No phone provided'} · {member.address || 'No address provided'}{member.createdAt ? ` · Joined ${new Date(member.createdAt).toLocaleDateString()}` : ''}</small><small>{member.discernment ? `Discerner · ${member.discernment.stage.replaceAll('_', ' ').toLowerCase()}${member.discernment.monastery ? ` · ${member.discernment.monastery}` : ''}` : 'Not registered as a discerner'}</small></div><span className={`access-status ${member.isActive ? 'enabled' : 'disabled'}`}>{member.isActive ? 'Active' : 'Blocked'}</span><div className="managed-user-actions"><ManagedPasswordResetButton account={member} onChanged={setSuccess} /><button className="staff-action" disabled={saving} onClick={() => member.isActive ? setPendingAccountAction({ account: member, action: 'disable' }) : void updateAccount(member, { isActive: true })}>{member.isActive ? 'Block' : 'Unblock'}</button><button className="staff-remove" disabled={saving} onClick={() => setPendingAccountAction({ account: member, action: 'delete' })}>Delete</button></div></article>)}</div> : <div className="staff-empty"><Users size={24} /><p>No community accounts in the database yet.</p></div>}</section>}
     {pendingAccountAction && <div className="account-confirm-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingAccountAction(null) }}><section className="account-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="account-confirm-title" aria-describedby="account-confirm-description"><span className="eyebrow">ACCOUNT ACTION</span><h2 id="account-confirm-title">{pendingAccountAction.action === 'delete' ? 'Delete this account?' : 'Disable this account?'}</h2><p id="account-confirm-description">{pendingAccountAction.action === 'delete' ? <>This will permanently delete <strong>{pendingAccountAction.account.name}</strong>'s account. This action cannot be undone.</> : <> <strong>{pendingAccountAction.account.name}</strong> will no longer be able to sign in. You can enable the account again later.</>}</p><footer><button className="button button-outline" type="button" onClick={() => setPendingAccountAction(null)}>Cancel</button><button className="button account-confirm-danger" type="button" disabled={saving} onClick={() => void confirmAccountAction()}>{saving ? 'Saving…' : pendingAccountAction.action === 'delete' ? 'Delete account' : 'Disable account'}</button></footer></section></div>}
   </main>
@@ -4852,7 +4941,7 @@ function FormatorUsersPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [pendingUser, setPendingUser] = useState<ManagedAccount | null>(null)
+  const [pendingUser, setPendingUser] = useState<{ account: ManagedAccount; action: 'block' | 'delete' } | null>(null)
   async function loadUsers() {
     const response = await fetch('/api/admin/users?role=USER', { credentials: 'include' })
     const result = await readApiResponse<{ users: ManagedAccount[] }>(response, 'Loading community accounts')
@@ -4893,14 +4982,30 @@ function FormatorUsersPage() {
       setSaving(false)
     }
   }
+  async function deleteUser(user: ManagedAccount) {
+    setPendingUser(null)
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}`, { method: 'DELETE', credentials: 'include' })
+      await readApiResponse<unknown>(response, 'Deleting community account')
+      await loadUsers()
+      setSuccess('Community account deleted successfully.')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not delete the community account.')
+    } finally {
+      setSaving(false)
+    }
+  }
   return <main className="user-admin-page">
     <header className="user-admin-heading"><div><span className="eyebrow">ACCESS CONTROL</span><h1>Manage users</h1><p>Manage community account access granted by your Federation administrator.</p></div></header>
     {error && <p className="form-error" role="alert">{error}</p>}
     {success && <p className="form-success" role="status" aria-live="polite">{success}</p>}
     <section className="managed-section"><header className="managed-section-heading"><div><span className="eyebrow">COMMUNITY ACCESS</span><h2>Community users</h2><p>{users.length} {users.length === 1 ? 'account' : 'accounts'} · status management only</p></div><span className="staff-role-label">USER ACCESS</span></header>
-      {loading ? <div className="staff-empty">Loading community accounts…</div> : users.length ? <div className="managed-user-list">{users.map((person) => <article className="managed-user-row" key={person.id}><span className="managed-avatar user-avatar">{person.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div className="managed-user-identity"><h3>{person.name}</h3><p>{person.email}</p><small>{person.phone || 'No phone provided'} · {person.address || 'No address provided'}</small></div><span className={`access-status ${person.isActive ? 'enabled' : 'disabled'}`}>{person.isActive ? 'Active' : 'Disabled'}</span><div className="managed-user-actions"><button className="staff-action" disabled={saving} onClick={() => person.isActive ? setPendingUser(person) : void updateUserStatus(person)}>{person.isActive ? 'Disable account' : 'Enable account'}</button></div></article>)}</div> : <div className="staff-empty"><Users size={24} /><p>No community users yet.</p></div>}
+      {loading ? <div className="staff-empty">Loading community accounts…</div> : users.length ? <div className="managed-user-list">{users.map((person) => <article className="managed-user-row" key={person.id}><span className="managed-avatar user-avatar">{person.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div className="managed-user-identity"><h3>{person.name}</h3><p>{person.email}</p><small>{person.phone || 'No phone provided'} · {person.address || 'No address provided'}</small></div><span className={`access-status ${person.isActive ? 'enabled' : 'disabled'}`}>{person.isActive ? 'Active' : 'Disabled'}</span><div className="managed-user-actions"><ManagedPasswordResetButton account={person} onChanged={setSuccess} /><button className="staff-action" disabled={saving} onClick={() => person.isActive ? setPendingUser({ account: person, action: 'block' }) : void updateUserStatus(person)}>{person.isActive ? 'Block' : 'Unblock'}</button><button className="staff-remove" disabled={saving} onClick={() => setPendingUser({ account: person, action: 'delete' })}>Delete</button></div></article>)}</div> : <div className="staff-empty"><Users size={24} /><p>No community users yet.</p></div>}
     </section>
-    {pendingUser && <AccountActionConfirmation title="Disable this account?" description={`${pendingUser.name} will no longer be able to sign in or use their community account. You can enable the account again later.`} confirmLabel="Disable account" onCancel={() => setPendingUser(null)} onConfirm={() => void updateUserStatus(pendingUser)} />}
+    {pendingUser && <AccountActionConfirmation title={pendingUser.action === 'delete' ? 'Delete this account?' : 'Block this account?'} description={pendingUser.action === 'delete' ? `Permanently delete ${pendingUser.account.name}'s community account? This cannot be undone.` : `${pendingUser.account.name} will no longer be able to sign in. You can unblock the account later.`} confirmLabel={pendingUser.action === 'delete' ? 'Delete account' : 'Block account'} onCancel={() => setPendingUser(null)} onConfirm={() => void (pendingUser.action === 'delete' ? deleteUser(pendingUser.account) : updateUserStatus(pendingUser.account))} />}
   </main>
 }
 
@@ -5016,6 +5121,7 @@ function AppRoutes() {
     <Route path="/carmelife/stories" element={<PublicLayout><StoryPage kind="life" /></PublicLayout>} />
     <Route path="/discernment" element={<PublicLayout><DiscernmentGuidePage /></PublicLayout>} />
     <Route path="/carmelights" element={<PublicLayout><StoryPage kind="stories" /></PublicLayout>} />
+    <Route path="/updates/:id" element={<UpdateDetailPage />} />
     <Route path="/updates" element={<PublicLayout><StoryPage kind="updates" /></PublicLayout>} />
     <Route path="/contact" element={<PublicLayout><ContactPage /></PublicLayout>} />
     <Route path="/donations" element={<PublicLayout><DonationsPage /></PublicLayout>} />

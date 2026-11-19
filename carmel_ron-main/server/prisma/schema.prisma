@@ -77,6 +77,8 @@ model User {
   passwordHash String
   role         Role        @default(USER)
   isActive     Boolean     @default(true)
+  sessionVersion Int       @default(0)
+  sessionExpiresAt DateTime?
   canManageUsers   Boolean @default(false)
   canManageDetails Boolean @default(false)
   canManageUpdates Boolean @default(false)
