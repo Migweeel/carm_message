@@ -340,7 +340,7 @@ type ManagedAboutText = {
 }
 type ManagedAboutImageKey = keyof Omit<ManagedAboutImages, 'assemblyCaption'>
 type ManagedSiteContent = { homeHeroImage: string; monasteries: ManagedMonastery[]; monasteriesVersion?: number; carmelife: ManagedArticle[]; carmelights: ManagedArticle[]; contactDetails: ManagedContactDetails; aboutImages: ManagedAboutImages; aboutText: ManagedAboutText }
-type SiteUpdate = { id: string; title: string; date: string; category: string; image: string; body: string; video?: string; featured?: boolean }
+type SiteUpdate = { id: string; title: string; date: string; category: string; image: string; body: string; video?: string }
 const monasteryCities = ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo', 'Bacolod', 'Cebu', 'Iloilo', 'Cagayan de Oro', 'Davao', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Zamboanga', 'Kuching']
 const monasteryAssetByCity: Record<string, string> = {
   Angeles: '/assets/image_monasteries/Angeles_Carmel.jpg',
@@ -1415,12 +1415,12 @@ function updateDateInputValue(value: string) {
   return `${parsed.getFullYear()}-${month}-${day}`
 }
 const defaultSiteUpdates: SiteUpdate[] = [
-  { id: 'jaro-centenary', title: 'Jaro Carmel Celebrates 100 Years of Carmelite Presence in the Philippines', date: '2026-10-01', category: 'Anniversaries', image: '/assets/updates-reference/jaro-centenary.jpg', body: 'Jaro Carmel celebrated her 100 years of Foundation Anniversary.', featured: true },
-  { id: 'papal-address', title: 'Address of Pope Francis to the Superiors and Delegates of the Carmelite Nuns', date: '2026-09-15', category: 'Meeting', image: '/assets/updates-reference/papal-address.jpg', body: 'Pope Francis delivered his address to the Superiors and Delegates of the Discalced Carmelite Nuns.', featured: true },
-  { id: 'cebu-anniversary', title: 'Address of Pope Francis to the Superiors and Delegates of the Carmelite Nuns', date: '2026-09-01', category: 'Anniversaries', image: '/assets/updates-reference/cebu-anniversary.jpg', body: 'Cebu Carmel celebrates its 75th Foundation Anniversary.', featured: true },
-  { id: 'assumpta-bacay', title: 'Mo. Assumpta Bacay, OCD of Angeles Carmel dies at 91', date: '2026-08-18', category: 'Anniversaries', image: '/assets/updates-reference/assumpta-bacay.jpg', body: 'Mo. Assumpta of the Holy Rosary, OCD (Bacay), the lone surviving foundress of Angeles Carmel, Pampanga died at the age of 91.', featured: false },
-  { id: 'cecile-pabilona', title: 'Sr. Cecile Pabilona OCD of Jaro Carmel dies at the age of 84', date: '2026-08-03', category: 'Anniversaries', image: '/assets/updates-reference/cecile-pabilona.jpg', body: 'Sr. Mary Cecile of the Holy Trinity, OCD (Pabilona), of Jaro Carmel, died at the age of 87.', featured: false },
-  { id: 'khristel-jubilee', title: 'Sr. Khristel of Baguio Carmel celebrates 25 years of consecrated life', date: '2026-07-16', category: 'Anniversaries', image: '/assets/updates-reference/khristel-jubilee.jpg', body: 'Sr. Marie Therese Eleanor of Our Father in heaven celebrated her Silver Jubilee of Religious Life.', featured: false },
+  { id: 'jaro-centenary', title: 'Jaro Carmel Celebrates 100 Years of Carmelite Presence in the Philippines', date: '2026-10-01', category: 'Anniversaries', image: '/assets/updates-reference/jaro-centenary.jpg', body: 'Jaro Carmel celebrated her 100 years of Foundation Anniversary.' },
+  { id: 'papal-address', title: 'Address of Pope Francis to the Superiors and Delegates of the Carmelite Nuns', date: '2026-09-15', category: 'Meeting', image: '/assets/updates-reference/papal-address.jpg', body: 'Pope Francis delivered his address to the Superiors and Delegates of the Discalced Carmelite Nuns.' },
+  { id: 'cebu-anniversary', title: 'Address of Pope Francis to the Superiors and Delegates of the Carmelite Nuns', date: '2026-09-01', category: 'Anniversaries', image: '/assets/updates-reference/cebu-anniversary.jpg', body: 'Cebu Carmel celebrates its 75th Foundation Anniversary.' },
+  { id: 'assumpta-bacay', title: 'Mo. Assumpta Bacay, OCD of Angeles Carmel dies at 91', date: '2026-08-18', category: 'Anniversaries', image: '/assets/updates-reference/assumpta-bacay.jpg', body: 'Mo. Assumpta of the Holy Rosary, OCD (Bacay), the lone surviving foundress of Angeles Carmel, Pampanga died at the age of 91.' },
+  { id: 'cecile-pabilona', title: 'Sr. Cecile Pabilona OCD of Jaro Carmel dies at the age of 84', date: '2026-08-03', category: 'Anniversaries', image: '/assets/updates-reference/cecile-pabilona.jpg', body: 'Sr. Mary Cecile of the Holy Trinity, OCD (Pabilona), of Jaro Carmel, died at the age of 87.' },
+  { id: 'khristel-jubilee', title: 'Sr. Khristel of Baguio Carmel celebrates 25 years of consecrated life', date: '2026-07-16', category: 'Anniversaries', image: '/assets/updates-reference/khristel-jubilee.jpg', body: 'Sr. Marie Therese Eleanor of Our Father in heaven celebrated her Silver Jubilee of Religious Life.' },
 ]
 const prototypeUpdatesKey = 'carmel-prototype-updates'
 const legacySiteUpdates: SiteUpdate[] = [
@@ -1434,16 +1434,6 @@ function isLegacySeededUpdates(updates: SiteUpdate[]) {
     return seed && seed.title === update.title && seed.date === update.date && seed.category === update.category && seed.image === update.image && seed.body === update.body
   })
 }
-function addDefaultUpdateHighlights(updates: SiteUpdate[]) {
-  const hasFeatureMetadata = updates.some((update) => typeof update.featured === 'boolean')
-  const featuredIds = hasFeatureMetadata
-    ? new Set<string>()
-    : new Set([...updates].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 3).map((update) => update.id))
-  return updates.map((update) => ({
-    ...update,
-    featured: typeof update.featured === 'boolean' ? update.featured : featuredIds.has(update.id),
-  }))
-}
 function readSiteUpdates(): SiteUpdate[] {
   try {
     const stored = JSON.parse(localStorage.getItem(prototypeUpdatesKey) || 'null') as SiteUpdate[] | null
@@ -1451,15 +1441,14 @@ function readSiteUpdates(): SiteUpdate[] {
     if (isLegacySeededUpdates(stored)) {
       return defaultSiteUpdates
     }
-    const updates = addDefaultUpdateHighlights(stored)
-    return updates
+    return stored
   } catch { return defaultSiteUpdates }
 }
 async function fetchSiteUpdates(migrateLegacy = false): Promise<SiteUpdate[] | null> {
   if (isLocalDemoSession()) {
     return readSiteUpdates()
   }
-  const response = await fetch('/api/content/SITE_UPDATES')
+  const response = await fetch('/api/content/SITE_UPDATES', { cache: 'no-store' })
   if (response.status === 404) return null
   const result = await response.json()
   if (!response.ok) throw new Error(result.error || 'Saved updates could not be loaded.')
@@ -1470,11 +1459,7 @@ async function fetchSiteUpdates(migrateLegacy = false): Promise<SiteUpdate[] | n
     if (migrateLegacy) return persistSiteUpdates(defaultSiteUpdates)
     return defaultSiteUpdates
   }
-  const updatesWithHighlights = addDefaultUpdateHighlights(savedUpdates)
-  if (migrateLegacy && savedUpdates.some((update) => typeof update.featured !== 'boolean')) {
-    return persistSiteUpdates(updatesWithHighlights)
-  }
-  return updatesWithHighlights
+  return savedUpdates
 }
 async function persistSiteUpdates(updates: SiteUpdate[]): Promise<SiteUpdate[]> {
   if (isLocalDemoSession()) {
@@ -1536,19 +1521,47 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
         return
       }
       void fetchSiteUpdates().then((saved) => {
-        if (active && saved) setUpdates(saved)
+        if (active && saved) {
+          setUpdates(saved)
+          setLoadError('')
+        }
       }).catch((error: unknown) => {
         if (active) setLoadError(error instanceof Error ? error.message : 'Saved updates could not be loaded.')
       })
     }
-    void fetchSiteUpdates().then((saved) => { if (active && saved) setUpdates(saved) }).catch((error) => { if (active) setLoadError(error instanceof Error ? error.message : 'Saved updates could not be loaded.') })
+    void fetchSiteUpdates().then((saved) => {
+      if (active && saved) {
+        setUpdates(saved)
+        setLoadError('')
+      }
+    }).catch((error) => {
+      if (active) setLoadError(error instanceof Error ? error.message : 'Saved updates could not be loaded.')
+    })
     window.addEventListener('storage', refresh)
     window.addEventListener('carmel-updates-updated', refresh)
-    return () => { active = false; window.removeEventListener('storage', refresh); window.removeEventListener('carmel-updates-updated', refresh) }
-  }, [])
+    if (kind === 'updates') {
+      window.addEventListener('focus', refresh)
+      const refreshOnVisibility = () => { if (!document.hidden) refresh() }
+      document.addEventListener('visibilitychange', refreshOnVisibility)
+      const timer = window.setInterval(() => { if (!document.hidden) refresh() }, 30_000)
+      return () => {
+        active = false
+        window.clearInterval(timer)
+        window.removeEventListener('storage', refresh)
+        window.removeEventListener('carmel-updates-updated', refresh)
+        window.removeEventListener('focus', refresh)
+        document.removeEventListener('visibilitychange', refreshOnVisibility)
+      }
+    }
+    return () => {
+      active = false
+      window.removeEventListener('storage', refresh)
+      window.removeEventListener('carmel-updates-updated', refresh)
+    }
+  }, [kind])
   const matchingUpdates = updates.filter((update) => (category === 'All Updates' || update.category.toLowerCase() === category.toLowerCase()) && `${update.title} ${update.category} ${update.body}`.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
-  const featuredUpdates = matchingUpdates.filter((update) => update.featured)
-  const regularUpdates = matchingUpdates.filter((update) => !update.featured)
+  const featuredUpdates = matchingUpdates.slice(0, 3)
+  const regularUpdates = matchingUpdates.slice(3)
   const recentCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000
   const visibleNews = regularUpdates.filter((update) => {
     if (newsAge === 'all') return true
@@ -1556,7 +1569,8 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
     if (!Number.isFinite(timestamp)) return false
     return newsAge === 'recent' ? timestamp >= recentCutoff : timestamp < recentCutoff
   })
-  const featuredUpdate = featuredUpdates[activeHighlight] ?? featuredUpdates[0]
+  const activeHighlightIndex = featuredUpdates.length ? activeHighlight % featuredUpdates.length : 0
+  const featuredUpdate = featuredUpdates[activeHighlightIndex]
   const showPreviousHighlight = () => setActiveHighlight((current) => (current - 1 + featuredUpdates.length) % featuredUpdates.length)
   const showNextHighlight = () => setActiveHighlight((current) => (current + 1) % featuredUpdates.length)
   useEffect(() => {
@@ -1564,12 +1578,11 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       setActiveHighlight(0)
       return
     }
-    setActiveHighlight((current) => current >= featuredUpdates.length ? 0 : current)
     const timer = window.setInterval(() => {
       setActiveHighlight((current) => (current + 1) % featuredUpdates.length)
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [kind, featuredUpdates.length, activeHighlight])
+  }, [kind, featuredUpdates.length])
   if (kind === 'updates') {
     const updateFilters = ['All Updates', 'Anniversaries']
     const selectedUpdate = updates.find((update) => update.id === selectedArticle)
@@ -1619,7 +1632,7 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
           </Link>
           {featuredUpdates.length > 1 && <div className="featured-update-controls" aria-label="Featured updates">
             <button type="button" onClick={showPreviousHighlight} aria-label="Previous featured update"><ChevronLeft size={17} /></button>
-            <span>{activeHighlight + 1} / {featuredUpdates.length}</span>
+            <span>{activeHighlightIndex + 1} / {featuredUpdates.length}</span>
             <button type="button" onClick={showNextHighlight} aria-label="Next featured update"><ChevronRight size={17} /></button>
           </div>}
         </div>}
@@ -3378,12 +3391,11 @@ function UpdatesAdminPage() {
   const [videoFile, setVideoFile] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
   const [videoMode, setVideoMode] = useState<'none' | 'upload' | 'link'>('none')
-  const [featured, setFeatured] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [pendingRemoval, setPendingRemoval] = useState<SiteUpdate | null>(null)
   const [editingUpdate, setEditingUpdate] = useState<SiteUpdate | null>(null)
-  const [editDraft, setEditDraft] = useState({ title: '', category: 'Federation events', date: '', body: '', image: '', videoFile: '', videoUrl: '', videoMode: 'none' as 'none' | 'upload' | 'link', featured: false })
+  const [editDraft, setEditDraft] = useState({ title: '', category: 'Federation events', date: '', body: '', image: '', videoFile: '', videoUrl: '', videoMode: 'none' as 'none' | 'upload' | 'link' })
   const [saving, setSaving] = useState(false)
   const [updatesReady, setUpdatesReady] = useState(false)
   const updateCategories = [...new Set(['Federation events', 'Reflections', 'Anniversaries', ...updates.map((update) => update.category.trim()).filter(Boolean)])].sort((a, b) => a.localeCompare(b))
@@ -3488,7 +3500,7 @@ function UpdatesAdminPage() {
     if (trimmedVideoUrl && !updateVideoEmbedUrl(trimmedVideoUrl)) { setError('Use a valid YouTube or Vimeo video link.'); return }
     const formattedDate = new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     const savedVideo = videoMode === 'upload' ? videoFile : trimmedVideoUrl
-    const saved = await saveUpdates([{ id: crypto.randomUUID(), title: title.trim(), category, date: formattedDate, image, body: body.trim(), video: savedVideo || undefined, featured }, ...updates], 'Update published successfully.')
+    const saved = await saveUpdates([{ id: crypto.randomUUID(), title: title.trim(), category, date: formattedDate, image, body: body.trim(), video: savedVideo || undefined }, ...updates], 'Update published successfully.')
     if (saved) {
       setTitle('')
       setBody('')
@@ -3496,7 +3508,6 @@ function UpdatesAdminPage() {
       setVideoFile('')
       setVideoUrl('')
       setVideoMode('none')
-      setFeatured(false)
     }
   }
   function startEditing(update: SiteUpdate) {
@@ -3506,7 +3517,7 @@ function UpdatesAdminPage() {
     const videoFile = update.video?.startsWith('data:video/') ? update.video : ''
     const videoUrl = update.video && !videoFile ? update.video : ''
     const videoMode = videoFile ? 'upload' : videoUrl ? 'link' : 'none'
-    setEditDraft({ title: update.title, category: update.category, date: updateDateInputValue(update.date), body: update.body, image: update.image, videoFile, videoUrl, videoMode, featured: Boolean(update.featured) })
+    setEditDraft({ title: update.title, category: update.category, date: updateDateInputValue(update.date), body: update.body, image: update.image, videoFile, videoUrl, videoMode })
   }
   function chooseEditImage(file: File) {
     if (file.size > 2_000_000) { setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
@@ -3524,7 +3535,7 @@ function UpdatesAdminPage() {
       ? new Date(`${editDraft.date}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
       : editingUpdate.date
     const savedVideo = editDraft.videoMode === 'upload' ? editDraft.videoFile : trimmedVideoUrl
-    const edited: SiteUpdate = { ...editingUpdate, title: editDraft.title.trim(), category: editDraft.category, date: formattedDate, body: editDraft.body.trim(), image: editDraft.image, video: savedVideo || undefined, featured: editDraft.featured }
+    const edited: SiteUpdate = { ...editingUpdate, title: editDraft.title.trim(), category: editDraft.category, date: formattedDate, body: editDraft.body.trim(), image: editDraft.image, video: savedVideo || undefined }
     const saved = await saveUpdates(updates.map((update) => update.id === editingUpdate.id ? edited : update), 'Update saved successfully.')
     if (saved) setEditingUpdate(null)
   }
@@ -3542,7 +3553,7 @@ function UpdatesAdminPage() {
         <label>Video source<select value={videoMode} onChange={(event) => { const mode = event.target.value; if (mode === 'none' || mode === 'upload' || mode === 'link') { setVideoMode(mode); setVideoFile(''); setVideoUrl('') } }}><option value="none">No video</option><option value="upload">Upload a video</option><option value="link">Use a YouTube or Vimeo link</option></select></label>
         {videoMode === 'upload' && <div className="update-video-field update-image-picker"><label htmlFor="update-video-file">Video file</label><small>MP4, WebM, or OGG · max 2 MB</small><input id="update-video-file" type="file" accept="video/mp4,video/webm,video/ogg" onChange={(event) => void chooseVideo(event)} />{videoFile && <UpdateVideoPlayer className="update-video-preview" source={videoFile} title={title || 'Video preview'} poster={image || undefined} />}</div>}
         {videoMode === 'link' && <div className="update-video-field"><label htmlFor="update-video-url">Video URL</label><input id="update-video-url" type="url" value={videoUrl} onChange={(event) => setVideoUrl(event.target.value)} placeholder="https://youtu.be/... or https://vimeo.com/..." /><small>Use a supported YouTube or Vimeo video link.</small>{videoUrl && updateVideoEmbedUrl(videoUrl) && <UpdateVideoPlayer className="update-video-preview" source={videoUrl} title={title || 'Video preview'} />}</div>}
-        <label className="update-feature-toggle"><input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />Feature this post in highlights</label>
+        <p className="update-feature-note">The three newest posts are highlighted automatically.</p>
         <label>Message<textarea value={body} onChange={(event) => setBody(event.target.value)} rows={8} placeholder="Write the update for your communities..." /></label>
         <label className="update-image-picker">Add a picture <small>Optional</small><ImageCropInput onImage={chooseImage} currentImage={image} ariaLabel="Choose update image" />{image && <img src={image} alt="Selected update preview" />}</label>
         {error && !editingUpdate && <p className="form-error" role="alert">{error}</p>}
@@ -3553,7 +3564,7 @@ function UpdatesAdminPage() {
         <div className="panel-heading"><div><h2>Published posts</h2><p>{updates.length} posts visible on Carmelinks.</p></div></div>
         <div className="published-update-list">{updates.map((update) => <article className="published-update-row" key={update.id}>
           {update.image ? <img src={update.image} alt="" /> : <span className="published-update-placeholder"><FileText size={18} /></span>}
-          <div><b>{update.title}</b><small>{update.category} · {update.date}</small>{update.featured && <small className="published-update-featured">Shown in highlights</small>}</div>
+          <div><b>{update.title}</b><small>{update.category} · {update.date}</small></div>
           <div className="published-update-actions">
             <button className="published-update-edit" type="button" onClick={() => startEditing(update)} aria-label={`Edit ${update.title}`} disabled={saving || !updatesReady}><Pencil size={15} /></button>
             <button type="button" onClick={() => setPendingRemoval(update)} aria-label={`Delete ${update.title}`} disabled={saving || !updatesReady}><X size={16} /></button>
@@ -3573,7 +3584,7 @@ function UpdatesAdminPage() {
           <label>Video source<select value={editDraft.videoMode} onChange={(event) => { const mode = event.target.value; if (mode === 'none' || mode === 'upload' || mode === 'link') setEditDraft({ ...editDraft, videoMode: mode, videoFile: '', videoUrl: '' }) }}><option value="none">No video</option><option value="upload">Upload a video</option><option value="link">Use a YouTube or Vimeo link</option></select></label>
           {editDraft.videoMode === 'upload' && <div className="update-video-field update-image-picker"><label htmlFor="edit-update-video-file">Video file</label><small>MP4, WebM, or OGG · max 2 MB</small><input id="edit-update-video-file" type="file" accept="video/mp4,video/webm,video/ogg" onChange={(event) => void chooseEditVideo(event)} />{editDraft.videoFile && <UpdateVideoPlayer className="update-video-preview" source={editDraft.videoFile} title={editDraft.title || 'Video preview'} poster={editDraft.image || undefined} />}</div>}
           {editDraft.videoMode === 'link' && <div className="update-video-field"><label htmlFor="edit-update-video-url">Video URL</label><input id="edit-update-video-url" type="url" value={editDraft.videoUrl} onChange={(event) => setEditDraft({ ...editDraft, videoUrl: event.target.value })} placeholder="https://youtu.be/... or https://vimeo.com/..." /><small>Use a supported YouTube or Vimeo video link.</small>{editDraft.videoUrl && updateVideoEmbedUrl(editDraft.videoUrl) && <UpdateVideoPlayer className="update-video-preview" source={editDraft.videoUrl} title={editDraft.title || 'Video preview'} />}</div>}
-          <label className="update-feature-toggle"><input type="checkbox" checked={editDraft.featured} onChange={(event) => setEditDraft({ ...editDraft, featured: event.target.checked })} />Feature this post in highlights</label>
+          <p className="update-feature-note">The three newest posts are highlighted automatically.</p>
           <label>Message<textarea value={editDraft.body} onChange={(event) => setEditDraft({ ...editDraft, body: event.target.value })} rows={7} placeholder="Write the update for your communities..." required /></label>
           <label className="update-image-picker">Picture <small>Optional</small><ImageCropInput onImage={chooseEditImage} currentImage={editDraft.image} ariaLabel="Choose update image" />{editDraft.image && <img src={editDraft.image} alt="Update image preview" />}</label>
           {editDraft.image && <button className="button button-outline update-edit-remove-image" type="button" onClick={() => setEditDraft({ ...editDraft, image: '' })}>Remove picture</button>}

@@ -1253,6 +1253,7 @@ app.get('/api/carmelights/most-viewed', asyncRoute(async (_req, res) => {
 }))
 app.get('/api/content/:pageKey', asyncRoute(async (req, res) => {
   const pageKey = routeParam(req, 'pageKey').toUpperCase()
+  if (pageKey === 'SITE_UPDATES') res.setHeader('Cache-Control', 'no-store')
   const cacheable = pageKey === 'HOME_HERO_IMAGE' || pageKey === 'HOME_SECTION_IMAGES'
   const cached = cacheable ? homepageContentCache.get(pageKey) : undefined
   if (cached && cached.expiresAt > Date.now()) {
