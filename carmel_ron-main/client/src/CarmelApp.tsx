@@ -392,10 +392,10 @@ function CarmelightsReadingDialog({ reading, fullView, onToggleFullView, onClose
       <div className="carmelights-reading-hero">
         <img className="carmelights-reading-image" src={articleImageFor(reading.image, photo.chapel)} alt={reading.title} />
       </div>
-      <button className="button button-outline story-full-view-toggle" type="button" onClick={onToggleFullView}>{fullView ? 'Return to quote preview' : 'Read quote in full view'} <Maximize2 size={15} /></button>
       <span className="carmelights-category-tag">{reading.category || 'Prayer'}</span>
       <span className="carmelights-reading-eyebrow">SAINTS’ QUOTE</span>
       <h2>{reading.title}</h2>
+      <button className="button button-outline story-full-view-toggle" type="button" onClick={onToggleFullView}>{fullView ? 'Return to quote preview' : 'Read quote in full view'} <Maximize2 size={15} /></button>
       <b className="carmelights-reading-author">{reading.author}</b>
       <div className="carmelights-reading-copy">{reading.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
     </article>
