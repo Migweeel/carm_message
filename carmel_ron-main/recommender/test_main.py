@@ -1,16 +1,22 @@
 import os
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("RECOMMENDER_API_TOKEN", "test-token")
 
+import main
 from main import (
     Interaction,
     Reading,
+    TrainRequest,
     aggregate_preferences,
     build_training_dataset,
     fallback_recommendations,
     metadata_features,
+    train,
 )
 
 
@@ -80,6 +86,24 @@ class RecommendationHelpersTests(unittest.TestCase):
         self.assertEqual(interactions.nnz, 4)
         self.assertEqual(weights.tocsr()[users["u1"], items["r1"]], 4)
         self.assertEqual(item_features.shape[0], len(readings))
+
+    def test_training_persists_model_to_configured_directory(self) -> None:
+        readings = [Reading(id=f"r{index}", title=f"Prayer {index}") for index in range(1, 5)]
+        events = [
+            self.interaction("u1", "r1", "VIEW", 60),
+            self.interaction("u1", "r2", "VIEW", 50),
+            self.interaction("u1", "r3", "VIEW", 40),
+            self.interaction("u2", "r1", "VIEW", 30),
+            self.interaction("u2", "r2", "VIEW", 20),
+            self.interaction("u2", "r4", "VIEW", 10),
+        ]
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            model_path = Path(temporary_directory) / "lightfm-model.pkl"
+            with patch.object(main, "MODEL_DIR", Path(temporary_directory)), patch.object(main, "MODEL_PATH", model_path):
+                result = train(TrainRequest(readings=readings, interactions=events))
+
+            self.assertEqual(result.status, "trained")
+            self.assertTrue(model_path.is_file())
 
 
 if __name__ == "__main__":

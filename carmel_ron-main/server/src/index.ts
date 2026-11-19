@@ -249,8 +249,17 @@ async function callLightfm<T>(path: string, body?: unknown, timeoutMs = 10_000):
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: AbortSignal.timeout(timeoutMs),
   })
-  const result = await response.json() as T & { detail?: string }
-  if (!response.ok) throw new Error(result.detail || `The LightFM service returned HTTP ${response.status}.`)
+  const responseBody = await response.text()
+  let result: (T & { detail?: string }) | undefined
+  if (responseBody) {
+    try {
+      result = JSON.parse(responseBody) as T & { detail?: string }
+    } catch {
+      if (response.ok) throw new Error('The LightFM service returned an invalid response.')
+    }
+  }
+  if (!response.ok) throw new Error(result?.detail || `The LightFM service returned HTTP ${response.status}.`)
+  if (result === undefined) throw new Error('The LightFM service returned an empty response.')
   return result
 }
 async function createEncryptedBackupArchive(payload: unknown, password: string) {
