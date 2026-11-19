@@ -3,9 +3,5 @@ Allow: /
 Allow: /account/login
 Allow: /account/signup
 Allow: /account/forgot-password
-Disallow: /account
-Disallow: /admin
-Disallow: /search
-Disallow: /staff
 
 Sitemap: https://carmelsincommunion.org/sitemap.xml
