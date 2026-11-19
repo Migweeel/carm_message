@@ -53,6 +53,7 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
   const [uploadError, setUploadError] = useState('')
   const drag = useRef<{ pointerId: number; x: number; y: number; offsetX: number; offsetY: number } | null>(null)
   const previewUrlRef = useRef<string | null>(null)
+  const imagePreviewRef = useRef<HTMLImageElement | null>(null)
   useEffect(() => () => { if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current) }, [])
   useEffect(() => {
     if (!file) return
@@ -60,6 +61,7 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
       if (event.key !== 'Escape') return
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
       previewUrlRef.current = null
+      imagePreviewRef.current = null
       setPreviewUrl('')
       setFile(null)
     }
@@ -69,6 +71,7 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
   function closeCrop() {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
     previewUrlRef.current = null
+    imagePreviewRef.current = null
     setPreviewUrl('')
     setFile(null)
   }
@@ -78,11 +81,15 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
     if (!selected) return
     setUploadError('')
     if (!selected.type.startsWith('image/')) {
+      if (selected.size > maxBytes) {
+        setUploadError(`This file exceeds the ${(maxBytes / 1_000_000).toFixed(0)} MB upload limit. Choose a smaller file.`)
+        return
+      }
       onImage(selected)
       return
     }
-    if (selected.size > maxBytes) {
-      setUploadError(`This image exceeds the ${(maxBytes / 1_000_000).toFixed(0)} MB upload limit. Choose a smaller image.`)
+    if (selected.size > 20_000_000) {
+      setUploadError('This image is larger than the 20 MB adjustment limit. Choose a smaller image.')
       return
     }
     setError('')
@@ -96,7 +103,9 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
   }
   function cropFrameSize() {
     const ratio = dimensions.width / dimensions.height
-    return { width: Math.min(360, 320 * ratio), height: Math.min(320, 360 / ratio) }
+    const maxWidth = Math.max(120, Math.min(360, window.innerWidth - 72))
+    const maxHeight = Math.max(120, Math.min(320, window.innerHeight - 300))
+    return { width: Math.min(maxWidth, maxHeight * ratio), height: Math.min(maxHeight, maxWidth / ratio) }
   }
   function onDragStart(event: ReactPointerEvent<HTMLDivElement>) {
     event.preventDefault()
@@ -118,29 +127,42 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
     if (!file || !dimensions.width || !dimensions.height) return
     setError('')
     try {
-      const image = await createImageBitmap(file)
-      try {
-        const scale = Math.min(1, 1600 / dimensions.width, 1600 / dimensions.height)
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.max(1, Math.round(dimensions.width * scale))
-        canvas.height = Math.max(1, Math.round(dimensions.height * scale))
-        const context = canvas.getContext('2d')
-        if (!context) throw new Error('The image could not be cropped in this browser.')
-        const frame = cropFrameSize()
-        const sourceWidth = image.width / zoom
-        const sourceHeight = image.height / zoom
-        const sourceX = image.width / 2 - sourceWidth / 2 - offset.x * image.width / (frame.width * zoom)
-        const sourceY = image.height / 2 - sourceHeight / 2 - offset.y * image.height / (frame.height * zoom)
+      const image = imagePreviewRef.current
+      if (!image?.complete || !image.naturalWidth || !image.naturalHeight) throw new Error('The selected image is not ready to be adjusted.')
+      const scale = Math.min(1, 1600 / image.naturalWidth, 1600 / image.naturalHeight)
+      let outputWidth = Math.max(1, Math.round(image.naturalWidth * scale))
+      let outputHeight = Math.max(1, Math.round(image.naturalHeight * scale))
+      let quality = 0.9
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('The image could not be cropped in this browser.')
+      const frame = cropFrameSize()
+      const sourceWidth = image.naturalWidth / zoom
+      const sourceHeight = image.naturalHeight / zoom
+      const sourceX = image.naturalWidth / 2 - sourceWidth / 2 - offset.x * image.naturalWidth / (frame.width * zoom)
+      const sourceY = image.naturalHeight / 2 - sourceHeight / 2 - offset.y * image.naturalHeight / (frame.height * zoom)
+      let blob: Blob
+      while (true) {
+        canvas.width = outputWidth
+        canvas.height = outputHeight
         context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height)
-        const blob = await new Promise<Blob>((resolve, reject) => {
-          canvas.toBlob((result) => result ? resolve(result) : reject(new Error('The cropped image could not be created.')), 'image/jpeg', 0.9)
+        blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((result) => result ? resolve(result) : reject(new Error('The cropped image could not be created.')), 'image/jpeg', quality)
         })
-        const name = file.name.replace(/\.[^.]+$/, '') || 'image'
-        onImage(new File([blob], `${name}-cropped.jpg`, { type: 'image/jpeg', lastModified: Date.now() }))
-        closeCrop()
-      } finally {
-        image.close()
+        if (blob.size <= maxBytes) break
+        if (quality > 0.5) {
+          quality = Math.max(0.5, quality - 0.1)
+        } else if (Math.max(outputWidth, outputHeight) > 480) {
+          outputWidth = Math.max(1, Math.round(outputWidth * 0.85))
+          outputHeight = Math.max(1, Math.round(outputHeight * 0.85))
+          quality = 0.9
+        } else {
+          throw new Error(`The adjusted image is still larger than ${(maxBytes / 1_000_000).toFixed(0)} MB. Choose a different image.`)
+        }
       }
+      const name = file.name.replace(/\.[^.]+$/, '') || 'image'
+      onImage(new File([blob], `${name}-cropped.jpg`, { type: 'image/jpeg', lastModified: Date.now() }))
+      closeCrop()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The image could not be cropped.')
     }
@@ -148,13 +170,14 @@ function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an im
   const frame = dimensions.width ? cropFrameSize() : null
   return <>
     <input type="file" accept={accept} aria-label={ariaLabel} onChange={chooseFile} />
+    <small className="image-crop-hint">Select an image to crop, reposition, and zoom before uploading.</small>
     {uploadError && <small className="form-error" role="alert">{uploadError}</small>}
     {file && previewUrl && createPortal(<div className="image-crop-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeCrop() }}>
       <section className="image-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="image-crop-title">
         <header><div><h2 id="image-crop-title">Adjust your image</h2><p>Drag the photo to reposition it, then zoom in or out.</p></div><button type="button" className="icon-button" aria-label="Cancel image adjustment" onClick={closeCrop}><X size={20} /></button></header>
         <div className="image-crop-workspace">
           <div className="image-crop-frame" style={frame ? { width: frame.width, height: frame.height } : undefined} onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
-            <img src={previewUrl} alt="Image crop preview" draggable={false} onLoad={(event) => setDimensions({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setError('This image could not be opened for adjustment.')} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }} />
+            <img ref={imagePreviewRef} src={previewUrl} alt="Image crop preview" draggable={false} onLoad={(event) => setDimensions({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setError('This image could not be opened for adjustment.')} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }} />
           </div>
           <label className="image-crop-zoom">Zoom<input aria-label="Zoom image" type="range" min="1" max="3" step="0.01" value={zoom} disabled={!dimensions.width} onChange={(event) => {
             const nextZoom = Number(event.target.value)
@@ -191,8 +214,17 @@ type ManagedArticle = { id: string; title: string; author: string; body: string;
 type PopularTeaching = ManagedArticle & { views: number }
 type ManagedContactDetails = { phone: string; email: string; facebookLabel: string; facebookUrl: string; location: string; heroImage: string }
 type ManagedAboutImages = { spirituality: string; assembly: string; assemblyCaption: string; officers: string; purposeOne: string; purposeTwo: string; purposeThree: string; purposeFour: string; quote: string }
+type ManagedAboutText = {
+  heroTitle: string; heroDescription: string; heroButton: string
+  aimEyebrow: string; aimTitle: string; aimDescription: string; aimStatements: string
+  spiritualityParagraph: string; spiritualitySignoff: string; spiritualityCardTitle: string; spiritualityCardLink: string
+  assemblyCaption: string; assemblyAlt: string; officersCaption: string; officersAlt: string
+  purposesEyebrow: string; purposesTitle: string; purposeOne: string; purposeTwo: string; purposeThree: string; purposeFour: string
+  purposeOneAlt: string; purposeTwoAlt: string; purposeThreeAlt: string; purposeFourAlt: string
+  quoteText: string; quoteAttribution: string; spiritualityAlt: string; quoteAlt: string
+}
 type ManagedAboutImageKey = keyof Omit<ManagedAboutImages, 'assemblyCaption'>
-type ManagedSiteContent = { homeHeroImage: string; monasteries: ManagedMonastery[]; monasteriesVersion?: number; carmelife: ManagedArticle[]; carmelights: ManagedArticle[]; contactDetails: ManagedContactDetails; aboutImages: ManagedAboutImages }
+type ManagedSiteContent = { homeHeroImage: string; monasteries: ManagedMonastery[]; monasteriesVersion?: number; carmelife: ManagedArticle[]; carmelights: ManagedArticle[]; contactDetails: ManagedContactDetails; aboutImages: ManagedAboutImages; aboutText: ManagedAboutText }
 type SiteUpdate = { id: string; title: string; date: string; category: string; image: string; body: string; video?: string; featured?: boolean }
 const monasteryCities = ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo', 'Bacolod', 'Cebu', 'Iloilo', 'Cagayan de Oro', 'Davao', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Zamboanga', 'Kuching']
 const monasteryAssetByCity: Record<string, string> = {
@@ -343,6 +375,37 @@ const defaultManagedContent: ManagedSiteContent = {
     purposeFour: purposeFourImage,
     quote: aboutFlowerImage,
   },
+  aboutText: {
+    heroTitle: 'About Us',
+    heroDescription: 'The Philippine Federation of Discalced Carmelite Nuns is a structure of communion among its 23 Carmelite monastery members, who all embrace the Teresian Charism.',
+    heroButton: 'Talk To Us',
+    aimEyebrow: 'OUR PURPOSE',
+    aimTitle: 'AIM',
+    aimDescription: 'The Federation aims to make visible the unity which Jesus prayed for among His disciples.',
+    aimStatements: 'COMMUNION.\nCOLLABORATION.\nCONTEMPLATION.\nMISSION.',
+    spiritualityParagraph: 'The Discalced Nuns of the Order of the Blessed Virgin Mary belong to the Carmelite Order reformed and renewed by St. Teresa of Avila. The Teresian Carmel integrates the Spirit and traditions of the Order, which is Christocentric, Marian, and Biblical with the apostolic and ecclesial spirit of a purely contemplative life.',
+    spiritualitySignoff: 'Come and see',
+    spiritualityCardTitle: 'Our Spirituality',
+    spiritualityCardLink: 'Explore our spirituality',
+    assemblyCaption: '14th General Assembly of the Philippine Federation of Discalced Carmelite Nuns\nMere Monique Home, La Paz, Iloilo City\nNovember 7–12, 2022',
+    assemblyAlt: 'Carmelite community gathered together',
+    officersCaption: 'Elected Officers (2022–2024)\nwith Father General Miguel Calle, OCD, Definitor Fr. Chris Surinono, OCD,\nand Religious Assistant Fr. Dan Lim, OCD',
+    officersAlt: 'Elected Carmelite officers with Church leaders',
+    purposesEyebrow: 'THE FEDERATION',
+    purposesTitle: 'PURPOSES',
+    purposeOne: 'To respond to the desire of St. Teresa that her Carmels be bound together by evangelical friendship.',
+    purposeTwo: 'To realize the desire of the Church and the Order to have close beneficial ties among the member monasteries.',
+    purposeThree: 'To help each other live more faithfully the Teresian ideal of the canonical contemplative life.',
+    purposeFour: 'To facilitate communication and mutual assistance in formation, government, practical skills, material and economic needs, and transfer of nuns among member monasteries. (VDQ no.30)',
+    purposeOneAlt: 'Federation purpose 1',
+    purposeTwoAlt: 'Federation purpose 2',
+    purposeThreeAlt: 'Federation purpose 3',
+    purposeFourAlt: 'Federation purpose 4',
+    quoteText: 'All must be friends,\nall must be loved,\nall must be held dear,\nall must be helped.',
+    quoteAttribution: '— St. Teresa of Avila (Way of Perfection 4:7)',
+    spiritualityAlt: 'A field of flowers in the sunlight',
+    quoteAlt: 'Peaceful Carmelite garden',
+  },
   contactDetails: {
     phone: '0921 419 2267',
     email: 'ocdnuns.vocpromph@gmail.com',
@@ -398,7 +461,7 @@ function readManagedContent(): ManagedSiteContent {
         image: savedMonastery.image && !savedMonastery.image.includes('unsplash.com') ? savedMonastery.image : defaultMonastery.image,
       }
     }).concat(savedMonasteries.filter((monastery) => !monasteryCities.some((city) => city.toLowerCase() === monastery.city.toLowerCase()) && monastery.city.toLowerCase() !== 'ozamis'))
-    const content = { ...defaultManagedContent, ...stored, aboutImages: { ...defaultManagedContent.aboutImages, ...stored?.aboutImages }, contactDetails: { ...defaultManagedContent.contactDetails, ...stored?.contactDetails }, monasteries, monasteriesVersion: 2, carmelife: stored?.carmelife || defaultManagedContent.carmelife, carmelights: stored?.carmelights || defaultManagedContent.carmelights }
+    const content = { ...defaultManagedContent, ...stored, aboutImages: { ...defaultManagedContent.aboutImages, ...stored?.aboutImages }, aboutText: { ...defaultManagedContent.aboutText, ...stored?.aboutText }, contactDetails: { ...defaultManagedContent.contactDetails, ...stored?.contactDetails }, monasteries, monasteriesVersion: 2, carmelife: stored?.carmelife || defaultManagedContent.carmelife, carmelights: stored?.carmelights || defaultManagedContent.carmelights }
     if (isLocalDemoSession() && stored && stored.monasteriesVersion !== 2) localStorage.setItem(managedContentKey, JSON.stringify(content))
     if (stored && localStorage.getItem(mainVocationStorySeedKey) !== 'true') {
       const existingIndex = content.carmelife.findIndex((article) => article.id === mainVocationStory.id)
@@ -477,6 +540,7 @@ function useManagedContent() {
             ...defaultManagedContent,
             ...result.content.blocks,
             aboutImages: { ...defaultManagedContent.aboutImages, ...result.content.blocks.aboutImages },
+            aboutText: { ...defaultManagedContent.aboutText, ...result.content.blocks.aboutText },
             contactDetails: { ...defaultManagedContent.contactDetails, ...result.content.blocks.contactDetails },
           })
         }
@@ -969,28 +1033,59 @@ function HomePage() {
   return <><section className="home-hero" style={{ backgroundImage: `linear-gradient(90deg,rgba(37,28,21,.19),rgba(37,28,21,.03)),url(${photo.hero})` }}><div className="hero-content"><span className="eyebrow eyebrow-light">A HOME FOR THE SEEKING HEART</span><h1>Carmels in<br /><em>Communion</em></h1><p>Welcome to the Philippine Federation of Discalced Carmelite Nuns, a family of communities sharing one contemplative heart.</p><div className="hero-buttons"><Link className="button button-gold" to="/about">Explore our story <ArrowRight size={16} /></Link><Link className="button button-glass" to="/monasteries">Meet our monasteries</Link></div></div><div className="hero-caption"><span>“Let nothing disturb you, let nothing frighten you.”</span><small>ST. TERESA OF AVILA</small></div></section><section className="marquee-wrap"><div className="marquee-label">Philippine Federation<br />of Discalced Carmelite Nuns</div><div className="marquee-window"><div className="marquee-track">{[...cities, ...cities].map((city, i) => <span key={`${city}-${i}`}>{city}<i>·</i></span>)}</div></div><ArrowRight size={18} /></section><section className="vocation-section section-wrap"><div className="vocation-image"><img src={photo.flower} alt="White flowers in a monastery garden" /><span className="image-note">A life held in prayer</span></div><div className="vocation-copy"><span className="eyebrow">A QUIET INVITATION</span><h2>Is <em>God</em> calling you to a life of prayer?</h2><p>There is a place for the listening heart. Discover the contemplative vocation and the sisters who make their home in Carmel.</p><Link className="text-link" to="/monasteries">Meet our monasteries <ArrowRight size={16} /></Link><div className="handwritten">Come and see <span>↗</span></div></div></section><section className="explore-section"><div className="section-wrap"><div className="section-heading-row"><div><span className="eyebrow">WALK WITH US</span><h2>Explore <em>Carmel</em></h2></div><p>Are you discerning if God is calling you to Carmel? Let us assist you.</p></div><div className="explore-grid">{cards.map((card) => <Link className="explore-card" key={card.title} to={card.to} style={{ backgroundImage: `linear-gradient(180deg,transparent 10%,rgba(35,26,20,.8)),url(${card.img})` }}><span>{card.label}</span><div><h3>{card.title}</h3><b>Learn more <ArrowRight size={14} /></b></div></Link>)}</div></div></section><section className="quote-banner" style={{ backgroundImage: `linear-gradient(90deg,rgba(43,32,24,.15),rgba(43,32,24,.78)),url(${photo.cosmos})` }}><div className="quote-content"><span className="quote-mark">“</span><p>Carmel is not merely a geographical place, but a sacred space in the cloister of the heart where the Carmelite nun encounters God.</p><Link className="button button-light" to="/contact">We’d love to hear from you <ArrowRight size={15} /></Link></div></section></>
 }
 void HomePage
-const purposes = ['To respond to the desire of St. Teresa that her Carmels be bound together by evangelical friendship.', 'To realize the desire of the Church and the Order to have close beneficial ties among the member monasteries.', 'To help each other live more faithfully the Teresian ideal of the canonical contemplative life.', 'To facilitate communication and mutual assistance in formation, government, practical skills, material and economic needs, and transfer of nuns among member monasteries. (VDQ no.30)']
-const aboutImageFields: Array<{ key: ManagedAboutImageKey; label: string; alt: string }> = [
-  { key: 'spirituality', label: 'Our Spirituality card', alt: 'A field of flowers in the sunlight' },
-  { key: 'assembly', label: 'General Assembly', alt: 'Carmelite community gathered together' },
-  { key: 'officers', label: 'Elected Officers', alt: 'Elected Carmelite officers with Church leaders' },
-  { key: 'purposeOne', label: 'Purpose 1', alt: 'Federation purpose 1' },
-  { key: 'purposeTwo', label: 'Purpose 2', alt: 'Federation purpose 2' },
-  { key: 'purposeThree', label: 'Purpose 3', alt: 'Federation purpose 3' },
-  { key: 'purposeFour', label: 'Purpose 4', alt: 'Federation purpose 4' },
-  { key: 'quote', label: 'Quote background', alt: 'Peaceful Carmelite garden' },
+const aboutImageFields: Array<{ key: ManagedAboutImageKey; label: string }> = [
+  { key: 'spirituality', label: 'Our Spirituality card' },
+  { key: 'assembly', label: 'General Assembly' },
+  { key: 'officers', label: 'Elected Officers' },
+  { key: 'purposeOne', label: 'Purpose 1' },
+  { key: 'purposeTwo', label: 'Purpose 2' },
+  { key: 'purposeThree', label: 'Purpose 3' },
+  { key: 'purposeFour', label: 'Purpose 4' },
+  { key: 'quote', label: 'Quote background' },
+]
+const aboutTextFields: Array<{ key: keyof ManagedAboutText; label: string; rows?: number }> = [
+  { key: 'heroTitle', label: 'Page heading' },
+  { key: 'heroDescription', label: 'Introduction', rows: 3 },
+  { key: 'heroButton', label: 'Introduction button text' },
+  { key: 'aimEyebrow', label: 'Aim section eyebrow' },
+  { key: 'aimTitle', label: 'Aim heading' },
+  { key: 'aimDescription', label: 'Aim description', rows: 3 },
+  { key: 'aimStatements', label: 'Aim statements (one per line)', rows: 4 },
+  { key: 'spiritualityParagraph', label: 'Spirituality description', rows: 5 },
+  { key: 'spiritualitySignoff', label: 'Spirituality sign-off' },
+  { key: 'spiritualityCardTitle', label: 'Spirituality card title' },
+  { key: 'spiritualityCardLink', label: 'Spirituality card link text' },
+  { key: 'assemblyCaption', label: 'Federation photo caption', rows: 3 },
+  { key: 'assemblyAlt', label: 'Federation photo alternative text' },
+  { key: 'officersCaption', label: 'Officers photo caption', rows: 3 },
+  { key: 'officersAlt', label: 'Officers photo alternative text' },
+  { key: 'purposesEyebrow', label: 'Purposes section eyebrow' },
+  { key: 'purposesTitle', label: 'Purposes heading' },
+  { key: 'purposeOne', label: 'Purpose 1 text', rows: 3 },
+  { key: 'purposeTwo', label: 'Purpose 2 text', rows: 3 },
+  { key: 'purposeThree', label: 'Purpose 3 text', rows: 3 },
+  { key: 'purposeFour', label: 'Purpose 4 text', rows: 4 },
+  { key: 'purposeOneAlt', label: 'Purpose 1 image alternative text' },
+  { key: 'purposeTwoAlt', label: 'Purpose 2 image alternative text' },
+  { key: 'purposeThreeAlt', label: 'Purpose 3 image alternative text' },
+  { key: 'purposeFourAlt', label: 'Purpose 4 image alternative text' },
+  { key: 'quoteText', label: 'Quote text (one line per verse)', rows: 4 },
+  { key: 'quoteAttribution', label: 'Quote attribution' },
+  { key: 'spiritualityAlt', label: 'Spirituality image alternative text' },
+  { key: 'quoteAlt', label: 'Quote image alternative text' },
 ]
 function AboutPage() {
-  const { aboutImages } = useManagedContent()
+  const { aboutImages, aboutText } = useManagedContent()
   const purposeImages = [aboutImages.purposeOne, aboutImages.purposeTwo, aboutImages.purposeThree, aboutImages.purposeFour]
+  const purposes = [aboutText.purposeOne, aboutText.purposeTwo, aboutText.purposeThree, aboutText.purposeFour]
   return <div className="about-reference">
     <section className="about-reference-top">
       <div className="about-reference-container">
         <div className="about-reference-hero">
           <div className="about-reference-hero-content">
-            <h1>About <em>Us</em></h1>
-            <p className="about-reference-description">The Philippine Federation of Discalced Carmelite Nuns is a structure of communion among its 23 Carmelite monastery members, who all embrace the Teresian Charism.</p>
-            <Link to="/contact" className="about-reference-button">Talk To Us</Link>
+            <h1>{aboutText.heroTitle}</h1>
+            <p className="about-reference-description">{aboutText.heroDescription}</p>
+            <Link to="/contact" className="about-reference-button">{aboutText.heroButton}</Link>
           </div>
         </div>
       </div>
@@ -999,60 +1094,60 @@ function AboutPage() {
     <section className="about-reference-aim">
       <div className="about-reference-container">
         <div className="about-reference-aim-content">
-          <div><span className="about-reference-eyebrow">OUR PURPOSE</span><h2>AIM</h2><p>The Federation aims to make visible the unity which Jesus prayed for among His disciples.</p></div>
-          <h3>COMMUNION.<br />COLLABORATION.<br />CONTEMPLATION.<br />MISSION.</h3>
+          <div><span className="about-reference-eyebrow">{aboutText.aimEyebrow}</span><h2>{aboutText.aimTitle}</h2><p>{aboutText.aimDescription}</p></div>
+          <h3>{aboutText.aimStatements.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</h3>
         </div>
       </div>
     </section>
 
     <section className="about-reference-spirituality">
       <div className="about-reference-spirituality-copy">
-        <p><em>The Discalced Nuns of the Order of the Blessed Virgin Mary</em> belong to the Carmelite Order reformed and renewed by St. Teresa of Avila. The Teresian Carmel integrates the Spirit and traditions of the Order, which is Christocentric, Marian, and Biblical with the apostolic and ecclesial spirit of a purely contemplative life.</p>
-        <span>Come and see</span>
+        <p>{aboutText.spiritualityParagraph}</p>
+        <span>{aboutText.spiritualitySignoff}</span>
       </div>
       <Link to="/spirituality" className="about-reference-spirituality-card">
-        <img src={aboutImages.spirituality} alt="A field of flowers in the sunlight" />
+        <img src={aboutImages.spirituality} alt={aboutText.spiritualityAlt} />
         <span className="about-reference-spirituality-overlay" />
-        <span className="about-reference-spirituality-title">Our Spirituality</span>
-        <span className="about-reference-spirituality-link">Explore our spirituality <ArrowRight size={13} /></span>
+        <span className="about-reference-spirituality-title">{aboutText.spiritualityCardTitle}</span>
+        <span className="about-reference-spirituality-link">{aboutText.spiritualityCardLink} <ArrowRight size={13} /></span>
       </Link>
     </section>
 
     <section className="about-reference-photo-section">
       <div className="about-reference-container">
-        <img src={aboutImages.assembly} alt="Carmelite community gathered together" />
-        <p>{aboutImages.assemblyCaption.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
+        <img src={aboutImages.assembly} alt={aboutText.assemblyAlt} />
+        <p>{aboutText.assemblyCaption.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
       </div>
     </section>
 
     <section className="about-reference-photo-section about-reference-officers">
       <div className="about-reference-container">
-        <img src={aboutImages.officers} alt="Elected Carmelite officers with Church leaders" />
-        <p>Elected Officers (2022–2024)<br />with Father General Miguel Calle, OCD, Definitor Fr. Chris Surinono, OCD,<br />and Religious Assistant Fr. Dan Lim, OCD</p>
+        <img src={aboutImages.officers} alt={aboutText.officersAlt} />
+        <p>{aboutText.officersCaption.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
       </div>
     </section>
 
     <section className="about-reference-purposes">
       <div className="about-reference-container">
         <header className="about-reference-purposes-heading">
-          <span className="about-reference-eyebrow">THE FEDERATION</span>
-          <h2>PURPOSES</h2>
+          <span className="about-reference-eyebrow">{aboutText.purposesEyebrow}</span>
+          <h2>{aboutText.purposesTitle}</h2>
           <span className="about-reference-divider" />
         </header>
         <div className="about-reference-purpose-grid">
-          {purposes.map((purpose, index) => <article className="about-reference-purpose-card" key={purpose}>
-            <div className="about-reference-purpose-image"><img src={purposeImages[index]} alt={`Federation purpose ${index + 1}`} /></div>
+          {purposes.map((purpose, index) => <article className="about-reference-purpose-card" key={index}>
+            <div className="about-reference-purpose-image"><img src={purposeImages[index]} alt={[aboutText.purposeOneAlt, aboutText.purposeTwoAlt, aboutText.purposeThreeAlt, aboutText.purposeFourAlt][index]} /></div>
             <span className={`about-reference-purpose-accent accent-${index + 1}`} />
             <div className="about-reference-purpose-content"><b>{String(index + 1).padStart(2, '0')}</b><p>{purpose}</p></div>
           </article>)}
         </div>
       </div>
       <div className="about-reference-quote">
-        <div className="about-reference-quote-image"><img src={aboutImages.quote} alt="Peaceful Carmelite garden" /></div>
+        <div className="about-reference-quote-image"><img src={aboutImages.quote} alt={aboutText.quoteAlt} /></div>
         <div className="about-reference-quote-content">
           <span className="about-reference-quote-mark">&quot;</span>
-          <blockquote>All must be friends,<br />all must be loved,<br />all must be held dear,<br />all must be helped.</blockquote>
-          <cite>— St. Teresa of Avila (Way of Perfection 4:7)</cite>
+          <blockquote>{aboutText.quoteText.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</blockquote>
+          <cite>{aboutText.quoteAttribution}</cite>
           <span className="about-reference-quote-line" />
         </div>
       </div>
@@ -3358,6 +3453,7 @@ function ContentAdminPage() {
     : [content.homeHeroImage])
   const [contactDetails, setContactDetails] = useState<ManagedContactDetails>(content.contactDetails)
   const [aboutImages, setAboutImages] = useState<ManagedAboutImages>(content.aboutImages)
+  const [aboutText, setAboutText] = useState<ManagedAboutText>(content.aboutText)
   const [homeSectionImages, setHomeSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>({})
   const [monastery, setMonastery] = useState<ManagedMonastery>({ id: '', name: '', city: '', description: '', image: '' })
   const [article, setArticle] = useState<ManagedArticle>({ id: '', title: '', author: '', body: '', image: '' })
@@ -3410,6 +3506,10 @@ function ContentAdminPage() {
   }
   function updateAboutImage(key: keyof ManagedAboutImages, value: string) {
     setAboutImages((current) => ({ ...current, [key]: value }))
+    setSuccess('')
+  }
+  function updateAboutText(key: keyof ManagedAboutText, value: string) {
+    setAboutText((current) => ({ ...current, [key]: value }))
     setSuccess('')
   }
   function focusEditor(form: HTMLFormElement | null) {
@@ -3474,6 +3574,7 @@ function ContentAdminPage() {
             ...defaultManagedContent,
             ...result.content.blocks,
             aboutImages: { ...defaultManagedContent.aboutImages, ...result.content.blocks.aboutImages },
+            aboutText: { ...defaultManagedContent.aboutText, ...result.content.blocks.aboutText },
             contactDetails: { ...defaultManagedContent.contactDetails, ...result.content.blocks.contactDetails },
           })
           if (active) setContentReady(true)
@@ -3492,8 +3593,10 @@ function ContentAdminPage() {
     if (isContact) setContactDetails(content.contactDetails)
   }, [isContact, content.contactDetails])
   useEffect(() => {
-    if (isAbout) setAboutImages(content.aboutImages)
-  }, [isAbout, content.aboutImages])
+    if (!isAbout) return
+    setAboutImages(content.aboutImages)
+    setAboutText(content.aboutText)
+  }, [isAbout, content.aboutImages, content.aboutText])
   useEffect(() => {
     if (!isSaints) return
     let active = true
@@ -3737,13 +3840,15 @@ function ContentAdminPage() {
     event.preventDefault()
     if (savingManagedContent) return
     if (!contentReady) { setError('Saved website content is still loading. Please try again.'); return }
-    if (aboutImageFields.some(({ key }) => !aboutImages[key].trim()) || !aboutImages.assemblyCaption.trim()) {
-      setError('Each About Us image and the Federation photo caption are required.')
+    if (aboutImageFields.some(({ key }) => !aboutImages[key].trim()) || aboutTextFields.some(({ key }) => !aboutText[key].trim())) {
+      setError('Complete each About Us text field and image before saving.')
       return
     }
-    const savedAboutImages = { ...aboutImages, assemblyCaption: aboutImages.assemblyCaption.trim() }
+    const savedAboutText = { ...aboutText }
+    for (const { key } of aboutTextFields) savedAboutText[key] = aboutText[key].trim()
+    const savedAboutImages = { ...aboutImages, assemblyCaption: savedAboutText.assemblyCaption }
     for (const { key } of aboutImageFields) savedAboutImages[key] = aboutImages[key].trim()
-    const nextContent = { ...content, aboutImages: savedAboutImages }
+    const nextContent = { ...content, aboutImages: savedAboutImages, aboutText: savedAboutText }
     setSavingManagedContent(true)
     setError('')
     setSuccess('Saving changes…')
@@ -3751,7 +3856,8 @@ function ContentAdminPage() {
       cacheManagedContent(nextContent)
       await saveManagedContent(nextContent)
       setAboutImages(savedAboutImages)
-      setSuccess(isLocalDemoSession() ? 'About Us images saved in this browser.' : 'About Us images saved successfully.')
+      setAboutText(savedAboutText)
+      setSuccess(isLocalDemoSession() ? 'About Us content saved in this browser.' : 'About Us content saved successfully.')
     } catch (saveError) {
       cacheManagedContent(content)
       setSuccess('')
@@ -3916,16 +4022,23 @@ function ContentAdminPage() {
     </nav>
     {success && <p className="form-success" role="status" aria-live="polite">{success}</p>}
     {isAbout ? <form className="admin-panel content-editor about-image-editor" onSubmit={saveAboutImages}>
-      <div className="panel-heading"><div><h2>About Us pictures</h2><p>Change the images shown throughout the About Us page. Enter an image URL or upload a replacement.</p></div></div>
+      <div className="panel-heading"><div><h2>About Us text and pictures</h2><p>Edit every About Us heading, caption, paragraph, quote, image description, and image. Changes publish together when saved.</p></div></div>
+      <h3 className="about-editor-subheading">Page text and image descriptions</h3>
+      <div className="about-text-editor-grid">
+        {aboutTextFields.map(({ key, label, rows }) => <label key={key}>{label}{rows
+          ? <textarea required rows={rows} value={aboutText[key]} onChange={(event) => updateAboutText(key, event.target.value)} />
+          : <input required value={aboutText[key]} onChange={(event) => updateAboutText(key, event.target.value)} />}
+        </label>)}
+      </div>
+      <h3 className="about-editor-subheading">Page images</h3>
       <div className="about-image-editor-grid">
-        <label>Federation photo caption<textarea required rows={3} value={aboutImages.assemblyCaption} onChange={(event) => updateAboutImage('assemblyCaption', event.target.value)} placeholder="Describe the Federation photo shown on About Us." /></label>
-        {aboutImageFields.map(({ key, label, alt }) => <div className="about-image-editor-card" key={key}>
+        {aboutImageFields.map(({ key, label }) => <div className="about-image-editor-card" key={key}>
           <label>{label} image URL<input value={aboutImages[key].startsWith('data:') ? '' : aboutImages[key]} onChange={(event) => updateAboutImage(key, event.target.value)} placeholder="https://..." /></label>
-          <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseAboutImage(file, key)} ariaLabel={`Choose ${label} image`} /><img src={aboutImages[key]} alt={alt} /><small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
+          <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseAboutImage(file, key)} ariaLabel={`Choose ${label} image`} /><img src={aboutImages[key]} alt={`${label} preview`} /><small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
         </div>)}
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="content-editor-actions"><button className="button button-dark" type="submit" disabled={savingManagedContent || !contentReady}>{savingManagedContent ? 'Saving…' : 'Save About Us pictures'}</button></div>
+      <div className="content-editor-actions"><button className="button button-dark" type="submit" disabled={savingManagedContent || !contentReady}>{savingManagedContent ? 'Saving…' : 'Save About Us content'}</button></div>
     </form> : isContact ? <form className="admin-panel content-editor contact-details-editor" onSubmit={saveContactDetails}>
       <div className="panel-heading"><div><h2>Contact Us content</h2><p>Change the page image and update the phone, email, Facebook link, and location shown on the public website.</p></div></div>
       <label>Contact Us page image URL<input value={contactDetails.heroImage.startsWith('data:') ? '' : contactDetails.heroImage} onChange={(event) => updateContactDetails('heroImage', event.target.value)} placeholder="https://..." /></label>
