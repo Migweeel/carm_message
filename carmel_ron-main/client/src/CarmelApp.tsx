@@ -380,6 +380,45 @@ function articleImageFor(image: string, fallback: string) {
   if (legacyPath === '/src/assets/attracted-by-the-veil.jpg') return attractedByTheVeilImage
   return image || fallback
 }
+function CarmelightsReadingDialog({ reading, fullView, onToggleFullView, onClose }: {
+  reading: ManagedArticle
+  fullView: boolean
+  onToggleFullView: () => void
+  onClose: () => void
+}) {
+  return <div className={`carmelights-reading-backdrop ${fullView ? 'carmelights-reading-backdrop-full-view' : ''}`} role="presentation" onClick={onClose}>
+    <article className={`carmelights-reading-dialog ${fullView ? 'carmelights-reading-dialog-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={reading.title} onClick={(event) => event.stopPropagation()}>
+      <button className="carmelights-reading-close" type="button" onClick={onClose} aria-label="Close quote"><X size={20} /></button>
+      <button className="button button-outline story-full-view-toggle" type="button" onClick={onToggleFullView}>{fullView ? 'Return to quote preview' : 'Read quote in full view'} <Maximize2 size={15} /></button>
+      <img className="carmelights-reading-image" src={articleImageFor(reading.image, photo.chapel)} alt={reading.title} />
+      <span className="carmelights-category-tag">{reading.category || 'Prayer'}</span>
+      <span className="carmelights-reading-eyebrow">SAINTS’ QUOTE</span>
+      <h2>{reading.title}</h2>
+      <b className="carmelights-reading-author">{reading.author}</b>
+      <div className="carmelights-reading-copy">{reading.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+    </article>
+  </div>
+}
+function CarmelifeReadingDialog({ reading, fullView, onToggleFullView, onClose, fallbackImage }: {
+  reading: ManagedArticle
+  fullView: boolean
+  onToggleFullView: () => void
+  onClose: () => void
+  fallbackImage: string
+}) {
+  return <div className={`story-modal-backdrop ${fullView ? 'story-modal-backdrop-full-view' : ''}`} role="presentation" onClick={onClose}>
+    <article className={`story-modal ${fullView ? 'story-modal-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={reading.title} onClick={(event) => event.stopPropagation()}>
+      <button className="story-modal-close" onClick={onClose} aria-label="Close story"><X size={18} /></button>
+      <img src={articleImageFor(reading.image, fallbackImage)} alt={reading.title} />
+      <div className="story-modal-body">
+        <button className="button button-outline story-full-view-toggle" type="button" onClick={onToggleFullView}>{fullView ? 'Return to story preview' : 'Read in full view'} <Maximize2 size={15} /></button>
+        <span className="eyebrow">{reading.author}</span>
+        <h2>{reading.title}</h2>
+        <div className="story-full-copy">{reading.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+      </div>
+    </article>
+  </div>
+}
 function updateVideoEmbedUrl(source: string) {
   let url: URL
   try { url = new URL(source.trim()) } catch { return null }
@@ -1709,7 +1748,7 @@ function CarmelifePage() {
       <button type="button" onClick={() => changeQuote(1)} aria-label="Next quote">&rsaquo;</button>
     </section>
 
-    {selected && <div className={`story-modal-backdrop ${fullView ? 'story-modal-backdrop-full-view' : ''}`} role="presentation" onClick={closeStory}><article className={`story-modal ${fullView ? 'story-modal-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={selected.title} onClick={(event) => event.stopPropagation()}><button className="story-modal-close" onClick={closeStory} aria-label="Close story"><X size={18} /></button><img src={articleImageFor(selected.image, seekingFaceImage)} alt={selected.title} /><div className="story-modal-body"><span className="eyebrow">{selected.author}</span><h2>{selected.title}</h2><div className="story-full-copy">{selected.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div><button className="button button-outline story-full-view-toggle" onClick={() => setFullView(!fullView)}>{fullView ? 'Return to story preview' : 'Read in full view'} <Maximize2 size={15} /></button></div></article></div>}
+    {selected && <CarmelifeReadingDialog reading={selected} fullView={fullView} onToggleFullView={() => setFullView(!fullView)} onClose={closeStory} fallbackImage={seekingFaceImage} />}
   </div>
 }
 
@@ -1945,19 +1984,28 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
         <button type="button" className="carmelights-read-link" onClick={() => setSelectedId(article.id)}><span><BookOpen size={14} />Read full quote</span><ArrowRight size={14} /></button>
       </article>)}</div>
       {visibleTeachings.length === 0 && <p className="content-empty">No teachings match your search.</p>}
-      {selected && <div className={`carmelights-reading-backdrop ${fullView ? 'carmelights-reading-backdrop-full-view' : ''}`} role="presentation" onClick={closeStory}><article className={`carmelights-reading-dialog ${fullView ? 'carmelights-reading-dialog-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={selected.title} onClick={(event) => event.stopPropagation()}>
-        <button className="carmelights-reading-close" type="button" onClick={closeStory} aria-label="Close quote"><X size={20} /></button>
-        <img className="carmelights-reading-image" src={articleImageFor(selected.image, photo.chapel)} alt={selected.title} />
-        <span className="carmelights-category-tag">{selected.category || 'Prayer'}</span>
-        <span className="carmelights-reading-eyebrow">SAINTS’ QUOTE</span>
-        <h2>{selected.title}</h2>
-        <b className="carmelights-reading-author">{selected.author}</b>
-        <div className="carmelights-reading-copy">{selected.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
-        <button className="button button-outline story-full-view-toggle" type="button" onClick={() => setFullView(!fullView)}>{fullView ? 'Return to quote preview' : 'Read quote in full view'} <Maximize2 size={15} /></button>
-      </article></div>}
+      {selected && <CarmelightsReadingDialog reading={selected} fullView={fullView} onToggleFullView={() => setFullView(!fullView)} onClose={closeStory} />}
     </section>
   }
-  return <section className="content-page section-wrap"><div className="story-page-intro"><div>{isLife && <span className="eyebrow">VOICES FROM CARMEL</span>}<h1>{isLife ? <>Stories from <em>Carmel</em></> : <>Teachings of <em>Carmel</em></>}</h1></div><p className="page-lead">{isLife ? 'Explore reflections and vocation stories shared by our sisters.' : desc}</p></div><div className="story-grid">{articles.map((article) => <article className="story-card" key={article.id}><img src={articleImageFor(article.image, isLife ? photo.garden : photo.chapel)} alt={article.title} loading="lazy" decoding="async" />{!isLife && <button type="button" className={`favorite-teaching ${favorites.includes(article.id) ? 'saved' : ''}`} onClick={() => toggleFavorite(article.id)} aria-label={favorites.includes(article.id) ? `Remove ${article.title} from favorites` : `Save ${article.title} to favorites`} title={favorites.includes(article.id) ? 'Remove from favorites' : 'Save teaching'}><Heart size={17} fill={favorites.includes(article.id) ? 'currentColor' : 'none'} /></button>}<div><span className="eyebrow">{article.author || (isLife ? 'VOCATION STORY' : 'CARMELITE SAINT')}</span><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button className="text-link story-read-button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story <ArrowRight size={15} /></button></div></article>)}</div>{articles.length === 0 && <p className="content-empty">New entries will appear here when published.</p>}{selected && <div className={`story-modal-backdrop ${fullView ? 'story-modal-backdrop-full-view' : ''}`} role="presentation" onClick={closeStory}><article className={`story-modal ${fullView ? 'story-modal-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={selected.title} onClick={(event) => event.stopPropagation()}><button className="story-modal-close" onClick={closeStory} aria-label="Close story"><X size={18} /></button><img src={articleImageFor(selected.image, isLife ? photo.garden : photo.chapel)} alt={selected.title} /><div className="story-modal-body"><span className="eyebrow">{selected.author}</span><h2>{selected.title}</h2><div className="story-full-copy">{selected.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div><button className="button button-outline story-full-view-toggle" onClick={() => setFullView(!fullView)}>{fullView ? 'Return to story preview' : 'Read in full view'} <Maximize2 size={15} /></button></div></article></div>}</section>
+  return <section className="content-page section-wrap">
+    <div className="story-page-intro">
+      <div>{isLife && <span className="eyebrow">VOICES FROM CARMEL</span>}<h1>{isLife ? <>Stories from <em>Carmel</em></> : <>Teachings of <em>Carmel</em></>}</h1></div>
+      <p className="page-lead">{isLife ? 'Explore reflections and vocation stories shared by our sisters.' : desc}</p>
+    </div>
+    <div className="story-grid">{articles.map((article) => <article className="story-card" key={article.id}>
+      <img src={articleImageFor(article.image, isLife ? photo.garden : photo.chapel)} alt={article.title} loading="lazy" decoding="async" />
+      {!isLife && <button type="button" className={`favorite-teaching ${favorites.includes(article.id) ? 'saved' : ''}`} onClick={() => toggleFavorite(article.id)} aria-label={favorites.includes(article.id) ? `Remove ${article.title} from favorites` : `Save ${article.title} to favorites`} title={favorites.includes(article.id) ? 'Remove from favorites' : 'Save teaching'}><Heart size={17} fill={favorites.includes(article.id) ? 'currentColor' : 'none'} /></button>}
+      <div><span className="eyebrow">{article.author || (isLife ? 'VOCATION STORY' : 'CARMELITE SAINT')}</span><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button className="text-link story-read-button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story <ArrowRight size={15} /></button></div>
+    </article>)}</div>
+    {articles.length === 0 && <p className="content-empty">New entries will appear here when published.</p>}
+    {selected && <CarmelifeReadingDialog
+      reading={selected}
+      fullView={fullView}
+      onToggleFullView={() => setFullView(!fullView)}
+      onClose={closeStory}
+      fallbackImage={isLife ? photo.garden : photo.chapel}
+    />}
+  </section>
 }
 function ContactPage() {
   const { contactDetails } = useManagedContent()
@@ -2833,7 +2881,17 @@ function MemberFavoritesView({ member }: { member: MemberAccount }) {
     void setFavorite(id, false).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'The saved teaching activity could not be updated.'))
   }
   function closeTeaching() { setSelectedId(null); setFullView(false) }
-  return <section className="member-account-section"><div className="member-section-heading"><span className="eyebrow">SAVED FOR LATER</span><h2>Favorite teachings</h2><p>{member.demo ? 'Demo favorites are saved only in this browser.' : 'Teachings saved to your account are loaded from the Federation database.'}</p></div>{(error || favoriteError) && <p className="form-error" role="alert">{error || favoriteError}</p>}{favoritesLoading ? <p className="staff-empty">Loading favorite teachings…</p> : saved.length ? <div className="member-favorites-list">{saved.map((teaching) => <article className="member-favorite-row" key={teaching.id}><img src={articleImageFor(teaching.image, photo.chapel)} alt="" /><div><span className="eyebrow">{teaching.author}</span><h3>{teaching.title}</h3><p>{teaching.body}</p><button type="button" className="text-link story-read-button" onClick={() => { setSelectedId(teaching.id); setFullView(false) }}>Read teaching <ArrowRight size={14} /></button></div><button type="button" className="member-favorite-remove" onClick={() => setPendingRemoval({ id: teaching.id, title: teaching.title })} aria-label={`Remove ${teaching.title} from favorites`}><Heart size={17} fill="currentColor" /></button></article>)}</div> : <div className="member-empty"><Heart size={22} /><h3>No favorite teachings yet</h3><p>Save a teaching from Carmelights to find it here.</p><Link className="button button-outline" to="/carmelights">Explore Carmelights <ArrowRight size={14} /></Link></div>}{selected && <div className={`carmelights-reading-backdrop ${fullView ? 'carmelights-reading-backdrop-full-view' : ''}`} role="presentation" onClick={closeTeaching}><article className={`carmelights-reading-dialog ${fullView ? 'carmelights-reading-dialog-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={selected.title} onClick={(event) => event.stopPropagation()}><button className="carmelights-reading-close" type="button" onClick={closeTeaching} aria-label="Close teaching"><X size={20} /></button><img className="carmelights-reading-image" src={articleImageFor(selected.image, photo.chapel)} alt={selected.title} /><span className="carmelights-category-tag">{selected.category || 'Prayer'}</span><span className="carmelights-reading-eyebrow">SAINTS’ QUOTE</span><h2>{selected.title}</h2><b className="carmelights-reading-author">{selected.author}</b><div className="carmelights-reading-copy">{selected.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div><button className="button button-outline story-full-view-toggle" type="button" onClick={() => setFullView(!fullView)}>{fullView ? 'Return to quote preview' : 'Read quote in full view'} <Maximize2 size={15} /></button></article></div>}{pendingRemoval && <AccountActionConfirmation title="Remove this favorite?" description={`“${pendingRemoval.title}” will be removed from your saved teachings. You can save it again from Carmelights.`} confirmLabel="Remove favorite" onCancel={() => setPendingRemoval(null)} onConfirm={() => { remove(pendingRemoval.id); setPendingRemoval(null) }} />}</section>
+  return <section className="member-account-section">
+    <div className="member-section-heading"><span className="eyebrow">SAVED FOR LATER</span><h2>Favorite teachings</h2><p>{member.demo ? 'Demo favorites are saved only in this browser.' : 'Teachings saved to your account are loaded from the Federation database.'}</p></div>
+    {(error || favoriteError) && <p className="form-error" role="alert">{error || favoriteError}</p>}
+    {favoritesLoading ? <p className="staff-empty">Loading favorite teachings…</p> : saved.length ? <div className="member-favorites-list">{saved.map((teaching) => <article className="member-favorite-row" key={teaching.id}>
+      <img src={articleImageFor(teaching.image, photo.chapel)} alt="" />
+      <div><span className="eyebrow">{teaching.author}</span><h3>{teaching.title}</h3><p>{teaching.body}</p><button type="button" className="text-link story-read-button" onClick={() => { setSelectedId(teaching.id); setFullView(false) }}>Read teaching <ArrowRight size={14} /></button></div>
+      <button type="button" className="member-favorite-remove" onClick={() => setPendingRemoval({ id: teaching.id, title: teaching.title })} aria-label={`Remove ${teaching.title} from favorites`}><Heart size={17} fill="currentColor" /></button>
+    </article>)}</div> : <div className="member-empty"><Heart size={22} /><h3>No favorite teachings yet</h3><p>Save a teaching from Carmelights to find it here.</p><Link className="button button-outline" to="/carmelights">Explore Carmelights <ArrowRight size={14} /></Link></div>}
+    {selected && <CarmelightsReadingDialog reading={selected} fullView={fullView} onToggleFullView={() => setFullView(!fullView)} onClose={closeTeaching} />}
+    {pendingRemoval && <AccountActionConfirmation title="Remove this favorite?" description={`“${pendingRemoval.title}” will be removed from your saved teachings. You can save it again from Carmelights.`} confirmLabel="Remove favorite" onCancel={() => setPendingRemoval(null)} onConfirm={() => { remove(pendingRemoval.id); setPendingRemoval(null) }} />}
+  </section>
 }
 
 function MemberRecommendationsView() {

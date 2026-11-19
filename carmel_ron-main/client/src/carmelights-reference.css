@@ -54,6 +54,7 @@
 @media(max-width:560px){.carmelights-page{padding-block:42px 60px}.carmelights-heading h1{font-size:2.7rem}.carmelights-heading .page-lead{font-size:12px}.carmelights-most-viewed h2{font-size:17px}.carmelights-popular-list{padding:0;gap:8px}.carmelights-popular-card{min-height:70px}.carmelights-toolbar{margin-block:20px 14px}.carmelights-filters{display:grid;grid-template-columns:1fr 1fr;gap:8px}.carmelights-filters select{width:100%;min-width:0}.carmelights-teaching-grid{grid-template-columns:1fr;gap:10px}.carmelights-teaching-card{min-height:220px;padding:15px 17px}.carmelights-teaching-card h2{font-size:18px}}
 .carmelights-reading-backdrop{position:fixed;z-index:70;inset:0;padding:28px;display:grid;place-items:center;overflow-y:auto;background:rgba(48,36,26,.42);animation:fade-up .2s both}
 .carmelights-reading-dialog{position:relative;width:min(660px,100%);max-height:min(820px,calc(100vh - 56px));overflow-y:auto;padding:42px 48px;background:#fffdfa;border-radius:10px;box-shadow:0 24px 70px rgba(29,19,13,.22)}
+.carmelights-reading-dialog .story-full-view-toggle{top:0;margin-right:50px!important}
 .carmelights-reading-image{width:100%;height:220px;margin:0 0 22px;border-radius:6px;object-fit:cover}
 .carmelights-reading-dialog>.carmelights-category-tag{display:inline-block;margin-bottom:16px;padding:6px 9px;font-size:10px}
 .carmelights-reading-close{position:absolute;top:20px;right:20px;width:42px;height:42px;border:1px solid #eee5db;border-radius:50%;display:grid;place-items:center;background:#fffdfa;color:#725c48}
