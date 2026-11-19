@@ -513,7 +513,6 @@ app.post('/api/auth/register', asyncRoute(async (req, res) => {
 const loginSchema = z.object({
   email: z.email().trim().toLowerCase(),
   password: z.string().min(1).max(128),
-  replaceExistingSession: z.boolean().optional(),
 })
 app.post('/api/auth/login', asyncRoute(async (req, res) => {
   const parsed = validate(loginSchema, req.body)
@@ -523,9 +522,6 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { email: input.email } })
   if (user) {
     if (!user.isActive || !(await bcrypt.compare(input.password, user.passwordHash))) return res.status(401).json({ error: 'Email or password is incorrect.' })
-    if (user.sessionExpiresAt && user.sessionExpiresAt > new Date() && !input.replaceExistingSession) {
-      return res.status(409).json({ code: 'ACTIVE_SESSION', error: 'This account is already signed in on another device.' })
-    }
     const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
     const sessionUser = await prisma.user.update({
       where: { id: user.id },

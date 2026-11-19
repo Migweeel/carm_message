@@ -1911,8 +1911,6 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const isSignup = mode === 'signup'
   const isStaff = mode === 'staff'
   const [error, setError] = useState('')
-  const [sessionConflict, setSessionConflict] = useState(false)
-  const [replaceExistingSession, setReplaceExistingSession] = useState(false)
   const [pending, setPending] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [privacyChecked, setPrivacyChecked] = useState(false)
@@ -1921,7 +1919,6 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const [accountType, setAccountType] = useState<'admin' | 'staff'>('staff')
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSessionConflict(false)
     const form = new FormData(event.currentTarget)
     if (isSignup) {
       if (form.get('privacyConsent') !== 'on') {
@@ -1944,12 +1941,9 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       const password = String(form.get('password') || '')
       const expectedRole = role === 'admin' ? 'ADMIN' : 'FORMATOR'
       try {
-        const response = await fetch('/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, replaceExistingSession }) })
+        const response = await fetch('/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
         const result = await readAuthResponse(response)
-        if (!response.ok) {
-          setSessionConflict(response.status === 409 && result.code === 'ACTIVE_SESSION')
-          throw new Error(result.error || 'Unable to sign in.')
-        }
+        if (!response.ok) throw new Error(result.error || 'Unable to sign in.')
         const authenticatedUser = result.user
         if (!authenticatedUser || !['ADMIN', 'FORMATOR'].includes(authenticatedUser.role)) throw new Error('This account does not have administration access.')
         if (authenticatedUser.role !== expectedRole) throw new Error(`Select ${authenticatedUser.role === 'FORMATOR' ? 'Staff' : 'Admin'} to sign in with this account.`)
@@ -1976,12 +1970,9 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const address = String(form.get('address') || '').trim()
     const password = String(form.get('password') || '')
     try {
-      const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password, privacyConsent: form.get('privacyConsent') === 'on' } : { email, password, replaceExistingSession }) })
+      const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password, privacyConsent: form.get('privacyConsent') === 'on' } : { email, password }) })
       const result = await readAuthResponse(response)
-      if (!response.ok) {
-        setSessionConflict(response.status === 409 && result.code === 'ACTIVE_SESSION')
-        throw new Error(result.error || 'Unable to continue.')
-      }
+      if (!response.ok) throw new Error(result.error || 'Unable to continue.')
       if (!result.user || result.user.role !== 'USER') throw new Error('Staff accounts use the Federation staff sign-in page.')
       saveMemberSession({ id: result.user.id, name: result.user.name, email: result.user.email, gender: result.user.gender || gender, phone: result.user.phone, address: result.user.address, role: 'USER' })
       navigate('/', { replace: true })
@@ -2020,11 +2011,6 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       </div>}
       {!isSignup && <Link className="auth-forgot-password-link" to="/account/forgot-password">Forgot password?</Link>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      {sessionConflict && <button className="auth-privacy-link" type="button" onClick={(event) => {
-        const form = event.currentTarget.form
-        setReplaceExistingSession(true)
-        window.setTimeout(() => form?.requestSubmit(), 0)
-      }}>Continue and sign out the other device</button>}
       <button className="button button-dark full-button" disabled={pending || (isSignup && !privacyChecked)}>{pending ? 'Please wait…' : isSignup ? <>Create member account <ArrowRight size={16} /></> : isStaff ? <>Staff sign in <ArrowRight size={16} /></> : <>Login <ArrowRight size={16} /></>}</button>
       {isStaff ? <>
         <p className="auth-staff-account-note">Staff accounts are created by a Federation administrator.</p>

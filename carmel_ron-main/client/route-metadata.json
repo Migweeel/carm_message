@@ -46,5 +46,17 @@
   "/account/login": {
     "title": "Member Sign In | Carmels in Communion",
     "description": "Sign in to your Carmels in Communion member account."
+  },
+  "/account/signup": {
+    "title": "Create a Member Account | Carmels in Communion",
+    "description": "Create a Carmels in Communion member account."
+  },
+  "/account/forgot-password": {
+    "title": "Forgot Password | Carmels in Communion",
+    "description": "Request a password reset link for your Carmels in Communion member account."
+  },
+  "/staff/login": {
+    "title": "Federation Staff Sign In | Carmels in Communion",
+    "description": "Sign in to the Carmels in Communion Federation staff or administrator account."
   }
 }
