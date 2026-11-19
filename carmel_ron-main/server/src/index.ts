@@ -1652,6 +1652,64 @@ app.put('/api/admin/content/home-section-image', authenticate, asyncRoute(async 
   await audit(req.auth!.id, 'UPDATE_CONTENT', 'PageContent', content.id, { pageKey, section: parsed.data!.section })
   res.json({ content })
 }))
+const adjustImageSchema = z.object({ url: z.string().url().max(4096) })
+const adjustableImageOrigins = new Set([productionOrigin.origin, clientOrigin, 'https://images.unsplash.com'])
+const maxAdjustImageBytes = 20_000_000
+app.post('/api/admin/content/adjust-image', authenticate, rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+}), asyncRoute(async (req, res) => {
+  const actor = req.auth!
+  if (actor.role !== 'ADMIN' && !actor.canManageDetails && !actor.canManageUpdates) {
+    return res.status(403).json({ error: 'You do not have access to adjust content images.' })
+  }
+  const parsed = validate(adjustImageSchema, req.body)
+  if (parsed.error) return res.status(400).json({ error: 'Provide a valid image URL.' })
+  const imageUrl = new URL(parsed.data!.url)
+  if (imageUrl.username || imageUrl.password || !adjustableImageOrigins.has(imageUrl.origin)) {
+    return res.status(400).json({ error: 'This image host is not supported for adjustment. Download the image and upload it instead.' })
+  }
+  let upstream: globalThis.Response
+  try {
+    upstream = await fetch(imageUrl, {
+      headers: { Accept: 'image/avif,image/webp,image/png,image/jpeg,image/gif' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(15_000),
+    })
+  } catch {
+    return res.status(502).json({ error: 'The image host could not be reached. Download the image and upload it instead.' })
+  }
+  if (upstream.status >= 300 && upstream.status < 400) {
+    return res.status(502).json({ error: 'The image host redirected the request. Download the image and upload it instead.' })
+  }
+  if (!upstream.ok) return res.status(502).json({ error: 'The current image could not be loaded from its host.' })
+  const contentType = upstream.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() || ''
+  if (!/^image\/(jpeg|png|webp|gif|bmp|avif)$/.test(contentType)) {
+    return res.status(415).json({ error: 'The current file is not a supported image.' })
+  }
+  const contentLength = Number(upstream.headers.get('content-length'))
+  if (Number.isFinite(contentLength) && contentLength > maxAdjustImageBytes) {
+    return res.status(413).json({ error: 'This image is larger than the 20 MB adjustment limit.' })
+  }
+  if (!upstream.body) return res.status(502).json({ error: 'The image host returned an empty image.' })
+  const reader = upstream.body.getReader()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    totalBytes += value.byteLength
+    if (totalBytes > maxAdjustImageBytes) {
+      await reader.cancel()
+      return res.status(413).json({ error: 'This image is larger than the 20 MB adjustment limit.' })
+    }
+    chunks.push(value)
+  }
+  res.set({ 'Content-Type': contentType, 'Content-Length': String(totalBytes), 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
+  res.send(Buffer.concat(chunks, totalBytes))
+}))
 app.put('/api/admin/content/:pageKey', authenticate, asyncRoute(async (req, res) => {
   const pageKey = routeParam(req, 'pageKey').toUpperCase()
   if (pageKey !== 'SITE_MANAGED' && pageKey !== 'SITE_UPDATES') return res.status(404).json({ error: 'Editable content section not found.' })

@@ -34,6 +34,30 @@ import RouteMetadata from './RouteMetadata'
 
 const DonationChart = lazy(() => import('./DonationChart'))
 
+function imageDataUrlToBlob(dataUrl: string) {
+  const commaIndex = dataUrl.indexOf(',')
+  if (commaIndex < 0) throw new Error('The saved image data is invalid.')
+  const metadata = dataUrl.slice(0, commaIndex)
+  const contentType = metadata.slice(5).split(';', 1)[0]
+  const encoded = dataUrl.slice(commaIndex + 1)
+  if (!contentType.startsWith('image/') || !metadata.endsWith(';base64')) {
+    throw new Error('The saved image has an unsupported data format.')
+  }
+  if (encoded.length > Math.ceil(20_000_000 / 3) * 4) {
+    throw new Error('This image is larger than the 20 MB adjustment limit.')
+  }
+  let binary: string
+  try {
+    binary = atob(encoded)
+  } catch {
+    throw new Error('The saved image data is invalid.')
+  }
+  if (binary.length > 20_000_000) throw new Error('This image is larger than the 20 MB adjustment limit.')
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return new Blob([bytes], { type: contentType })
+}
+
 type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>
 function PasswordInput(props: PasswordInputProps) {
   const [visible, setVisible] = useState(false)
@@ -114,9 +138,25 @@ function ImageCropInput({ onImage, currentImage, accept = 'image/*', ariaLabel =
     setUploadError('')
     setLoadingExisting(true)
     try {
-      const response = await fetch(currentImage)
-      if (!response.ok) throw new Error('The current image could not be loaded for adjustment.')
-      const blob = await response.blob()
+      let blob: Blob
+      if (currentImage.startsWith('data:')) {
+        blob = imageDataUrlToBlob(currentImage)
+      } else {
+        const currentImageUrl = new URL(currentImage, window.location.href)
+        const response = currentImageUrl.origin === window.location.origin
+          ? await fetch(currentImageUrl)
+          : await fetch('/api/admin/content/adjust-image', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: currentImageUrl.href }),
+          })
+        if (!response.ok) {
+          const result = await response.json() as { error?: string }
+          throw new Error(result.error || 'The current image could not be loaded for adjustment.')
+        }
+        blob = await response.blob()
+      }
       if (!blob.type.startsWith('image/')) throw new Error('The current file is not an image.')
       if (blob.size > 20_000_000) throw new Error('This image is larger than the 20 MB adjustment limit.')
       const name = currentImage.startsWith('data:') ? 'current-image' : decodeURIComponent(currentImage.split('/').pop()?.split(/[?#]/)[0] || 'current-image')
