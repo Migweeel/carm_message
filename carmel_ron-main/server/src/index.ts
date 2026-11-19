@@ -126,7 +126,7 @@ app.set('trust proxy', 1)
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      imgSrc: ["'self'", 'data:', 'https://images.unsplash.com'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://images.unsplash.com'],
       mediaSrc: ["'self'", 'data:'],
       frameSrc: ["'self'", 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'],
     },
