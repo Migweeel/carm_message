@@ -431,3 +431,17 @@
 .admin-search-toggle:hover,.admin-search-toggle[aria-expanded=true]{background:#f8f2e9}
 .admin-search-popover{position:absolute;z-index:45;top:calc(100% + 12px);right:0;width:min(430px,calc(100vw - 28px));height:42px;padding:0 12px;display:flex;align-items:center;gap:9px;border:1px solid #e9dfd3;border-radius:7px;background:#fff;box-shadow:0 12px 30px rgba(49,35,24,.14);color:#8b7969}
 .admin-search-popover input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--brown-900);font-size:11px}
+.image-crop-backdrop{position:fixed;inset:0;z-index:1000;padding:20px;display:grid;place-items:center;background:rgba(27,20,15,.72)}
+.image-crop-dialog{width:min(560px,100%);max-height:min(90vh,760px);overflow:auto;padding:22px;border:1px solid #e9dfd3;border-radius:12px;background:#fffdfa;box-shadow:0 24px 70px rgba(0,0,0,.3)}
+.image-crop-dialog>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.image-crop-dialog>header h2{margin:0 0 6px;font-size:23px}
+.image-crop-dialog>header p{margin:0;color:var(--muted);font-size:12px}
+.image-crop-workspace{display:grid;justify-items:center;gap:16px}
+.image-crop-frame{position:relative;max-width:100%;overflow:hidden;border-radius:6px;background:#241e19;touch-action:none;cursor:grab}
+.image-crop-frame:active{cursor:grabbing}
+.image-crop-frame img{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:fill;transform-origin:center;user-select:none}
+.image-crop-zoom{width:min(360px,100%);display:grid;grid-template-columns:auto 1fr;align-items:center;gap:14px;color:var(--brown-900);font-size:12px;font-weight:700}
+.image-crop-zoom input{width:100%;accent-color:var(--gold)}
+.image-crop-dialog>footer{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+.session-replaced-notice{position:fixed;z-index:1100;right:20px;bottom:20px;width:min(440px,calc(100vw - 40px));padding:15px 18px;border:1px solid #ddbd91;border-radius:8px;background:#fff8ec;color:#4f3824;box-shadow:0 10px 32px rgba(45,30,18,.2);font-size:13px;font-weight:600}
+@media(max-width:560px){.image-crop-backdrop{padding:12px}.image-crop-dialog{padding:17px}.image-crop-dialog>header h2{font-size:20px}.image-crop-dialog>footer .button{flex:1;padding-inline:8px}.session-replaced-notice{right:12px;bottom:12px;width:calc(100vw - 24px)}}

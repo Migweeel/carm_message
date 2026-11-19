@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
 import attractedByTheVeilImage from './assets/attracted-by-the-veil.jpg'
@@ -42,10 +43,142 @@ function PasswordInput(props: PasswordInputProps) {
   </span>
 }
 
+function ImageCropInput({ onImage, accept = 'image/*', ariaLabel = 'Choose an image', maxBytes = 2_000_000 }: { onImage: (file: File) => void; accept?: string; ariaLabel?: string; maxBytes?: number }) {
+  const [file, setFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const [error, setError] = useState('')
+  const [uploadError, setUploadError] = useState('')
+  const drag = useRef<{ pointerId: number; x: number; y: number; offsetX: number; offsetY: number } | null>(null)
+  const previewUrlRef = useRef<string | null>(null)
+  useEffect(() => () => { if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current) }, [])
+  useEffect(() => {
+    if (!file) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = null
+      setPreviewUrl('')
+      setFile(null)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [file])
+  function closeCrop() {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    previewUrlRef.current = null
+    setPreviewUrl('')
+    setFile(null)
+  }
+  function chooseFile(event: ChangeEvent<HTMLInputElement>) {
+    const selected = event.target.files?.[0]
+    event.target.value = ''
+    if (!selected) return
+    setUploadError('')
+    if (!selected.type.startsWith('image/')) {
+      onImage(selected)
+      return
+    }
+    if (selected.size > maxBytes) {
+      setUploadError(`This image exceeds the ${(maxBytes / 1_000_000).toFixed(0)} MB upload limit. Choose a smaller image.`)
+      return
+    }
+    setError('')
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    previewUrlRef.current = URL.createObjectURL(selected)
+    setPreviewUrl(previewUrlRef.current)
+    setZoom(1)
+    setOffset({ x: 0, y: 0 })
+    setDimensions({ width: 0, height: 0 })
+    setFile(selected)
+  }
+  function cropFrameSize() {
+    const ratio = dimensions.width / dimensions.height
+    return { width: Math.min(360, 320 * ratio), height: Math.min(320, 360 / ratio) }
+  }
+  function onDragStart(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, offsetX: offset.x, offsetY: offset.y }
+  }
+  function onDragMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const start = drag.current
+    if (!start || start.pointerId !== event.pointerId) return
+    const frame = cropFrameSize()
+    const maxX = frame.width * (zoom - 1) / 2
+    const maxY = frame.height * (zoom - 1) / 2
+    setOffset({
+      x: Math.max(-maxX, Math.min(maxX, start.offsetX + event.clientX - start.x)),
+      y: Math.max(-maxY, Math.min(maxY, start.offsetY + event.clientY - start.y)),
+    })
+  }
+  async function saveCrop() {
+    if (!file || !dimensions.width || !dimensions.height) return
+    setError('')
+    try {
+      const image = await createImageBitmap(file)
+      try {
+        const scale = Math.min(1, 1600 / dimensions.width, 1600 / dimensions.height)
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(dimensions.width * scale))
+        canvas.height = Math.max(1, Math.round(dimensions.height * scale))
+        const context = canvas.getContext('2d')
+        if (!context) throw new Error('The image could not be cropped in this browser.')
+        const frame = cropFrameSize()
+        const sourceWidth = image.width / zoom
+        const sourceHeight = image.height / zoom
+        const sourceX = image.width / 2 - sourceWidth / 2 - offset.x * image.width / (frame.width * zoom)
+        const sourceY = image.height / 2 - sourceHeight / 2 - offset.y * image.height / (frame.height * zoom)
+        context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height)
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((result) => result ? resolve(result) : reject(new Error('The cropped image could not be created.')), 'image/jpeg', 0.9)
+        })
+        const name = file.name.replace(/\.[^.]+$/, '') || 'image'
+        onImage(new File([blob], `${name}-cropped.jpg`, { type: 'image/jpeg', lastModified: Date.now() }))
+        closeCrop()
+      } finally {
+        image.close()
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'The image could not be cropped.')
+    }
+  }
+  const frame = dimensions.width ? cropFrameSize() : null
+  return <>
+    <input type="file" accept={accept} aria-label={ariaLabel} onChange={chooseFile} />
+    {uploadError && <small className="form-error" role="alert">{uploadError}</small>}
+    {file && previewUrl && createPortal(<div className="image-crop-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeCrop() }}>
+      <section className="image-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="image-crop-title">
+        <header><div><h2 id="image-crop-title">Adjust your image</h2><p>Drag the photo to reposition it, then zoom in or out.</p></div><button type="button" className="icon-button" aria-label="Cancel image adjustment" onClick={closeCrop}><X size={20} /></button></header>
+        <div className="image-crop-workspace">
+          <div className="image-crop-frame" style={frame ? { width: frame.width, height: frame.height } : undefined} onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
+            <img src={previewUrl} alt="Image crop preview" draggable={false} onLoad={(event) => setDimensions({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setError('This image could not be opened for adjustment.')} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }} />
+          </div>
+          <label className="image-crop-zoom">Zoom<input aria-label="Zoom image" type="range" min="1" max="3" step="0.01" value={zoom} disabled={!dimensions.width} onChange={(event) => {
+            const nextZoom = Number(event.target.value)
+            const nextFrame = cropFrameSize()
+            setZoom(nextZoom)
+            setOffset((current) => ({ x: Math.max(-nextFrame.width * (nextZoom - 1) / 2, Math.min(nextFrame.width * (nextZoom - 1) / 2, current.x)), y: Math.max(-nextFrame.height * (nextZoom - 1) / 2, Math.min(nextFrame.height * (nextZoom - 1) / 2, current.y)) }))
+          }} /></label>
+        </div>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <footer><button type="button" className="button button-outline" onClick={closeCrop}>Cancel</button><button type="button" className="button button-dark" onClick={() => void saveCrop()} disabled={!dimensions.width}>Use this image</button></footer>
+      </section>
+    </div>, document.body)}
+  </>
+}
+
 const cities = ['Angeles', 'Bacolod', 'Baguio', 'Cagayan de Oro', 'Castillejos', 'Cebu', 'Davao', 'Gumaca', 'Infanta']
 const nav = [['Home', '/'], ['Our Monastery', '/monasteries'], ['Carmelife', '/carmelife'], ['Discernment', '/discernment'], ['Carmelights', '/carmelights'], ['Donations', '/donations'], ['Updates', '/updates'], ['Contact us', '/contact'], ['About us', '/about']]
 const managedContentKey = 'carmel-prototype-site-content'
 const managedContentEvent = 'carmel-site-content-updated'
+const serverSessionRoleKey = 'carmel-server-session-role'
+function saveServerSessionRole(role: PublicProfile['role'] | null) {
+  if (role) localStorage.setItem(serverSessionRoleKey, role)
+  else localStorage.removeItem(serverSessionRoleKey)
+}
 function requestServerLogout() {
   void fetch('/api/auth/logout', { method: 'POST', credentials: 'include', keepalive: true }).then((response) => {
     if (!response.ok) console.error(`Sign-out request failed with HTTP ${response.status}.`)
@@ -537,11 +670,19 @@ function Navbar() {
     let active = true
     const refresh = () => {
       const localProfile = readPublicProfile()
-      if (localProfile) { setProfile(localProfile); return }
+      if (localProfile) {
+        if (!localProfile.prototype) saveServerSessionRole(localProfile.role)
+        setProfile(localProfile)
+        return
+      }
       fetch('/api/auth/me', { credentials: 'include' }).then(async (response) => {
         if (!response.ok) { if (active) setProfile(null); return }
         const result = await response.json()
-        if (active && ['ADMIN', 'FORMATOR', 'USER'].includes(result.user?.role)) setProfile(result.user as PublicProfile)
+        if (active && ['ADMIN', 'FORMATOR', 'USER'].includes(result.user?.role)) {
+          const authenticatedProfile = result.user as PublicProfile
+          saveServerSessionRole(authenticatedProfile.role)
+          setProfile(authenticatedProfile)
+        }
       }).catch(() => { if (active) setProfile(null) })
     }
     refresh()
@@ -551,6 +692,7 @@ function Navbar() {
     return () => { active = false; window.removeEventListener(memberSessionUpdatedEvent, refresh); window.removeEventListener(staffSessionUpdatedEvent, refresh); window.removeEventListener('storage', refresh) }
   }, [])
   function signOut() {
+    saveServerSessionRole(null)
     if (profile?.role === 'USER') saveMemberSession(null)
     else { localStorage.removeItem(prototypeSessionKey); window.dispatchEvent(new Event(staffSessionUpdatedEvent)) }
     if (!profile?.prototype) requestServerLogout()
@@ -1947,6 +2089,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         const authenticatedUser = result.user
         if (!authenticatedUser || !['ADMIN', 'FORMATOR'].includes(authenticatedUser.role)) throw new Error('This account does not have administration access.')
         if (authenticatedUser.role !== expectedRole) throw new Error(`Select ${authenticatedUser.role === 'FORMATOR' ? 'Staff' : 'Admin'} to sign in with this account.`)
+        saveServerSessionRole(authenticatedUser.role)
         navigate('/admin', { replace: true })
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : 'Unable to connect to the sign-in service.')
@@ -1974,6 +2117,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       const result = await readAuthResponse(response)
       if (!response.ok) throw new Error(result.error || 'Unable to continue.')
       if (!result.user || result.user.role !== 'USER') throw new Error('Staff accounts use the Federation staff sign-in page.')
+      saveServerSessionRole(result.user.role)
       saveMemberSession({ id: result.user.id, name: result.user.name, email: result.user.email, gender: result.user.gender || gender, phone: result.user.phone, address: result.user.address, role: 'USER' })
       navigate('/', { replace: true })
     } catch (reason) {
@@ -2535,6 +2679,7 @@ function MemberAccountPage() {
       const result = await readAuthResponse(response)
       if (response.ok && result.user?.role === 'USER') {
         const account: MemberAccount = { ...result.user, role: 'USER' }
+        saveServerSessionRole('USER')
         saveMemberSession(account)
         setMember(account)
         setSessionWarning('')
@@ -2565,7 +2710,7 @@ function MemberAccountPage() {
     { id: 'favorites', label: 'Favorite teachings', icon: Heart, path: '/account/favorites' },
     { id: 'recommendations', label: 'Recommended for You', icon: BookOpen, path: '/account/recommendations' },
   ]
-  function signOut() { saveMemberSession(null); if (!isDemoMember) requestServerLogout(); navigate('/') }
+  function signOut() { saveServerSessionRole(null); saveMemberSession(null); if (!isDemoMember) requestServerLogout(); navigate('/') }
   return <section className="member-account-page"><div className="member-account-shell"><aside className="member-account-sidebar"><div className="member-account-identity"><span className="member-account-avatar">{member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><b>{member.name}</b><small>{member.email}</small><Link className="member-edit-profile" to="/account"><Pencil size={13} /> Edit profile</Link></div><nav aria-label="Your account">{tabs.map(({ id, label, icon: Icon, path }) => <NavLink key={id} to={path} end={id === 'profile'} className={({ isActive }) => isActive || section === id ? 'active' : ''}><Icon size={16} />{label}</NavLink>)}</nav><button className="member-signout" type="button" onClick={signOut}><LogOut size={15} />Sign out</button></aside><main className="member-account-main">{sessionWarning && <p className="form-error" role="status">{sessionWarning}</p>}{section === 'profile' && <><MemberProfileDetails key={member.email} member={member} onUpdated={setMember} /><MemberDiscernmentSummary key={`discernment-${member.email}`} member={member} /></>}{section === 'donations' && <MemberDonationsView member={member} />}{section === 'discernment' && <MemberDiscernmentView key={member.email} member={member} />}{section === 'security' && <MemberSecurityView member={member} />}{section === 'messages' && <MemberMessagesView member={member} />}{section === 'favorites' && <MemberFavoritesView member={member} />}{section === 'recommendations' && <MemberRecommendationsView />}</main></div></section>
 }
 
@@ -2665,6 +2810,7 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
   useEffect(() => { const timer = setInterval(() => setClock(new Date()), 60000); return () => clearInterval(timer) }, [])
   useEffect(() => { if (adminSearchOpen) adminSearchInputRef.current?.focus() }, [adminSearchOpen])
   function signOut() {
+    saveServerSessionRole(null)
     localStorage.removeItem(prototypeSessionKey)
     if (!user.prototype) requestServerLogout()
     window.dispatchEvent(new Event(staffSessionUpdatedEvent))
@@ -3035,10 +3181,8 @@ function UpdatesAdminPage() {
       setSaving(false)
     }
   }
-  function chooseImage(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (file.size > 2_000_000) { event.target.value = ''; setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
+  function chooseImage(file: File) {
+    if (file.size > 2_000_000) { setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
     const reader = new FileReader()
     reader.onload = () => setImage(String(reader.result || ''))
     reader.readAsDataURL(file)
@@ -3097,10 +3241,8 @@ function UpdatesAdminPage() {
     const videoMode = videoFile ? 'upload' : videoUrl ? 'link' : 'none'
     setEditDraft({ title: update.title, category: update.category, date: updateDateInputValue(update.date), body: update.body, image: update.image, videoFile, videoUrl, videoMode, featured: Boolean(update.featured) })
   }
-  function chooseEditImage(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (file.size > 2_000_000) { event.target.value = ''; setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
+  function chooseEditImage(file: File) {
+    if (file.size > 2_000_000) { setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
     const reader = new FileReader()
     reader.onload = () => setEditDraft((draft) => ({ ...draft, image: String(reader.result || '') }))
     reader.readAsDataURL(file)
@@ -3135,7 +3277,7 @@ function UpdatesAdminPage() {
         {videoMode === 'link' && <div className="update-video-field"><label htmlFor="update-video-url">Video URL</label><input id="update-video-url" type="url" value={videoUrl} onChange={(event) => setVideoUrl(event.target.value)} placeholder="https://youtu.be/... or https://vimeo.com/..." /><small>Use a supported YouTube or Vimeo video link.</small>{videoUrl && updateVideoEmbedUrl(videoUrl) && <UpdateVideoPlayer className="update-video-preview" source={videoUrl} title={title || 'Video preview'} />}</div>}
         <label className="update-feature-toggle"><input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />Feature this post in highlights</label>
         <label>Message<textarea value={body} onChange={(event) => setBody(event.target.value)} rows={8} placeholder="Write the update for your communities..." /></label>
-        <label className="update-image-picker">Add a picture <small>Optional</small><input type="file" accept="image/*" onChange={chooseImage} />{image && <img src={image} alt="Selected update preview" />}</label>
+        <label className="update-image-picker">Add a picture <small>Optional</small><ImageCropInput onImage={chooseImage} ariaLabel="Choose update image" />{image && <img src={image} alt="Selected update preview" />}</label>
         {error && !editingUpdate && <p className="form-error" role="alert">{error}</p>}
         {success && <p className="form-success" role="status" aria-live="polite">{success}</p>}
         <button className="button button-dark" type="submit" disabled={saving || !updatesReady}>{saving ? 'Saving…' : !updatesReady ? 'Loading…' : 'Publish update'} <ArrowUpRight size={15} /></button>
@@ -3166,7 +3308,7 @@ function UpdatesAdminPage() {
           {editDraft.videoMode === 'link' && <div className="update-video-field"><label htmlFor="edit-update-video-url">Video URL</label><input id="edit-update-video-url" type="url" value={editDraft.videoUrl} onChange={(event) => setEditDraft({ ...editDraft, videoUrl: event.target.value })} placeholder="https://youtu.be/... or https://vimeo.com/..." /><small>Use a supported YouTube or Vimeo video link.</small>{editDraft.videoUrl && updateVideoEmbedUrl(editDraft.videoUrl) && <UpdateVideoPlayer className="update-video-preview" source={editDraft.videoUrl} title={editDraft.title || 'Video preview'} />}</div>}
           <label className="update-feature-toggle"><input type="checkbox" checked={editDraft.featured} onChange={(event) => setEditDraft({ ...editDraft, featured: event.target.checked })} />Feature this post in highlights</label>
           <label>Message<textarea value={editDraft.body} onChange={(event) => setEditDraft({ ...editDraft, body: event.target.value })} rows={7} placeholder="Write the update for your communities..." required /></label>
-          <label className="update-image-picker">Picture <small>Optional</small><input type="file" accept="image/*" onChange={chooseEditImage} />{editDraft.image && <img src={editDraft.image} alt="Update image preview" />}</label>
+          <label className="update-image-picker">Picture <small>Optional</small><ImageCropInput onImage={chooseEditImage} ariaLabel="Choose update image" />{editDraft.image && <img src={editDraft.image} alt="Update image preview" />}</label>
           {editDraft.image && <button className="button button-outline update-edit-remove-image" type="button" onClick={() => setEditDraft({ ...editDraft, image: '' })}>Remove picture</button>}
           {error && <p className="form-error" role="alert">{error}</p>}
           <footer className="update-edit-actions"><button className="button button-outline" type="button" onClick={() => setEditingUpdate(null)} disabled={saving}>Cancel</button><button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'} <Check size={15} /></button></footer>
@@ -3464,10 +3606,8 @@ function ContentAdminPage() {
     void loadHomeSectionImages()
     return () => { active = false }
   }, [section])
-  function chooseImage(event: ChangeEvent<HTMLInputElement>, target: 'home' | 'monastery' | 'article' | 'contact', homeImageIndex?: number) {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (file.size > 2_000_000) { event.target.value = ''; setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
+  function chooseImage(file: File, target: 'home' | 'monastery' | 'article' | 'contact', homeImageIndex?: number) {
+    if (file.size > 2_000_000) { setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
     setSuccess('')
     if (target === 'home' || target === 'monastery' || target === 'contact') {
       void optimizeUploadedImage(file, target === 'home' ? 175_000 : undefined).then((value) => {
@@ -3492,10 +3632,8 @@ function ContentAdminPage() {
     }
     reader.readAsDataURL(file)
   }
-  function chooseAboutImage(event: ChangeEvent<HTMLInputElement>, key: keyof ManagedAboutImages) {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (file.size > 2_000_000) { event.target.value = ''; setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
+  function chooseAboutImage(file: File, key: keyof ManagedAboutImages) {
+    if (file.size > 2_000_000) { setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
     setSuccess('')
     void optimizeUploadedImage(file).then((value) => {
       updateAboutImage(key, value)
@@ -3505,10 +3643,8 @@ function ContentAdminPage() {
       setError(reason instanceof Error ? reason.message : 'The About Us image could not be optimized.')
     })
   }
-  function chooseHomeSectionImage(event: ChangeEvent<HTMLInputElement>, key: HomeSectionKey) {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (file.size > 2_000_000) { event.target.value = ''; setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
+  function chooseHomeSectionImage(file: File, key: HomeSectionKey) {
+    if (file.size > 2_000_000) { setError('This image exceeds the 2 MB upload limit. Choose a smaller image.'); return }
     setSuccess('')
     const reader = new FileReader()
     reader.onload = () => {
@@ -3785,7 +3921,7 @@ function ContentAdminPage() {
         <label>Federation photo caption<textarea required rows={3} value={aboutImages.assemblyCaption} onChange={(event) => updateAboutImage('assemblyCaption', event.target.value)} placeholder="Describe the Federation photo shown on About Us." /></label>
         {aboutImageFields.map(({ key, label, alt }) => <div className="about-image-editor-card" key={key}>
           <label>{label} image URL<input value={aboutImages[key].startsWith('data:') ? '' : aboutImages[key]} onChange={(event) => updateAboutImage(key, event.target.value)} placeholder="https://..." /></label>
-          <label className="content-image-picker">Upload or replace image<input type="file" accept="image/*" onChange={(event) => chooseAboutImage(event, key)} /><img src={aboutImages[key]} alt={alt} /><small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
+          <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseAboutImage(file, key)} ariaLabel={`Choose ${label} image`} /><img src={aboutImages[key]} alt={alt} /><small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
         </div>)}
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -3793,7 +3929,7 @@ function ContentAdminPage() {
     </form> : isContact ? <form className="admin-panel content-editor contact-details-editor" onSubmit={saveContactDetails}>
       <div className="panel-heading"><div><h2>Contact Us content</h2><p>Change the page image and update the phone, email, Facebook link, and location shown on the public website.</p></div></div>
       <label>Contact Us page image URL<input value={contactDetails.heroImage.startsWith('data:') ? '' : contactDetails.heroImage} onChange={(event) => updateContactDetails('heroImage', event.target.value)} placeholder="https://..." /></label>
-      <label className="content-image-picker">Upload or replace Contact Us page image<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'contact')} /><img src={contactDetails.heroImage} alt="Contact Us page image preview" /><small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
+      <label className="content-image-picker">Upload or replace Contact Us page image<ImageCropInput onImage={(file) => chooseImage(file, 'contact')} ariaLabel="Choose Contact Us page image" /><img src={contactDetails.heroImage} alt="Contact Us page image preview" /><small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
       <label>Phone number<input required value={contactDetails.phone} onChange={(event) => updateContactDetails('phone', event.target.value)} placeholder="0921 419 2267" /></label>
       <label>Email address<input required type="email" value={contactDetails.email} onChange={(event) => updateContactDetails('email', event.target.value)} placeholder="name@example.com" /></label>
       <label>Facebook link text<input required value={contactDetails.facebookLabel} onChange={(event) => updateContactDetails('facebookLabel', event.target.value)} placeholder="Carmels in Communion on Facebook" /></label>
@@ -3809,7 +3945,7 @@ function ContentAdminPage() {
         <label>City<input required value={monastery.city} onChange={(event) => updateMonastery('city', event.target.value)} placeholder="City or province" /></label>
         <label>Community details<textarea rows={3} value={monastery.description} onChange={(event) => updateMonastery('description', event.target.value)} placeholder="A short introduction to this community" /></label>
         <label>Image URL<input value={monastery.image.startsWith('data:') ? '' : monastery.image} onChange={(event) => updateMonastery('image', event.target.value)} placeholder="https://..." /></label>
-        <label className="content-image-picker">Upload image<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'monastery')} />{monastery.image && <img src={monasteryImageFor(monastery)} alt="Monastery preview" />}<small>Uploaded monastery images are optimized automatically for faster loading.</small></label>
+        <label className="content-image-picker">Upload image<ImageCropInput onImage={(file) => chooseImage(file, 'monastery')} ariaLabel="Choose monastery image" />{monastery.image && <img src={monasteryImageFor(monastery)} alt="Monastery preview" />}<small>Uploaded monastery images are optimized automatically for faster loading.</small></label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="content-editor-actions">
           <button className="button button-dark" type="submit" disabled={savingManagedContent}>{savingManagedContent ? 'Saving…' : editingMonastery ? 'Save changes' : 'Add monastery'}</button>
@@ -3920,7 +4056,7 @@ function ContentAdminPage() {
         </>}
         <label>Story<textarea required rows={7} value={article.body} onChange={(event) => updateArticle('body', event.target.value)} placeholder="Write the entry shown on the public page" /></label>
         <label>{isLife ? 'Story image URL' : 'Teaching image URL'}<input value={article.image.startsWith('data:') ? '' : article.image} onChange={(event) => updateArticle('image', event.target.value)} placeholder="https://..." /></label>
-        <label className="content-image-picker">{isLife ? 'Upload story image' : 'Upload teaching image'}<input type="file" accept="image/*" onChange={(event) => chooseImage(event, 'article')} />{article.image && <img src={articleImageFor(article.image, '')} alt="Entry image preview" />}</label>
+        <label className="content-image-picker">{isLife ? 'Upload story image' : 'Upload teaching image'}<ImageCropInput onImage={(file) => chooseImage(file, 'article')} ariaLabel={isLife ? 'Choose story image' : 'Choose teaching image'} />{article.image && <img src={articleImageFor(article.image, '')} alt="Entry image preview" />}</label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="content-editor-actions">
           <button className="button button-dark" type="submit" disabled={savingManagedContent}>{savingManagedContent ? 'Saving…' : editingArticle ? 'Save changes' : 'Publish entry'}</button>
@@ -3942,7 +4078,7 @@ function ContentAdminPage() {
       {homeHeroImages.map((image, index) => <div className="home-hero-image-card" key={`home-hero-image-${index}`}>
         <div className="home-hero-image-heading"><b>Image {index + 1}</b><button type="button" className="home-hero-image-remove" aria-label={`Remove homepage image ${index + 1}`} onClick={() => { setHomeHeroImages((current) => current.filter((_, currentIndex) => currentIndex !== index)); setSuccess(''); setError('') }}><X size={15} />Remove</button></div>
         <label>Image URL<input value={image.startsWith('data:') ? '' : image} onChange={(event) => { setHomeHeroImages((current) => current.map((currentImage, currentIndex) => currentIndex === index ? event.target.value : currentImage)); setSuccess(''); setError('') }} placeholder="https://..." /></label>
-        <label className="content-image-picker">Upload or replace image<input type="file" accept="image/*" onChange={(event) => void chooseImage(event, 'home', index)} />{image && <img src={image} alt={`Homepage image ${index + 1} preview`} />}<small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
+        <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseImage(file, 'home', index)} ariaLabel={`Choose homepage image ${index + 1}`} />{image && <img src={image} alt={`Homepage image ${index + 1} preview`} />}<small>Choose an image smaller than 2 MB; uploads are optimized automatically.</small></label>
       </div>)}
       <button type="button" className="button button-outline home-hero-image-add" disabled={savingImage || homeHeroImages.length >= 8} onClick={() => { setHomeHeroImages((current) => [...current, '']); setSuccess(''); setError('') }}><Plus size={15} />Add an image{homeHeroImages.length >= 8 ? ' (maximum reached)' : ''}</button>
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -3991,7 +4127,7 @@ function ContentAdminPage() {
           return <form className="home-thumbnail-card" key={card.key} onSubmit={(event) => { void saveHomeSectionImage(event, card.key) }}>
             <div className="home-thumbnail-heading"><h3>{card.sectionLabel}</h3><p>Card: {card.label}</p></div>
             <label>Image URL<input value={sectionImage.startsWith('data:') ? '' : sectionImage} onChange={(event) => { setHomeSectionImages((current) => ({ ...current, [card.key]: event.target.value })); setSuccess(''); setError('') }} placeholder="https://..." /></label>
-            <label className="content-image-picker">Or upload an image<input type="file" accept="image/*" onChange={(event) => chooseHomeSectionImage(event, card.key)} /><img src={sectionImage || card.image} alt={`${card.sectionLabel} thumbnail preview`} /></label>
+            <label className="content-image-picker">Or upload an image<ImageCropInput onImage={(file) => chooseHomeSectionImage(file, card.key)} ariaLabel={`Choose ${card.sectionLabel} thumbnail`} /><img src={sectionImage || card.image} alt={`${card.sectionLabel} thumbnail preview`} /></label>
             <button className="button button-dark" type="submit" disabled={!homeSectionImagesReady || savingSectionImage !== null}>{savingSectionImage === card.key ? 'Saving…' : `Save ${card.sectionLabel} thumbnail`}</button>
           </form>
         })}
@@ -4060,12 +4196,9 @@ function DonationAdminPage() {
     return () => { active = false }
   }, [])
 
-  async function selectProof(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
+  async function selectProof(file: File) {
     setError('')
     setSuccess('')
-    if (!file) return
     if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
       setError('Choose a JPG, PNG, WebP, or PDF proof file.')
       return
@@ -4174,7 +4307,7 @@ function DonationAdminPage() {
         <label>Email (optional)<input type="email" value={donorEmail} onChange={(event) => setDonorEmail(event.target.value)} maxLength={254} /></label>
         <label>Phone (optional)<input type="tel" value={donorPhone} onChange={(event) => setDonorPhone(event.target.value)} maxLength={30} /></label>
       </div>}
-      <label className="donation-proof-picker">Payment proof <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => void selectProof(event)} /><small>Optional · JPG, PNG, WebP, or PDF up to 5 MB</small></label>
+      <label className="donation-proof-picker">Payment proof <ImageCropInput accept="image/jpeg,image/png,image/webp,application/pdf" maxBytes={5 * 1024 * 1024} onImage={(file) => void selectProof(file)} ariaLabel="Choose payment proof" /><small>Optional · JPG, PNG, WebP, or PDF up to 5 MB</small></label>
       {proof && <div className="donation-proof-selected"><FileText size={16} /><span>{proof.fileName}<small>{(proof.fileUrl.length * 0.75 / 1024).toFixed(0)} KB</small></span><button type="button" aria-label="Remove payment proof" onClick={() => setProof(null)}><X size={15} /></button></div>}
       <footer className="donation-entry-actions"><button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Saving donation…' : 'Record donation'} <ArrowRight size={15} /></button></footer>
     </form> : <section className="admin-panel donation-transactions-panel">
@@ -5074,6 +5207,8 @@ function AdminPage() {
       const result = await readAuthResponse(response)
       if (!active) return
       if (response.ok && result.user && ['ADMIN', 'FORMATOR'].includes(result.user.role)) {
+        const role = result.user.role
+        if (role === 'ADMIN' || role === 'FORMATOR') saveServerSessionRole(role)
         setUser({ ...result.user, role: result.user.role as StaffRole, passwordHash: '' })
       } else if (response.status === 401) {
         setUser(null)
@@ -5096,6 +5231,7 @@ function AdminPage() {
 }
 function AppRoutes() {
   return <>
+    <SessionMonitor />
     <RouteMetadata />
     <Routes>
     <Route path="/" element={<PublicLayout><HomepageReference /></PublicLayout>} />
@@ -5124,5 +5260,53 @@ function AppRoutes() {
     <Route path="*" element={<PublicLayout><section className="content-page section-wrap"><h1>This page has <em>gone quiet.</em></h1><Link className="button button-dark" to="/">Return home <ArrowRight size={15} /></Link></section></PublicLayout>} />
     </Routes>
   </>
+}
+function SessionMonitor() {
+  const navigate = useNavigate()
+  const navigateRef = useRef(navigate)
+  const [notice, setNotice] = useState('')
+  useEffect(() => { navigateRef.current = navigate }, [navigate])
+  useEffect(() => {
+    let active = true
+    let checking = false
+    const checkSession = async () => {
+      if (checking || !localStorage.getItem(serverSessionRoleKey)) return
+      checking = true
+      try {
+        const response = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
+        if (!active) return
+        if (response.status === 401) {
+          const role = localStorage.getItem(serverSessionRoleKey)
+          if (!role) return
+          saveServerSessionRole(null)
+          saveMemberSession(null)
+          window.dispatchEvent(new Event(staffSessionUpdatedEvent))
+          setNotice('You were signed out because this account signed in on another device.')
+          navigateRef.current(role === 'USER' ? '/account/login' : '/staff/login', { replace: true })
+        } else if (!response.ok) {
+          console.error(`Session status check failed with HTTP ${response.status}; it will retry.`)
+        }
+      } catch (reason) {
+        console.warn('Session status check could not reach the account service; it will retry.', reason)
+      } finally {
+        checking = false
+      }
+    }
+    const timer = window.setInterval(() => void checkSession(), 3000)
+    const checkWhenVisible = () => { if (!document.hidden) void checkSession() }
+    document.addEventListener('visibilitychange', checkWhenVisible)
+    void checkSession()
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', checkWhenVisible)
+    }
+  }, [])
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(''), 8000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
+  return notice ? <div className="session-replaced-notice" role="alert">{notice}</div> : null
 }
 export default function CarmelApp() { return <BrowserRouter><AppRoutes /><PermissionConfirmationHost /></BrowserRouter> }
