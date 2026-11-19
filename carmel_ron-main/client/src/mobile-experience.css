@@ -2035,10 +2035,6 @@
     order: 0;
   }
 
-  .site-header .header-favorites {
-    order: 3;
-  }
-
   .site-header .member-profile-control,
   .site-header .header-actions > .button {
     order: 4;
@@ -2432,10 +2428,6 @@
   .site-header .mobile-menu {
     order: 3;
     margin-left: 0;
-  }
-
-  .site-header .header-favorites {
-    order: 2;
   }
 
   .site-header .mobile-search-trigger {

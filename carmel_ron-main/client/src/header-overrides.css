@@ -140,13 +140,6 @@
   opacity: 1;
 }
 
-.site-header .header-favorites {
-  width: 40px;
-  height: 42px;
-  color: #594b3f;
-}
-
-.site-header .header-favorites:hover,
 .site-header .search-bar:hover {
   color: #704214;
 }
@@ -249,14 +242,12 @@
     margin-left: 0;
   }
 
-  .site-header .search-bar,
-  .site-header .header-favorites {
+  .site-header .search-bar {
     width: 25px;
     height: 30px;
   }
 
-  .site-header .search-bar svg,
-  .site-header .header-favorites svg {
+  .site-header .search-bar svg {
     width: 13px;
     height: 13px;
   }
@@ -305,8 +296,7 @@
     margin-left: 0;
   }
 
-  .site-header .search-bar,
-  .site-header .header-favorites {
+  .site-header .search-bar {
     width: 36px;
     height: 42px;
   }
@@ -362,10 +352,6 @@
   .site-header .brand {
     gap: 7px;
     font-size: 13px;
-  }
-
-  .site-header .header-favorites {
-    display: none;
   }
 
   .site-header .header-actions > .button {

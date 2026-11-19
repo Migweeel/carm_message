@@ -932,7 +932,6 @@ function Navbar() {
         <div className="header-actions">
           <label className="search-bar" aria-label="Search this site"><Search size={19} /><input type="search" placeholder="Search..." aria-label="Search this site" /></label>
           <button className="mobile-search-trigger icon-button" type="button" aria-label="Search this site" onClick={() => { setMobileSearchQuery(''); setMobileSearchOpen(true) }}><Search size={19} /></button>
-          <Link className="header-favorites icon-button" to="/account/favorites" aria-label="Favorite teachings"><Heart size={19} /></Link>
           {profile ? <div className="member-profile-control">
             <button className="member-profile-trigger" type="button" aria-haspopup="menu" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)}>
               <i>{profile.name[0]?.toUpperCase()}</i><span>{profile.name}<small>{profile.role === 'USER' ? 'My profile' : profile.role === 'ADMIN' ? 'Administrator' : 'Staff'}</small></span><ChevronDown size={14} />
