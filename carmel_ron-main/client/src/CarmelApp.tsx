@@ -389,8 +389,10 @@ function CarmelightsReadingDialog({ reading, fullView, onToggleFullView, onClose
   return <div className={`carmelights-reading-backdrop ${fullView ? 'carmelights-reading-backdrop-full-view' : ''}`} role="presentation" onClick={onClose}>
     <article className={`carmelights-reading-dialog ${fullView ? 'carmelights-reading-dialog-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={reading.title} onClick={(event) => event.stopPropagation()}>
       <button className="carmelights-reading-close" type="button" onClick={onClose} aria-label="Close quote"><X size={20} /></button>
+      <div className="carmelights-reading-hero">
+        <img className="carmelights-reading-image" src={articleImageFor(reading.image, photo.chapel)} alt={reading.title} />
+      </div>
       <button className="button button-outline story-full-view-toggle" type="button" onClick={onToggleFullView}>{fullView ? 'Return to quote preview' : 'Read quote in full view'} <Maximize2 size={15} /></button>
-      <img className="carmelights-reading-image" src={articleImageFor(reading.image, photo.chapel)} alt={reading.title} />
       <span className="carmelights-category-tag">{reading.category || 'Prayer'}</span>
       <span className="carmelights-reading-eyebrow">SAINTS’ QUOTE</span>
       <h2>{reading.title}</h2>
