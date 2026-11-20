@@ -383,6 +383,8 @@
 
 .auth-social-login {
   display: grid;
+  width: 100%;
+  min-width: 0;
   justify-items: center;
   gap: 12px;
   margin: 0 0 20px;
@@ -391,6 +393,7 @@
 .auth-google-button {
   display: flex;
   width: 100%;
+  min-width: 0;
   max-width: 100%;
   justify-content: center;
 }
