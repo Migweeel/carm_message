@@ -124,11 +124,14 @@ const backupEnumColumns: Record<string, Record<string, string>> = {
 app.disable('x-powered-by')
 app.set('trust proxy', 1)
 app.use(helmet({
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   contentSecurityPolicy: {
     directives: {
+      connectSrc: ["'self'", 'https://accounts.google.com/gsi/'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https://images.unsplash.com'],
       mediaSrc: ["'self'", 'data:'],
-      frameSrc: ["'self'", 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'],
+      frameSrc: ["'self'", 'https://www.youtube-nocookie.com', 'https://player.vimeo.com', 'https://accounts.google.com/gsi/'],
+      scriptSrc: ["'self'", 'https://accounts.google.com/gsi/client'],
     },
   },
 }))
