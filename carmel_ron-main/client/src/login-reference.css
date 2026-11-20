@@ -15,8 +15,8 @@
 }
 
 .member-auth-signup-page .auth-reference-art {
-  align-self: start;
-  height: 100svh;
+  align-self: stretch;
+  height: auto;
   min-height: 100svh;
 }
 
