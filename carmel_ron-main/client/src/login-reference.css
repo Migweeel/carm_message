@@ -78,6 +78,10 @@
   font-weight: 600;
 }
 
+.auth-reference-brand .brand-name {
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+
 .auth-reference-brand .brand-mark {
   width: 26px;
   height: 30px;
@@ -92,6 +96,7 @@
   max-width: none;
   padding: 0;
   object-fit: fill;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
 }
 
 .auth-reference-art > p {
