@@ -22,11 +22,11 @@
 
 .member-auth-signup-page .member-address-input {
   padding: 12px 16px 0;
-  text-align: center;
+  text-align: left;
 }
 
 .member-auth-signup-page .member-address-input::placeholder {
-  text-align: center;
+  text-align: left;
 }
 
 .member-auth-reset-page {

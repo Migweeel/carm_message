@@ -546,6 +546,12 @@ async function sendRegistrationVerificationEmail(email: string, code: string) {
     html: `<p>Your Carmels in Communion verification code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:8px">${code}</p><p>Enter this six-digit code to complete your account registration. It expires in 10 minutes.</p><p>If you did not request this, you can ignore this email.</p>`,
   })
 }
+function registrationEmailDeliveryErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.includes('only send testing emails to your own email address')) {
+    return 'Email verification is not enabled for public signups yet. The sending domain must be verified in Resend.'
+  }
+  return 'We could not send a verification code right now. Please try again later.'
+}
 app.post('/api/auth/register', registrationEmailRateLimit, asyncRoute(async (req, res) => {
   const parsed = validate(registerSchema, req.body)
   if (parsed.error) return res.status(400).json({ error: 'Please check the form fields.', details: parsed.error })
@@ -609,7 +615,7 @@ app.post('/api/auth/register', registrationEmailRateLimit, asyncRoute(async (req
   } catch (error) {
     console.error('Registration verification email delivery failed:', error instanceof Error ? error.message : 'Unknown error')
     await prisma.registrationVerification.deleteMany({ where: { id: verification.id, codeHash } })
-    return res.status(503).json({ error: 'We could not send a verification code right now. Please try again later.' })
+    return res.status(503).json({ error: registrationEmailDeliveryErrorMessage(error) })
   }
   return res.status(202).json({ verificationRequired: true, email: input.email, resendAfterSeconds: registrationCodeResendDelayMs / 1000 })
 }))
@@ -647,7 +653,7 @@ app.post('/api/auth/register/resend', registrationEmailRateLimit, asyncRoute(asy
   } catch (error) {
     console.error('Registration verification email delivery failed:', error instanceof Error ? error.message : 'Unknown error')
     await prisma.registrationVerification.deleteMany({ where: { id: verification.id, codeHash } })
-    return res.status(503).json({ error: 'We could not send a verification code right now. Please try again later.' })
+    return res.status(503).json({ error: registrationEmailDeliveryErrorMessage(error) })
   }
   return res.json({ message: 'A new verification code was sent.', resendAfterSeconds: registrationCodeResendDelayMs / 1000 })
 }))

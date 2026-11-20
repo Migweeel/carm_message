@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, RotateCw, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
@@ -1712,12 +1712,26 @@ function CarmelifePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [fullView, setFullView] = useState(false)
   const [quoteIndex, setQuoteIndex] = useState(0)
+  const quoteTouchStart = useRef<{ x: number; y: number } | null>(null)
   const selected = articles.find((article) => article.id === selectedId)
   const featuredArticles = articles.slice(0, 6)
   const quote = vocationQuotes[quoteIndex]
   function closeStory() { setSelectedId(null); setFullView(false) }
   function changeQuote(direction: number) {
     setQuoteIndex((index) => (index + direction + vocationQuotes.length) % vocationQuotes.length)
+  }
+  function startQuoteSwipe(event: ReactTouchEvent<HTMLElement>) {
+    const touch = event.touches[0]
+    quoteTouchStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null
+  }
+  function endQuoteSwipe(event: ReactTouchEvent<HTMLElement>) {
+    const start = quoteTouchStart.current
+    const touch = event.changedTouches[0]
+    quoteTouchStart.current = null
+    if (!start || !touch) return
+    const deltaX = touch.clientX - start.x
+    const deltaY = touch.clientY - start.y
+    if (Math.abs(deltaX) > 48 && Math.abs(deltaX) > Math.abs(deltaY)) changeQuote(deltaX < 0 ? 1 : -1)
   }
   return <div className="carmelife-page">
     <section className="life-hero">
@@ -1766,9 +1780,9 @@ function CarmelifePage() {
       </div>
     </section>
 
-    <section className="life-slider-quote" aria-label="Vocation quotes">
+    <section className="life-slider-quote" aria-label="Vocation quotes" onTouchStart={startQuoteSwipe} onTouchEnd={endQuoteSwipe} onTouchCancel={() => { quoteTouchStart.current = null }}>
       <button type="button" onClick={() => changeQuote(-1)} aria-label="Previous quote">&lsaquo;</button>
-      <div><blockquote>{quote.quote}</blockquote><cite>{quote.attribution}<br />{quote.source}</cite></div>
+      <div className="life-slider-quote-content" aria-live="polite" aria-atomic="true"><blockquote>{quote.quote}</blockquote><cite>{quote.attribution}<br />{quote.source}</cite><div className="life-slider-quote-dots" role="group" aria-label="Choose a vocation quote">{vocationQuotes.map((item, index) => <button key={item.attribution} type="button" className={index === quoteIndex ? 'is-active' : ''} aria-label={`Show quote ${index + 1}`} aria-pressed={index === quoteIndex} onClick={() => setQuoteIndex(index)} />)}</div></div>
       <button type="button" onClick={() => changeQuote(1)} aria-label="Next quote">&rsaquo;</button>
     </section>
 

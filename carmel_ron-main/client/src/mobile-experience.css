@@ -2435,3 +2435,278 @@
     margin-left: auto;
   }
 }
+
+@media (max-width: 900px) {
+  .carmelife-page .life-slider-quote {
+    gap: 16px;
+    padding: 28px 20px;
+    touch-action: pan-y;
+  }
+
+  .carmelife-page .life-slider-quote > button {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    font-size: 24px;
+  }
+
+  .carmelife-page .life-slider-quote-content {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .carmelife-page .life-slider-quote blockquote {
+    font-size: clamp(16px, 2.4vw, 22px);
+    line-height: 1.45;
+  }
+
+  .carmelife-page .life-slider-quote cite {
+    margin-top: 10px;
+    font-size: 9px;
+    line-height: 1.5;
+  }
+
+  .carmelife-page .life-slider-quote-dots {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 10px;
+  }
+
+  .carmelife-page .life-slider-quote-dots button {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .carmelife-page .life-slider-quote-dots button::before {
+    display: block;
+    width: 7px;
+    height: 7px;
+    margin: auto;
+    border-radius: 999px;
+    background: #c8b8a9;
+    content: "";
+    transition: width 180ms ease, background-color 180ms ease;
+  }
+
+  .carmelife-page .life-slider-quote-dots button.is-active::before {
+    width: 16px;
+    background: var(--life-gold);
+  }
+
+  .reference-home .reference-carousel {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+
+  .reference-home .reference-carousel > button {
+    display: none;
+  }
+
+  .reference-home .reference-cards {
+    width: 100%;
+    flex: 1 1 100%;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .reference-home .reference-cards::-webkit-scrollbar {
+    display: none;
+  }
+
+  .reference-home .reference-card {
+    scroll-snap-align: start;
+  }
+
+  .reference-home .reference-carousel-dots {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    margin-top: 2px;
+  }
+
+  .reference-home .reference-carousel-dot {
+    display: grid;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .reference-home .reference-carousel-dot::before {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #c8b8a9;
+    content: "";
+    transition: width 180ms ease, background-color 180ms ease;
+  }
+
+  .reference-home .reference-carousel-dot[aria-current="true"]::before {
+    width: 16px;
+    background: #704214;
+  }
+
+  .reference-home .reference-carousel-dot:focus-visible,
+  .carmelife-page .life-slider-quote-dots button:focus-visible {
+    outline: 2px solid #704214;
+    outline-offset: 1px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 900px) {
+  .site-footer {
+    padding: 28px 24px 14px;
+  }
+
+  .footer-main {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, .8fr) minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: 18px;
+    padding-bottom: 22px;
+  }
+
+  .footer-about p {
+    margin-top: 10px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .footer-main h3 {
+    margin-bottom: 8px;
+    font-size: 9px;
+  }
+
+  .footer-main a:not(.brand),
+  .footer-main p {
+    overflow-wrap: anywhere;
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .footer-bottom {
+    gap: 12px;
+    font-size: 8px;
+  }
+
+  .reference-home .reference-cards {
+    gap: 14px;
+    margin-inline: -20px;
+    padding: 4px 20px 12px;
+    scroll-padding-inline: 20px;
+  }
+
+  .reference-home .reference-card {
+    flex-basis: min(41vw, 300px);
+    height: 248px;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-footer {
+    padding: 22px 14px 12px;
+  }
+
+  .footer-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 14px;
+    padding-bottom: 14px;
+  }
+
+  .footer-about,
+  .footer-main > div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .footer-about p {
+    max-width: 340px;
+    margin-top: 8px;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .footer-main h3 {
+    margin: 0 0 6px;
+    font-size: 9px;
+  }
+
+  .footer-main a:not(.brand),
+  .footer-main p {
+    overflow-wrap: anywhere;
+    font-size: 10px;
+    line-height: 1.4;
+  }
+
+  .footer-main a:not(.brand) {
+    margin: 5px 0;
+  }
+
+  .footer-bottom {
+    flex-direction: column;
+    gap: 5px;
+    padding-top: 10px;
+    font-size: 8px;
+    line-height: 1.4;
+  }
+
+  .carmelife-page .life-slider-quote {
+    gap: 0;
+    padding: 18px 14px;
+  }
+
+  .carmelife-page .life-slider-quote > button {
+    display: none;
+  }
+
+  .carmelife-page .life-slider-quote-content {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .carmelife-page .life-slider-quote blockquote {
+    font-size: 16px;
+    line-height: 1.4;
+  }
+
+  .carmelife-page .life-slider-quote cite {
+    margin-top: 8px;
+    font-size: 8px;
+  }
+
+  .carmelife-page .life-slider-quote-dots {
+    margin-top: 6px;
+  }
+
+  .reference-home .reference-cards {
+    gap: 12px;
+    margin-inline: -12px;
+    padding: 2px 12px 10px;
+    scroll-padding-inline: 12px;
+  }
+
+  .reference-home .reference-card {
+    flex-basis: min(82vw, 320px);
+    height: 220px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reference-home .reference-carousel-dot::before,
+  .carmelife-page .life-slider-quote-dots button::before {
+    transition: none;
+  }
+}
+@media (min-width: 901px) {
+  .reference-home .reference-carousel-dots,
+  .carmelife-page .life-slider-quote-dots {
+    display: none;
+  }
+}

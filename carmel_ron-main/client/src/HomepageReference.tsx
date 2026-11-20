@@ -12,6 +12,7 @@ export default function HomepageReference() {
   const cards = useRef<HTMLDivElement>(null)
   const [heroImages, setHeroImages] = useState(readCachedHomepageHeroImages)
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
+  const [activeCardIndex, setActiveCardIndex] = useState(0)
   const [sectionImages, setSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>(() => {
     try {
       return JSON.parse(localStorage.getItem('carmel-home-section-images-v2') || '{}') as Partial<Record<HomeSectionKey, string>>
@@ -23,6 +24,34 @@ export default function HomepageReference() {
 
   function scrollCards(direction: number) {
     cards.current?.scrollBy({ left: direction * 280, behavior: 'smooth' })
+  }
+
+  function scrollToCard(index: number) {
+    const container = cards.current
+    const card = container?.children.item(index)
+    if (!container || !(card instanceof HTMLElement)) return
+
+    const containerLeft = container.getBoundingClientRect().left + container.clientLeft
+    const targetLeft = container.scrollLeft + card.getBoundingClientRect().left - containerLeft
+    container.scrollTo({ left: targetLeft, behavior: 'smooth' })
+  }
+
+  function updateActiveCard() {
+    const container = cards.current
+    if (!container) return
+
+    const containerLeft = container.getBoundingClientRect().left + container.clientLeft
+    let closestIndex = 0
+    let closestDistance = Number.POSITIVE_INFINITY
+    Array.from(container.children).forEach((card, index) => {
+      if (!(card instanceof HTMLElement)) return
+      const distance = Math.abs(card.getBoundingClientRect().left - containerLeft)
+      if (distance < closestDistance) {
+        closestIndex = index
+        closestDistance = distance
+      }
+    })
+    setActiveCardIndex((current) => current === closestIndex ? current : closestIndex)
   }
 
   const activeHeroImage = heroImages[activeHeroIndex] || homepageHeroImageFallback
@@ -113,7 +142,7 @@ export default function HomepageReference() {
     </section>
     <section className="reference-ticker"><strong>Philippine Federation of Discalced Carmelite Nuns</strong><div className="reference-ticker-window"><div className="reference-ticker-track">{cities.map((city) => <span key={city}>{city}<i>·</i></span>)}{cities.map((city) => <span key={`duplicate-${city}`} aria-hidden="true">{city}<i>·</i></span>)}</div></div></section>
     <section className="reference-discernment"><img src="/assets/images/whiteflowers.jpg" alt="White flowers in a garden" loading="lazy" decoding="async" /><div><h2>Is <b>GOD</b> calling you to be a<br /> Discalced Carmelite Nun?</h2><p>Are you discerning if God is calling you to Carmel? Let us assist you in your discernment as you explore the pages of this site.</p><Link className="reference-primary" to="/monasteries">Meet Our Monasteries</Link></div></section>
-    <section className="reference-explore" id="home-explore"><div className="reference-explore-heading"><div><p className="reference-kicker">FIND YOUR WAY IN</p><h2>Explore</h2></div><p>Learn about our charism, communities, and the women who have found a home in Carmel.</p></div><div className="reference-carousel"><button type="button" onClick={() => scrollCards(-1)} aria-label="Scroll left"><ArrowLeft size={18} /></button><div className="reference-cards" ref={cards}>{homeSectionCards.map(({ key, label, title, to, image }) => <Link className="reference-card" key={key} to={to}><img src={sectionImages[key] || image} alt="" loading="lazy" decoding="async" /><span>{label}</span><div><h3>{title}</h3><b>Learn More <ArrowRight size={14} /></b></div></Link>)}</div><button type="button" onClick={() => scrollCards(1)} aria-label="Scroll right"><ArrowRight size={18} /></button></div></section>
+    <section className="reference-explore" id="home-explore"><div className="reference-explore-heading"><div><p className="reference-kicker">FIND YOUR WAY IN</p><h2>Explore</h2></div><p>Learn about our charism, communities, and the women who have found a home in Carmel.</p></div><div className="reference-carousel"><button type="button" onClick={() => scrollCards(-1)} aria-label="Scroll left"><ArrowLeft size={18} /></button><div className="reference-cards" ref={cards} onScroll={updateActiveCard}>{homeSectionCards.map(({ key, label, title, to, image }) => <Link className="reference-card" key={key} to={to}><img src={sectionImages[key] || image} alt="" loading="lazy" decoding="async" /><span>{label}</span><div><h3>{title}</h3><b>Learn More <ArrowRight size={14} /></b></div></Link>)}</div><button type="button" onClick={() => scrollCards(1)} aria-label="Scroll right"><ArrowRight size={18} /></button></div><div className="reference-carousel-dots" role="group" aria-label="Explore categories">{homeSectionCards.map(({ key, label }, index) => <button key={key} type="button" className={index === activeCardIndex ? 'reference-carousel-dot is-active' : 'reference-carousel-dot'} aria-label={`Go to ${label.toLowerCase()} slide`} aria-current={index === activeCardIndex ? 'true' : undefined} onClick={() => scrollToCard(index)} />)}</div></section>
     <section className="reference-quote"><img src="/assets/images/pinkflower.jpg" alt="Pink flower" loading="lazy" decoding="async" /><div><p>Carmel symbolizes prayer. More than a geographical place, it is a sacred space in the cloister of the heart where the Carmelite nun encounters God.</p><Link className="reference-secondary" to="/contact">Contact us</Link></div></section>
   </div>
 }
