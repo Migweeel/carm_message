@@ -72,6 +72,7 @@ model User {
   gender       Gender      @default(ANONYMOUS)
   phone        String      @default("")
   address      String      @default("")
+  avatarImage  String?     @db.Text
   privacyConsentAt      DateTime?
   privacyPolicyVersion  String?
   passwordHash String

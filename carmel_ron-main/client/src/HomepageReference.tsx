@@ -136,7 +136,7 @@ export default function HomepageReference({ useLocalImageCache = false }: { useL
       window.removeEventListener('carmel-home-section-images-updated', loadSectionImages)
       window.removeEventListener('focus', loadSectionImages)
     }
-  }, [])
+  }, [useLocalImageCache])
 
   return <div className="reference-home">
     <section className="reference-hero" id="home">

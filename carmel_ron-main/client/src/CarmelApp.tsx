@@ -27,6 +27,7 @@ import './donation-payment.css'
 import './discernment-reference.css'
 import './carmelights-reference.css'
 import './mobile-experience.css'
+import './member-profile-avatar.css'
 import HomepageReference from './HomepageReference'
 import { homeSectionCards, type HomeSectionKey } from './home-section-cards'
 import { cacheHomepageHeroImages, getHomepageHeroImages, readCachedHomepageHeroImages } from './homepage-hero-images'
@@ -728,7 +729,7 @@ const memberSessionUpdatedEvent = 'carmel-member-session-updated'
 const directThreadsUpdatedEvent = 'carmel-direct-threads-updated'
 const adminMessagesReadEvent = 'carmel-admin-messages-read'
 type MemberGender = 'MALE' | 'FEMALE' | 'ANONYMOUS'
-type MemberAccount = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: 'USER'; prototype?: boolean; demo?: true }
+type MemberAccount = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; avatarImage?: string | null; role: 'USER'; prototype?: boolean; demo?: true }
 function useMemberFavorites(member: MemberAccount | null) {
   const [favorites, setFavorites] = useState<string[]>([])
   const [loading, setLoading] = useState(Boolean(member))
@@ -2307,7 +2308,7 @@ type AuthApiResponse = {
   resendAfterSeconds?: number
   verificationRequired?: boolean
   verified?: boolean
-  user?: { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: string; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
+  user?: { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; avatarImage?: string | null; role: string; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
 }
 async function readAuthResponse(response: Response): Promise<AuthApiResponse> {
   const retryAfter = Number(response.headers.get('Retry-After'))
@@ -2456,7 +2457,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       }
       if (!result.user || result.user.role !== 'USER') throw new Error('Staff accounts use the Federation staff sign-in page.')
       saveServerSessionRole(result.user.role)
-      saveMemberSession({ id: result.user.id, name: result.user.name, email: result.user.email, gender: result.user.gender || gender, phone: result.user.phone, address: result.user.address, role: 'USER' })
+      saveMemberSession({ id: result.user.id, name: result.user.name, email: result.user.email, gender: result.user.gender || gender, phone: result.user.phone, address: result.user.address, avatarImage: result.user.avatarImage, role: 'USER' })
       navigate('/', { replace: true })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to connect to the account service.')
@@ -2688,36 +2689,95 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
   const [gender, setGender] = useState<MemberGender>(member.gender || 'ANONYMOUS')
   const [phone, setPhone] = useState(member.phone || '')
   const [address, setAddress] = useState(member.address || '')
+  const [avatarImageOverride, setAvatarImageOverride] = useState<string | undefined>()
+  const avatarImage = avatarImageOverride ?? member.avatarImage ?? ''
+  const [avatarLoading, setAvatarLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  function chooseAvatar(file: File) {
+    if (!file.type.startsWith('image/')) {
+      setError('Choose an image file for your profile photo.')
+      return
+    }
+    const reader = new FileReader()
+    setAvatarLoading(true)
+    setError('')
+    reader.onload = () => {
+      const image = typeof reader.result === 'string' ? reader.result : ''
+      if (!image.startsWith('data:image/jpeg;base64,')) {
+        setError('The selected profile photo could not be read.')
+      } else {
+        setAvatarImageOverride(image)
+        setSaved(false)
+      }
+      setAvatarLoading(false)
+    }
+    reader.onerror = () => {
+      setError('The selected profile photo could not be read.')
+      setAvatarLoading(false)
+    }
+    reader.readAsDataURL(file)
+  }
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
     setSaved(false)
+    if (avatarLoading || saving) return
+    setSaving(true)
     const normalizedEmail = email.trim().toLowerCase()
     const normalizedPhone = phone.trim()
     const normalizedAddress = address.trim()
     try {
       if (name.trim().length < 2 || !normalizedEmail.includes('@') || normalizedPhone.length < 7 || normalizedPhone.length > 30 || normalizedAddress.length < 5 || normalizedAddress.length > 300) throw new Error('Enter a valid name, email, contact number, and address.')
       if (member.prototype) {
-        const updated: MemberAccount = { ...member, name: name.trim(), email: normalizedEmail, gender, phone: normalizedPhone, address: normalizedAddress }
+        const updated: MemberAccount = { ...member, name: name.trim(), email: normalizedEmail, gender, phone: normalizedPhone, address: normalizedAddress, avatarImage: avatarImage || null }
         moveMemberData(member.email, updated.email)
         saveMemberSession(updated)
         onUpdated(updated)
         setSaved(true)
         return
       }
-      const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), email: normalizedEmail, gender, phone: normalizedPhone, address: normalizedAddress }) })
+      const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), email: normalizedEmail, gender, phone: normalizedPhone, address: normalizedAddress, avatarImage: avatarImage || null }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Unable to update your profile.')
-      const updated: MemberAccount = { ...member, name: result.user.name, email: result.user.email, gender: result.user.gender, phone: result.user.phone, address: result.user.address }
+      const updated: MemberAccount = { ...member, name: result.user.name, email: result.user.email, gender: result.user.gender, phone: result.user.phone, address: result.user.address, avatarImage: result.user.avatarImage }
       moveMemberData(member.email, updated.email)
       saveMemberSession(updated)
       onUpdated(updated)
       setSaved(true)
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to update your profile.') }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to update your profile.')
+    } finally {
+      setSaving(false)
+    }
   }
-  return <form className="member-account-form member-profile-form" onSubmit={save}><div className="member-section-heading"><span className="eyebrow">YOUR ACCOUNT</span><h2>Profile details</h2><p>Keep your contact details current for messages from the Federation.</p></div><label>Full name<input required minLength={2} maxLength={100} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /></label><label>Gender<select value={gender} onChange={(event) => setGender(parseMemberGender(event.target.value))}><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="ANONYMOUS">Anonymous</option></select></label><label>Contact number<input required type="tel" minLength={7} maxLength={30} autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="e.g. +63 912 345 6789" /></label><label>Email address<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Address<textarea required minLength={5} maxLength={300} rows={3} autoComplete="street-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Your complete address" /></label><div className="member-account-form-actions">{error && <p className="form-error" role="alert">{error}</p>}{saved && <p className="member-success form-success" role="status" aria-live="polite">Profile details updated successfully.</p>}<button className="button button-dark" type="submit">Save profile</button></div></form>
+  return <form className="member-account-form member-profile-form" onSubmit={save}>
+    <div className="member-section-heading"><span className="eyebrow">YOUR ACCOUNT</span><h2>Profile details</h2><p>Keep your contact details current for messages from the Federation.</p></div>
+    <label>Full name<input required minLength={2} maxLength={100} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /></label>
+    <label>Gender<select value={gender} onChange={(event) => setGender(parseMemberGender(event.target.value))}><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="ANONYMOUS">Anonymous</option></select></label>
+    <label>Contact number<input required type="tel" minLength={7} maxLength={30} autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="e.g. +63 912 345 6789" /></label>
+    <label>Email address<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+    <label>Address<textarea required minLength={5} maxLength={300} rows={3} autoComplete="street-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Your complete address" /></label>
+    <section className="member-profile-avatar-editor" aria-labelledby="member-profile-avatar-title">
+      <div className="member-profile-avatar-preview">
+        {avatarImage ? <img src={avatarImage} alt="" /> : <User size={26} aria-hidden="true" />}
+      </div>
+      <div className="member-profile-avatar-content">
+        <h3 id="member-profile-avatar-title">Profile photo</h3>
+        <p>Upload a photo, then crop, resize, or adjust it before saving your profile.</p>
+        <div className="member-profile-avatar-controls">
+          <ImageCropInput onImage={chooseAvatar} currentImage={avatarImage || undefined} ariaLabel="Upload profile photo" maxBytes={1_000_000} />
+          {avatarImage && <button className="member-profile-avatar-remove" type="button" onClick={() => { setAvatarImageOverride(''); setSaved(false) }}>Remove photo</button>}
+        </div>
+      </div>
+    </section>
+    <div className="member-account-form-actions">
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {saved && <p className="member-success form-success" role="status" aria-live="polite">Profile details updated successfully.</p>}
+      <button className="button button-dark" type="submit" disabled={saving || avatarLoading}>{saving ? 'Saving…' : avatarLoading ? 'Preparing photo…' : 'Save profile'}</button>
+    </div>
+  </form>
 }
 
 function DiscernmentStageProgress({ stage, compact = false, label = 'Your discernment stages', updatedAt }: { stage: DiscernmentStage; compact?: boolean; label?: string; updatedAt?: string }) {
@@ -3150,7 +3210,7 @@ function MemberAccountPage() {
     { id: 'recommendations', label: 'Recommended for You', icon: BookOpen, path: '/account/recommendations' },
   ]
   function signOut() { saveServerSessionRole(null); saveMemberSession(null); if (!isDemoMember) requestServerLogout(); navigate('/') }
-  return <section className="member-account-page"><div className="member-account-shell"><aside className="member-account-sidebar"><div className="member-account-identity"><span className="member-account-avatar">{member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><b>{member.name}</b><small>{member.email}</small><Link className="member-edit-profile" to="/account"><Pencil size={13} /> Edit profile</Link></div><nav aria-label="Your account">{tabs.map(({ id, label, icon: Icon, path }) => <NavLink key={id} to={path} end={id === 'profile'} className={({ isActive }) => isActive || section === id ? 'active' : ''}><Icon size={16} />{label}</NavLink>)}</nav><button className="member-signout" type="button" onClick={signOut}><LogOut size={15} />Sign out</button></aside><main className="member-account-main">{sessionWarning && <p className="form-error" role="status">{sessionWarning}</p>}{section === 'profile' && <><MemberProfileDetails key={member.email} member={member} onUpdated={setMember} /><MemberDiscernmentSummary key={`discernment-${member.email}`} member={member} /></>}{section === 'donations' && <MemberDonationsView member={member} />}{section === 'discernment' && <MemberDiscernmentView key={member.email} member={member} />}{section === 'security' && <MemberSecurityView member={member} />}{section === 'messages' && <MemberMessagesView member={member} />}{section === 'favorites' && <MemberFavoritesView member={member} />}{section === 'recommendations' && <MemberRecommendationsView />}</main></div></section>
+  return <section className="member-account-page"><div className="member-account-shell"><aside className="member-account-sidebar"><div className="member-account-identity"><span className="member-account-avatar">{member.avatarImage ? <img src={member.avatarImage} alt="" /> : member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><b>{member.name}</b><small>{member.email}</small><Link className="member-edit-profile" to="/account"><Pencil size={13} /> Edit profile</Link></div><nav aria-label="Your account">{tabs.map(({ id, label, icon: Icon, path }) => <NavLink key={id} to={path} end={id === 'profile'} className={({ isActive }) => isActive || section === id ? 'active' : ''}><Icon size={16} />{label}</NavLink>)}</nav><button className="member-signout" type="button" onClick={signOut}><LogOut size={15} />Sign out</button></aside><main className="member-account-main">{sessionWarning && <p className="form-error" role="status">{sessionWarning}</p>}{section === 'profile' && <><MemberProfileDetails key={member.email} member={member} onUpdated={setMember} /><MemberDiscernmentSummary key={`discernment-${member.email}`} member={member} /></>}{section === 'donations' && <MemberDonationsView member={member} />}{section === 'discernment' && <MemberDiscernmentView key={member.email} member={member} />}{section === 'security' && <MemberSecurityView member={member} />}{section === 'messages' && <MemberMessagesView member={member} />}{section === 'favorites' && <MemberFavoritesView member={member} />}{section === 'recommendations' && <MemberRecommendationsView />}</main></div></section>
 }
 
 const conversations = [{ name: 'Maria Santos', email: 'maria.santos@email.com', subject: 'Monthly offering receipt', text: 'Thank you for confirming my contribution…', time: '10:42 AM', type: 'Donation', unread: true, color: 'rose' }, { name: 'Ana Reyes', email: 'ana.reyes@email.com', subject: 'Discernment and visits', text: 'I have been thinking about visiting…', time: 'Yesterday', type: 'Discerner', unread: true, color: 'gold' }, { name: 'John Dela Cruz', email: 'john.dc@email.com', subject: 'Bank transfer question', text: 'Could you help me verify a transfer?', time: 'Sep 25', type: 'Donation', unread: false, color: 'green' }, { name: 'Rosa Villanueva', email: 'rosa.v@email.com', subject: 'A note to the sisters', text: 'Please include our family in your prayers…', time: 'Sep 24', type: 'General', unread: false, color: 'blue' }]

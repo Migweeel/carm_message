@@ -740,7 +740,7 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
     }
     const token = jwt.sign({ id: user.id, role: user.role, sessionVersion: sessionUser.sessionVersion }, jwtSecret, { expiresIn: '8h' })
     res.cookie('carmel_session', token, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 })
-    return res.json({ user: { id: user.id, name: user.name, email: user.email, gender: user.gender, phone: user.phone, address: user.address, role: user.role, canManageUsers: user.canManageUsers, canManageDetails: user.canManageDetails, canManageUpdates: user.canManageUpdates } })
+    return res.json({ user: { id: user.id, name: user.name, email: user.email, gender: user.gender, phone: user.phone, address: user.address, avatarImage: user.avatarImage, role: user.role, canManageUsers: user.canManageUsers, canManageDetails: user.canManageDetails, canManageUpdates: user.canManageUpdates } })
   }
   return res.status(401).json({ error: 'Email or password is incorrect.' })
 }))
@@ -826,7 +826,7 @@ app.post('/api/auth/logout', asyncRoute(async (req, res) => {
   res.status(204).end()
 }))
 app.get('/api/auth/me', authenticate, asyncRoute(async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.auth!.id }, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, role: true, isActive: true, canManageUsers: true, canManageDetails: true, canManageUpdates: true } })
+  const user = await prisma.user.findUnique({ where: { id: req.auth!.id }, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, avatarImage: true, role: true, isActive: true, canManageUsers: true, canManageDetails: true, canManageUpdates: true } })
   if (!user?.isActive) return res.status(401).json({ error: 'This account is inactive.' })
   res.json({ user })
 }))
@@ -836,6 +836,7 @@ const profileUpdateSchema = z.object({
   gender: z.enum(['MALE', 'FEMALE', 'ANONYMOUS']).optional(),
   phone: z.string().trim().min(7).max(30).optional(),
   address: z.string().trim().min(5).max(300).optional(),
+  avatarImage: z.string().max(1_400_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/).nullable().optional(),
   currentPassword: z.string().optional(),
   newPassword: z.string().min(10).max(128).optional(),
 }).refine((input) => !input.newPassword || Boolean(input.currentPassword), { message: 'Enter your current password to set a new password.', path: ['currentPassword'] })
@@ -843,26 +844,28 @@ app.patch('/api/auth/me', authenticate, allowRoles('ADMIN', 'FORMATOR', 'USER'),
   const parsed = validate(profileUpdateSchema, req.body)
   if (parsed.error) return res.status(400).json({ error: 'Please check the profile fields.', details: parsed.error })
   const input = parsed.data!
-  const currentUser = await prisma.user.findUnique({ where: { id: req.auth!.id }, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, passwordHash: true, isActive: true } })
+  const currentUser = await prisma.user.findUnique({ where: { id: req.auth!.id }, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, avatarImage: true, passwordHash: true, isActive: true } })
   if (!currentUser?.isActive) return res.status(401).json({ error: 'This account is inactive.' })
   if (input.newPassword && !(await bcrypt.compare(input.currentPassword!, currentUser.passwordHash))) return res.status(400).json({ error: 'Your current password is incorrect.' })
   const data: Prisma.UserUpdateInput = { name: input.name, email: input.email }
   if (input.gender !== undefined) data.gender = input.gender
   if (input.phone !== undefined) data.phone = input.phone
   if (input.address !== undefined) data.address = input.address
+  if (input.avatarImage !== undefined) data.avatarImage = input.avatarImage
   if (input.newPassword) {
     data.passwordHash = await bcrypt.hash(input.newPassword, 12)
     data.sessionVersion = { increment: 1 }
     data.sessionExpiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
   }
   try {
-    const user = await prisma.user.update({ where: { id: currentUser.id }, data, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, role: true, isActive: true, sessionVersion: true } })
+    const user = await prisma.user.update({ where: { id: currentUser.id }, data, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, avatarImage: true, role: true, isActive: true, sessionVersion: true } })
     await audit(user.id, 'UPDATE_PROFILE', 'User', user.id, {
       nameChanged: currentUser.name !== user.name,
       emailChanged: currentUser.email !== user.email,
       genderChanged: currentUser.gender !== user.gender,
       phoneChanged: currentUser.phone !== user.phone,
       addressChanged: currentUser.address !== user.address,
+      avatarChanged: currentUser.avatarImage !== user.avatarImage,
       passwordChanged: Boolean(input.newPassword),
     })
     const { sessionVersion, ...publicUser } = user
