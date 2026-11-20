@@ -609,7 +609,9 @@ const defaultManagedContent: ManagedSiteContent = {
 }
 function readManagedContent(): ManagedSiteContent {
   try {
-    const stored = JSON.parse(localStorage.getItem(managedContentKey) || 'null') as Partial<ManagedSiteContent> | null
+    const stored = isLocalDemoSession()
+      ? JSON.parse(localStorage.getItem(managedContentKey) || 'null') as Partial<ManagedSiteContent> | null
+      : null
     const savedMonasteries = stored?.monasteries || defaultManagedContent.monasteries
     const monasteries = stored?.monasteriesVersion === 2 ? savedMonasteries : defaultManagedContent.monasteries.map((defaultMonastery) => {
       const savedMonastery = savedMonasteries.find((monastery) => monastery.city.toLowerCase() === defaultMonastery.city.toLowerCase() || (defaultMonastery.city === 'Ozamiz' && monastery.city.toLowerCase() === 'ozamis'))
@@ -696,7 +698,7 @@ function useManagedContent() {
     async function load() {
       if (isLocalDemoSession()) return
       try {
-        const response = await fetch('/api/content/SITE_MANAGED')
+        const response = await fetch('/api/content/SITE_MANAGED', { cache: 'no-store' })
         if (response.status === 404) return
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Saved website content could not be loaded.')
@@ -3900,7 +3902,7 @@ function ContentAdminPage() {
           return
         }
         try {
-        const response = await fetch('/api/content/SITE_MANAGED')
+        const response = await fetch('/api/content/SITE_MANAGED', { cache: 'no-store' })
         if (response.status !== 404) {
           if (!response.ok) {
             const result = await response.json()
@@ -3991,7 +3993,7 @@ function ContentAdminPage() {
         return
       }
       try {
-        const response = await fetch('/api/content/HOME_HERO_IMAGE')
+        const response = await fetch('/api/content/HOME_HERO_IMAGE', { cache: 'no-store' })
         if (response.status === 404) { if (active) setHomeImageState({ section, ready: true }); return }
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'The saved homepage image could not be loaded.')
@@ -4020,7 +4022,7 @@ function ContentAdminPage() {
         return
       }
       try {
-        const response = await fetch('/api/content/HOME_SECTION_IMAGES')
+        const response = await fetch('/api/content/HOME_SECTION_IMAGES', { cache: 'no-store' })
         if (response.status === 404) {
           if (active) {
             setHomeSectionImages({})
@@ -5687,7 +5689,7 @@ function AppRoutes() {
     <SessionMonitor />
     <RouteMetadata />
     <Routes>
-    <Route path="/" element={<PublicLayout><HomepageReference /></PublicLayout>} />
+    <Route path="/" element={<PublicLayout><HomepageReference useLocalImageCache={isLocalDemoSession()} /></PublicLayout>} />
     <Route path="/search" element={<PublicLayout><SiteSearchPage /></PublicLayout>} />
     <Route path="/about" element={<PublicLayout><AboutPage /></PublicLayout>} />
     <Route path="/spirituality" element={<PublicLayout><SpiritualityPage /></PublicLayout>} />

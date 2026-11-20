@@ -8,12 +8,13 @@ import './homepage-reference.css'
 const cities = ['Angeles', 'Bacolod', 'Baguio', 'Cagayan de Oro', 'Castillejos', 'Cebu', 'Davao', 'Gumaca', 'Infanta']
 const maxInlineHeroImageLength = 350_000
 
-export default function HomepageReference() {
+export default function HomepageReference({ useLocalImageCache = false }: { useLocalImageCache?: boolean }) {
   const cards = useRef<HTMLDivElement>(null)
-  const [heroImages, setHeroImages] = useState(readCachedHomepageHeroImages)
+  const [heroImages, setHeroImages] = useState(() => useLocalImageCache ? readCachedHomepageHeroImages() : [homepageHeroImageFallback])
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
   const [activeCardIndex, setActiveCardIndex] = useState(0)
   const [sectionImages, setSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>(() => {
+    if (!useLocalImageCache) return {}
     try {
       return JSON.parse(localStorage.getItem('carmel-home-section-images-v2') || '{}') as Partial<Record<HomeSectionKey, string>>
     } catch (error) {
@@ -58,28 +59,32 @@ export default function HomepageReference() {
 
   useEffect(() => {
     let active = true
+    let requestGeneration = 0
     async function loadHeroImage() {
+      const currentRequest = ++requestGeneration
       try {
-        const response = await fetch('/api/content/HOME_HERO_IMAGE')
+        const response = await fetch('/api/content/HOME_HERO_IMAGE', { cache: 'no-store' })
         if (response.status === 404) return
         if (!response.ok) throw new Error('The saved homepage image could not be loaded.')
         const result: { content?: { blocks?: unknown } } = await response.json()
         const savedImages = getHomepageHeroImages(result.content?.blocks)
         const displayImages = savedImages.filter((image) => !image.startsWith('data:image/') || image.length <= maxInlineHeroImageLength)
-        if (active) {
+        if (active && currentRequest === requestGeneration) {
           setHeroImages(displayImages)
           setActiveHeroIndex(0)
           cacheHomepageHeroImages(displayImages)
         }
       } catch (error) {
-        console.error('Unable to load the saved homepage image.', error)
+        if (active && currentRequest === requestGeneration) console.error('Unable to load the saved homepage image.', error)
       }
     }
     void loadHeroImage()
     window.addEventListener('carmel-home-hero-updated', loadHeroImage)
+    window.addEventListener('focus', loadHeroImage)
     return () => {
       active = false
       window.removeEventListener('carmel-home-hero-updated', loadHeroImage)
+      window.removeEventListener('focus', loadHeroImage)
     }
   }, [])
 
@@ -99,11 +104,13 @@ export default function HomepageReference() {
 
   useEffect(() => {
     let active = true
+    let requestGeneration = 0
     async function loadSectionImages() {
+      const currentRequest = ++requestGeneration
       try {
-        const response = await fetch('/api/content/HOME_SECTION_IMAGES')
+        const response = await fetch('/api/content/HOME_SECTION_IMAGES', { cache: 'no-store' })
         if (response.status === 404) {
-          if (active) setSectionImages({})
+          if (!useLocalImageCache && active && currentRequest === requestGeneration) setSectionImages({})
           return
         }
         if (!response.ok) throw new Error('The saved homepage thumbnails could not be loaded.')
@@ -116,16 +123,18 @@ export default function HomepageReference() {
           if (typeof savedImage === 'string' && savedImage.trim()) saved[card.key] = savedImage
           return saved
         }, {})
-        if (active) setSectionImages(images)
+        if (active && currentRequest === requestGeneration) setSectionImages(images)
       } catch (error) {
-        console.error('Unable to load saved homepage thumbnails.', error)
+        if (active && currentRequest === requestGeneration) console.error('Unable to load saved homepage thumbnails.', error)
       }
     }
     void loadSectionImages()
     window.addEventListener('carmel-home-section-images-updated', loadSectionImages)
+    window.addEventListener('focus', loadSectionImages)
     return () => {
       active = false
       window.removeEventListener('carmel-home-section-images-updated', loadSectionImages)
+      window.removeEventListener('focus', loadSectionImages)
     }
   }, [])
 

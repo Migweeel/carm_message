@@ -17,11 +17,6 @@ import { z } from 'zod'
 
 const app = express()
 const prisma = new PrismaClient()
-const homepageContentCache = new Map<string, {
-  content: Awaited<ReturnType<typeof prisma.pageContent.findUnique>>
-  expiresAt: number
-}>()
-const homepageContentCacheTtlMs = 60_000
 const homepageInlineImageMaxChars = 350_000
 const homepageHeroImageFallback = '/assets/images/home-hero.jpg'
 const port = Number(process.env.PORT || 4000)
@@ -1463,14 +1458,7 @@ app.get('/api/carmelights/most-viewed', asyncRoute(async (_req, res) => {
 }))
 app.get('/api/content/:pageKey', asyncRoute(async (req, res) => {
   const pageKey = routeParam(req, 'pageKey').toUpperCase()
-  if (pageKey === 'SITE_UPDATES') res.setHeader('Cache-Control', 'no-store')
-  const cacheable = pageKey === 'HOME_HERO_IMAGE' || pageKey === 'HOME_SECTION_IMAGES'
-  const cached = cacheable ? homepageContentCache.get(pageKey) : undefined
-  if (cached && cached.expiresAt > Date.now()) {
-    if (!cached.content) return res.status(404).json({ error: 'Page content not found.' })
-    return res.json({ content: homepageContentForResponse(pageKey, cached.content) })
-  }
-  if (cached) homepageContentCache.delete(pageKey)
+  res.setHeader('Cache-Control', 'no-store')
   const content = pageKey === 'SITE_MANAGED'
     ? (await prisma.$queryRaw<Array<{ id: string; pageKey: string; blocks: Prisma.JsonValue; updatedAt: Date }>>(Prisma.sql`
         SELECT
@@ -1493,7 +1481,6 @@ app.get('/api/content/:pageKey', asyncRoute(async (req, res) => {
         LIMIT 1
       `))[0] ?? null
     : await prisma.pageContent.findUnique({ where: { pageKey } })
-  if (cacheable && content) homepageContentCache.set(pageKey, { content, expiresAt: Date.now() + homepageContentCacheTtlMs })
   if (!content) return res.status(404).json({ error: 'Page content not found.' })
   res.json({ content: homepageContentForResponse(pageKey, content) })
 }))
@@ -1842,7 +1829,6 @@ app.put('/api/admin/content/home-hero-image', authenticate, asyncRoute(async (re
     update: { blocks },
     create: { pageKey: 'HOME_HERO_IMAGE', blocks },
   })
-  homepageContentCache.set('HOME_HERO_IMAGE', { content, expiresAt: Date.now() + homepageContentCacheTtlMs })
   await audit(req.auth!.id, 'UPDATE_CONTENT', 'PageContent', content.id, { pageKey: 'HOME_HERO_IMAGE' })
   res.json({ content })
 }))
@@ -1859,7 +1845,6 @@ app.put('/api/admin/content/home-section-image', authenticate, asyncRoute(async 
     update: { blocks: blocks as Prisma.InputJsonValue },
     create: { pageKey, blocks: blocks as Prisma.InputJsonValue },
   })
-  homepageContentCache.set(pageKey, { content, expiresAt: Date.now() + homepageContentCacheTtlMs })
   await audit(req.auth!.id, 'UPDATE_CONTENT', 'PageContent', content.id, { pageKey, section: parsed.data!.section })
   res.json({ content })
 }))
