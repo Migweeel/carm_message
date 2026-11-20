@@ -36,6 +36,8 @@ npm run dev
 
 The website runs at http://localhost:5173 and the API runs at http://localhost:4000. PostgreSQL runs in Docker and is available to the local app at `localhost:5433` (mapped to port 5432 inside the container); its data persists in the `postgres-data` Docker volume when the container is stopped. Stop the database with `docker compose down` (this keeps the data).
 
+Google member sign-in uses the Google OAuth client ID in both the client build and API server. Add the same web client ID to `client/.env.local` as `VITE_GOOGLE_CLIENT_ID` and to `server/.env` as `GOOGLE_CLIENT_ID`. In Google Cloud, authorize `https://carmelsincommunion.org` and `http://localhost:5173` as JavaScript origins. Add both variables to the Railway `carm_message` service as well; the `VITE_` variable must be available when Railway builds the client. The client ID is public; no Google client secret is used by this ID-token flow. The API verifies each ID token and only creates accounts from the sign-up page after privacy and terms consent.
+
 Member and staff sign-in pages include password recovery. To deliver reset links and donation acknowledgment emails, create a Resend API key, verify a sending domain in Resend, and set these values in `server/.env`:
 
 ```env

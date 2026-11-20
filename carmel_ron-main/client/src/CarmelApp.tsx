@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, RotateCw, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
 import attractedByTheVeilImage from './assets/attracted-by-the-veil.jpg'
 import vocationHeroImage from '../../assets/image_carmelife/vocation-to-carmel.png'
@@ -28,12 +29,15 @@ import './discernment-reference.css'
 import './carmelights-reference.css'
 import './mobile-experience.css'
 import './member-profile-avatar.css'
+import './legal-pages.css'
 import HomepageReference from './HomepageReference'
 import { homeSectionCards, type HomeSectionKey } from './home-section-cards'
 import { cacheHomepageHeroImages, getHomepageHeroImages, readCachedHomepageHeroImages } from './homepage-hero-images'
 import RouteMetadata from './RouteMetadata'
+import { PrivacyNoticeContent, PrivacyPolicyPage, TermsOfServicePage } from './LegalPages'
 
 const DonationChart = lazy(() => import('./DonationChart'))
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || ''
 
 function imageDataUrlToBlob(dataUrl: string) {
   const commaIndex = dataUrl.indexOf(',')
@@ -1058,7 +1062,7 @@ function SiteSearchPage() {
 function Footer() {
   const { contactDetails } = useManagedContent()
   const phoneLink = contactDetails.phone.replace(/[^\d+]/g, '')
-  return <footer className="site-footer"><div className="footer-main"><div className="footer-about"><Brand light /><p>A communion of Carmelite monasteries, living the Teresian charism in the heart of the Church.</p></div><div><h3>Explore</h3><Link to="/about">About us</Link><Link to="/monasteries">Our monasteries</Link><Link to="/updates">News & updates</Link></div><div><h3>Connect with us</h3><a href={`tel:${phoneLink}`}>{contactDetails.phone}</a><a href={`mailto:${contactDetails.email}`}>{contactDetails.email}</a><a href={contactDetails.facebookUrl}>{contactDetails.facebookLabel}</a></div><div><h3>Our location</h3><p>{contactDetails.location.split(/\r?\n/).map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p><Link to="/contact">Contact us <ArrowUpRight size={14} /></Link></div></div><div className="footer-bottom"><span>© 2026 Philippine Federation of Discalced Carmelite Nuns</span><span>Data Privacy Act of 2012 · Terms of Service · Privacy Policy</span></div></footer>
+  return <footer className="site-footer"><div className="footer-main"><div className="footer-about"><Brand light /><p>A communion of Carmelite monasteries, living the Teresian charism in the heart of the Church.</p></div><div><h3>Explore</h3><Link to="/about">About us</Link><Link to="/monasteries">Our monasteries</Link><Link to="/updates">News & updates</Link></div><div><h3>Connect with us</h3><a href={`tel:${phoneLink}`}>{contactDetails.phone}</a><a href={`mailto:${contactDetails.email}`}>{contactDetails.email}</a><a href={contactDetails.facebookUrl}>{contactDetails.facebookLabel}</a></div><div><h3>Our location</h3><p>{contactDetails.location.split(/\r?\n/).map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p><Link to="/contact">Contact us <ArrowUpRight size={14} /></Link></div></div><div className="footer-bottom"><span>© 2026 Philippine Federation of Discalced Carmelite Nuns</span><nav className="footer-legal-links" aria-label="Legal"><Link to="/terms">Terms of Service</Link><span>·</span><Link to="/privacy">Privacy Policy</Link></nav></div></footer>
 }
 function ContactNotifier() {
   type ChatMessage = { id: string; senderType: 'VISITOR' | 'ADMIN' | 'FORMATOR'; body: string; createdAt: string; sender: { id: string; name: string; role: string } | null }
@@ -2465,6 +2469,41 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       setPending(false)
     }
   }
+  async function continueWithGoogle(credential: string) {
+    if (isSignup && !privacyChecked) {
+      setError('Please agree to the Privacy Policy and Terms of Service before creating an account with Google.')
+      return
+    }
+    setPending(true)
+    setError('')
+    try {
+      const response = await fetch('/api/auth/google', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential, intent: isSignup ? 'signup' : 'login', privacyConsent: privacyChecked }),
+      })
+      const result = await readAuthResponse(response)
+      if (!response.ok) throw new Error(result.error || 'Unable to continue with Google.')
+      if (!result.user || result.user.role !== 'USER') throw new Error('Google sign-in did not return a member account.')
+      saveServerSessionRole('USER')
+      saveMemberSession({
+        id: result.user.id,
+        name: result.user.name,
+        email: result.user.email,
+        gender: result.user.gender || 'ANONYMOUS',
+        phone: result.user.phone,
+        address: result.user.address,
+        avatarImage: result.user.avatarImage,
+        role: 'USER',
+      })
+      navigate(isSignup ? '/account' : '/', { replace: true })
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to connect to the Google sign-in service.')
+    } finally {
+      setPending(false)
+    }
+  }
   async function verifyRegistration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPending(true)
@@ -2527,6 +2566,35 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       <span className="eyebrow">{isSignup ? 'HELLO' : isStaff ? 'FEDERATION STAFF' : 'WELCOME BACK'}</span>
       <h1>{isSignup ? <>Create <em>Account</em></> : isStaff ? <>Staff <em>Sign in</em></> : <>Login <em>Account</em></>}</h1>
       <p>{isSignup ? 'Create a resident account by providing your information.' : isStaff ? 'Sign in to your Federation staff or administrator account.' : 'Please provide your account information.'}</p>
+      {isSignup && <div className="auth-signup-consent">
+        <label><input name="privacyConsent" type="checkbox" required checked={privacyChecked} onChange={(event) => { setPrivacyChecked(event.target.checked); setError('') }} /><span>I have read and agree to the <Link to="/privacy">Privacy Policy</Link> and <Link to="/terms">Terms of Service</Link>.</span></label>
+        <button className="auth-privacy-link" type="button" onClick={() => setPrivacyOpen(true)}>Read Data Privacy Notice</button>
+      </div>}
+      {!isStaff && <div className="auth-social-login">
+        {googleClientId ? isSignup && !privacyChecked
+          ? <p className="auth-social-consent-note">Agree to the Privacy Policy and Terms of Service above to continue with Google.</p>
+          : pending
+            ? <p className="auth-social-status" role="status">Connecting to Google…</p>
+            : <GoogleOAuthProvider clientId={googleClientId}>
+              <div className="auth-google-button"><GoogleLogin
+                onSuccess={(response) => {
+                  if (!response.credential) {
+                    setError('Google did not return a sign-in credential. Please try again.')
+                    return
+                  }
+                  void continueWithGoogle(response.credential)
+                }}
+                onError={() => setError('Google sign-in did not complete. Please try again or use your email and password.')}
+                text="continue_with"
+                theme="outline"
+                shape="rectangular"
+                size="large"
+                width="360"
+              /></div>
+          </GoogleOAuthProvider>
+          : <p className="auth-social-consent-note" role="status">Google sign-in is not configured for this website yet.</p>}
+        <div className="auth-social-divider" aria-hidden="true"><span>or</span></div>
+      </div>}
       {isStaff && <fieldset className="auth-role-selection">
         <legend>Staff account type</legend>
         <div className="auth-role-options">
@@ -2543,10 +2611,6 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       <label>Email address<input name="email" type="email" required autoComplete="email" placeholder="name@example.com" value={isSignup ? undefined : loginEmail} onChange={isSignup ? undefined : (event) => setLoginEmail(event.target.value)} /></label>
       <label>Password<PasswordInput name="password" required minLength={isSignup ? 10 : 1} maxLength={128} autoComplete={isSignup ? 'new-password' : 'current-password'} placeholder={isSignup ? 'At least 10 characters' : 'Enter your password'} value={isSignup ? undefined : loginPassword} onChange={isSignup ? undefined : (event) => setLoginPassword(event.target.value)} /></label>
       {isSignup && <label>Confirm password<PasswordInput name="confirmPassword" required minLength={10} maxLength={128} autoComplete="new-password" placeholder="Re-enter your password" /></label>}
-      {isSignup && <div className="auth-signup-consent">
-        <label><input name="privacyConsent" type="checkbox" required checked={privacyChecked} onChange={(event) => { setPrivacyChecked(event.target.checked); setError('') }} /><span>I have read and agree to the Data Privacy Notice before creating my account.</span></label>
-        <button className="auth-privacy-link" type="button" onClick={() => setPrivacyOpen(true)}>Read Data Privacy Notice</button>
-      </div>}
       {!isSignup && <Link className="auth-forgot-password-link" to="/account/forgot-password">Forgot password?</Link>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="button button-dark full-button" disabled={pending || (isSignup && !privacyChecked)}>{pending ? 'Please wait…' : isSignup ? <>Create member account <ArrowRight size={16} /></> : isStaff ? <>Staff sign in <ArrowRight size={16} /></> : <>Login <ArrowRight size={16} /></>}</button>
@@ -2596,19 +2660,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       </>}
     </section>
   </div>}
-  {privacyOpen && <div className="privacy-consent-backdrop" role="presentation"><section className="privacy-consent-dialog" role="dialog" aria-modal="true" aria-labelledby="privacy-consent-title"><button className="privacy-consent-close" type="button" aria-label="Close privacy notice" onClick={closePrivacyNotice}><X size={18} /></button><span className="eyebrow">CARMEL'S IN COMMUNION</span><h2 id="privacy-consent-title">Data Privacy Notice and Consent</h2><div className="privacy-notice-content">
-    <p>Carmel's in Communion is committed to protecting your personal information. This notice explains how information is collected, used, stored, and protected when you register, sign in, and use the website, including its LightFM recommendation feature. Our practices are guided by the Philippine Data Privacy Act of 2012 (Republic Act No. 10173).</p>
-    <h3>1. Information we collect</h3><p>When you register, we collect your full name, gender choice (including Anonymous), contact number, address, email address, and password. We send a one-time code to verify that you can access the email address. Until verification is completed, registration details and the hashed password are held temporarily to finish account creation. Passwords are hashed for authentication and are not stored as plain text. The confirmation-password field is checked in your browser; it is not sent to the server or retained in your account record.</p>
-    <h3>2. LightFM recommendations</h3><p>For signed-in members, teaching views and current bookmarks may be linked to the account and used to learn reading preferences and provide relevant Carmelights suggestions. The recommendation service receives an internal account identifier and reading-interaction data, not your password or login credentials. Anonymous teaching views may contribute to overall popularity counts, but are not linked to an account or used to train LightFM. Recommendations may use a popularity-based fallback when personalization is unavailable or the model has insufficient data.</p>
-    <h3>3. How we use information</h3><p>We use account information to create and maintain accounts, authenticate sign-ins, maintain resident records, provide website features, communicate important account-related information, support password recovery, provide relevant recommendations, and improve website functionality.</p>
-    <h3>4. Protection and access</h3><p>Reasonable organizational, physical, and technical measures are used to protect personal information against unauthorized access, disclosure, alteration, loss, or misuse. Access is limited to authorized personnel who need the information for their responsibilities. Passwords are not recommendation-system inputs.</p>
-    <h3>5. Sharing</h3><p>We do not sell personal information. Authorized administrators and technical service providers may access information as necessary for website hosting, maintenance, security, and operation, subject to appropriate safeguards. Information may also be disclosed when required or permitted by law.</p>
-    <h3>6. Retention</h3><p>Information is retained for as long as needed for the purposes described in this notice, account administration, and applicable legal or operational requirements. Interaction records are retained for account features and recommendation purposes. For questions or requests about your information, contact the website administrator using the details below.</p>
-    <h3>7. Your rights</h3><p>Subject to applicable law, you may ask to be informed about processing, access or correct your personal information, object to or withdraw consent where applicable, request deletion or blocking, or raise a concern about how your information is handled. Contact the website administrator to make a request.</p>
-    <h3>8. Changes to this notice</h3><p>This notice may be updated when our practices or requirements change. Significant changes affecting how information is processed will be communicated through the website or other appropriate means.</p>
-    <h3>9. Contact</h3><p>For questions, concerns, or privacy requests, contact the website administrator or designated Data Protection Officer at <a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a>.</p>
-    <h3>10. Consent</h3><p>By creating an account and selecting the consent checkbox, you acknowledge that you have read and understood this notice and agree to the collection and use of information for the purposes described above. You retain the rights available to you under the Data Privacy Act of 2012.</p>
-  </div><footer><button className="button button-outline" type="button" onClick={closePrivacyNotice}>Close</button></footer></section></div>}
+  {privacyOpen && <div className="privacy-consent-backdrop" role="presentation"><section className="privacy-consent-dialog" role="dialog" aria-modal="true" aria-labelledby="privacy-consent-title"><button className="privacy-consent-close" type="button" aria-label="Close privacy notice" onClick={closePrivacyNotice}><X size={18} /></button><span className="eyebrow">CARMEL'S IN COMMUNION</span><h2 id="privacy-consent-title">Data Privacy Notice and Consent</h2><PrivacyNoticeContent /><footer><Link className="auth-privacy-link" to="/privacy">View the full Privacy Policy</Link><button className="button button-outline" type="button" onClick={closePrivacyNotice}>Close</button></footer></section></div>}
   </>
 }
 
@@ -5760,6 +5812,8 @@ function AppRoutes() {
     <Route path="/carmelights" element={<PublicLayout><StoryPage kind="stories" /></PublicLayout>} />
     <Route path="/updates/:id" element={<UpdateDetailPage />} />
     <Route path="/updates" element={<PublicLayout><StoryPage kind="updates" /></PublicLayout>} />
+    <Route path="/privacy" element={<PublicLayout><PrivacyPolicyPage /></PublicLayout>} />
+    <Route path="/terms" element={<PublicLayout><TermsOfServicePage /></PublicLayout>} />
     <Route path="/contact" element={<PublicLayout><ContactPage /></PublicLayout>} />
     <Route path="/donations" element={<PublicLayout><DonationsPage /></PublicLayout>} />
     <Route path="/account/login" element={<MemberAuthPage mode="login" />} />

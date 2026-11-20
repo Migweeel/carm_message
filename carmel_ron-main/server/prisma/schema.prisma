@@ -86,6 +86,7 @@ model User {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   auditLogs    AuditLog[]
+  oauthIdentities OAuthIdentity[]
   donations    Donation[]   @relation("UserDonations")
   discernment  Discernment?
   conversations Conversation[] @relation("UserConversations")
@@ -93,6 +94,18 @@ model User {
   sentMessages Message[] @relation("UserMessages")
   contentInteractions ContentInteraction[]
   passwordResetToken PasswordResetToken?
+}
+
+model OAuthIdentity {
+  id             String   @id @default(cuid())
+  provider       String
+  providerUserId String
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
 }
 
 model PasswordResetToken {

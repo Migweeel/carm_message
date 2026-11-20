@@ -43,6 +43,14 @@
     "title": "Support the Federation | Carmels in Communion",
     "description": "Support the work and communities of the Philippine Federation of Discalced Carmelite Nuns."
   },
+  "/privacy": {
+    "title": "Privacy Policy | Carmels in Communion",
+    "description": "Learn how Carmels in Communion collects, uses, and protects personal information."
+  },
+  "/terms": {
+    "title": "Terms of Service | Carmels in Communion",
+    "description": "Read the terms that apply to using the Carmels in Communion website and member services."
+  },
   "/account/login": {
     "title": "Member Sign In | Carmels in Communion",
     "description": "Sign in to your Carmels in Communion member account."

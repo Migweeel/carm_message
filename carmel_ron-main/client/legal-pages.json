@@ -1,0 +1,164 @@
+{
+  "privacy": {
+    "title": "Privacy Policy",
+    "eyebrow": "CARMELS IN COMMUNION",
+    "intro": "Carmel's in Communion is committed to protecting your personal information. This notice explains how information is collected, used, stored, and protected when you register, sign in, and use the website, including its LightFM recommendation feature. Our practices are guided by the Philippine Data Privacy Act of 2012 (Republic Act No. 10173).",
+    "lastUpdated": "November 20, 2026",
+    "sections": [
+      {
+        "heading": "1. Information we collect",
+        "paragraphs": [
+          "For email-and-password registration, we collect your full name, gender choice (including Anonymous), contact number, address, email address, and password. We send a one-time code to verify that you can access the email address. Until verification is completed, registration details and the hashed password are held temporarily to finish account creation. Passwords are hashed for authentication and are not stored as plain text. The confirmation-password field is checked in your browser; it is not sent to the server or retained in your account record.",
+          "When you use Google sign-in, we receive your Google account identifier and basic profile information such as your name and email address. We do not receive your Google password. Information you provide through other member features may also be collected when you use them."
+        ]
+      },
+      {
+        "heading": "2. LightFM recommendations",
+        "paragraphs": [
+          "For signed-in members, teaching views and current bookmarks may be linked to the account and used to learn reading preferences and provide relevant Carmelights suggestions. The recommendation service receives an internal account identifier and reading-interaction data, not your password or login credentials. Anonymous teaching views may contribute to overall popularity counts, but are not linked to an account or used to train LightFM. Recommendations may use a popularity-based fallback when personalization is unavailable or the model has insufficient data."
+        ]
+      },
+      {
+        "heading": "3. How we use information",
+        "paragraphs": [
+          "We use account information to create and maintain accounts, authenticate sign-ins, maintain resident records, provide website features, communicate important account-related information, support password recovery, provide relevant recommendations, and improve website functionality."
+        ]
+      },
+      {
+        "heading": "4. Protection and access",
+        "paragraphs": [
+          "Reasonable organizational, physical, and technical measures are used to protect personal information against unauthorized access, disclosure, alteration, loss, or misuse. Access is limited to authorized personnel who need the information for their responsibilities. Passwords are not recommendation-system inputs."
+        ]
+      },
+      {
+        "heading": "5. Sharing",
+        "paragraphs": [
+          "We do not sell personal information. Authorized administrators and technical service providers may access information as necessary for website hosting, maintenance, security, and operation, subject to appropriate safeguards. Information may also be disclosed when required or permitted by law. Google processes information related to Google sign-in under its own privacy policy."
+        ]
+      },
+      {
+        "heading": "6. Retention",
+        "paragraphs": [
+          "Information is retained for as long as needed for the purposes described in this notice, account administration, and applicable legal or operational requirements. Interaction records are retained for account features and recommendation purposes. For questions or requests about your information, contact the website administrator using the details below."
+        ]
+      },
+      {
+        "heading": "7. Your rights",
+        "paragraphs": [
+          "Subject to applicable law, you may ask to be informed about processing, access or correct your personal information, object to or withdraw consent where applicable, request deletion or blocking, or raise a concern about how your information is handled. Contact the website administrator to make a request."
+        ]
+      },
+      {
+        "heading": "8. Changes to this policy",
+        "paragraphs": [
+          "This notice may be updated when our practices or requirements change. Significant changes affecting how information is processed will be communicated through the website or other appropriate means."
+        ]
+      },
+      {
+        "heading": "9. Contact",
+        "paragraphs": [
+          "For questions, concerns, or privacy requests, contact the website administrator or designated Data Protection Officer at ocdnuns.vocpromph@gmail.com."
+        ]
+      },
+      {
+        "heading": "10. Consent",
+        "paragraphs": [
+          "By creating an account and selecting the consent checkbox, you acknowledge that you have read and understood this notice and agree to the collection and use of information for the purposes described above. This consent also applies when you create a member account using Google sign-in. You retain the rights available to you under the Data Privacy Act of 2012."
+        ]
+      }
+    ]
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "eyebrow": "CARMELS IN COMMUNION",
+    "intro": "These Terms of Service apply to your access to and use of the Carmels in Communion website, member account, and related features. By using the website or creating an account, you agree to these terms. If you do not agree, please do not use member-only features.",
+    "lastUpdated": "November 20, 2026",
+    "sections": [
+      {
+        "heading": "1. About the website",
+        "paragraphs": [
+          "Carmels in Communion is the website of the Philippine Federation of Discalced Carmelite Nuns. It provides information about the Federation, its communities, Carmelite life, vocation discernment, teachings, updates, and ways to contact or support the Federation."
+        ]
+      },
+      {
+        "heading": "2. Member accounts",
+        "paragraphs": [
+          "You are responsible for providing accurate information, keeping your sign-in credentials private, and promptly notifying the website administrator if you believe your account has been used without permission. You must not impersonate another person or create an account using information you are not authorized to use.",
+          "You may sign in using a supported third-party provider where available. Your use of that provider is also subject to its own terms. You remain responsible for activity carried out through your account."
+        ]
+      },
+      {
+        "heading": "3. Acceptable use",
+        "paragraphs": [
+          "Use the website lawfully and respectfully. Do not attempt to gain unauthorized access, interfere with the website or its security, introduce malicious code, misuse contact or messaging features, or use automated methods to collect information in a way that disrupts the service or violates applicable law."
+        ]
+      },
+      {
+        "heading": "4. Information and messages you provide",
+        "paragraphs": [
+          "You are responsible for information and messages you submit through your account or website features. Do not submit information that you do not have the right to provide. We may use submitted information to operate the requested feature, respond to you, maintain security, and meet legal obligations, as described in the Privacy Policy."
+        ]
+      },
+      {
+        "heading": "5. Website materials",
+        "paragraphs": [
+          "Unless otherwise indicated, website text, images, branding, and other materials are owned by the Federation or used with permission. You may access and share links to public pages for personal, non-commercial purposes. Other reproduction, distribution, or commercial use requires prior permission from the relevant rights holder."
+        ]
+      },
+      {
+        "heading": "6. Donations and external services",
+        "paragraphs": [
+          "Donation information and payment instructions are provided for your consideration. Review the details shown on the website before sending a contribution, and contact the Federation using its published contact information if you have a question or believe a transaction needs attention. External payment or other third-party services may have separate terms and privacy practices."
+        ]
+      },
+      {
+        "heading": "7. Third-party links and sign-in providers",
+        "paragraphs": [
+          "The website may link to third-party websites or offer sign-in through external providers. The Federation does not control those services and is not responsible for their content, availability, or policies. Your use of them is governed by their own terms and notices."
+        ]
+      },
+      {
+        "heading": "8. Availability and changes",
+        "paragraphs": [
+          "We aim to keep the website available and current, but features or content may change, be interrupted, or be unavailable from time to time. We may update or discontinue features to maintain, improve, or protect the website."
+        ]
+      },
+      {
+        "heading": "9. Account restriction or closure",
+        "paragraphs": [
+          "We may restrict or suspend access when reasonably necessary to protect the website or its users, address suspected misuse, comply with law, or enforce these terms. You may stop using the website at any time. Requests to close an account or address account information can be sent to the contact below and will be handled subject to applicable law and necessary records."
+        ]
+      },
+      {
+        "heading": "10. Disclaimers",
+        "paragraphs": [
+          "Website content is provided for general information and spiritual reflection. It is not a substitute for personalized vocation guidance or other professional advice. To the extent permitted by law, the website and its content are provided without a guarantee that access will always be uninterrupted, error-free, or suitable for every purpose."
+        ]
+      },
+      {
+        "heading": "11. Liability",
+        "paragraphs": [
+          "To the extent permitted by applicable law, the Federation is not liable for indirect or consequential loss arising from use of, or inability to use, the website. Nothing in these terms excludes or limits liability or rights that cannot lawfully be excluded or limited."
+        ]
+      },
+      {
+        "heading": "12. Privacy",
+        "paragraphs": [
+          "Our collection and use of personal information is explained in the Privacy Policy at https://carmelsincommunion.org/privacy."
+        ]
+      },
+      {
+        "heading": "13. Changes to these terms",
+        "paragraphs": [
+          "We may revise these terms when the website or applicable requirements change. The updated version will be posted on this page with a revised date. Continued use after an update means you accept the revised terms, to the extent permitted by law."
+        ]
+      },
+      {
+        "heading": "14. Governing law and contact",
+        "paragraphs": [
+          "These terms are governed by the laws of the Republic of the Philippines, subject to applicable mandatory rights and protections. For questions about these terms, contact the Federation at ocdnuns.vocpromph@gmail.com."
+        ]
+      }
+    ]
+  }
+}

@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import jwt from 'jsonwebtoken'
 import { Prisma, PrismaClient } from '@prisma/client'
+import { OAuth2Client } from 'google-auth-library'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -59,6 +60,8 @@ const xenditSecretKey = process.env.XENDIT_SECRET_KEY || process.env.XENDIT_TEST
 const xenditCallbackToken = process.env.XENDIT_CALLBACK_TOKEN || ''
 const resendApiKey = process.env.RESEND_API_KEY || ''
 const resendFrom = process.env.RESEND_FROM || ''
+const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim() || ''
+const googleOAuthClient = new OAuth2Client()
 const systemBackupFormat = 'carmels-in-communion-backup'
 const maxBackupPlaintextBytes = 45 * 1024 * 1024
 async function sendEmail(email: { to: string; subject: string; text: string; html: string }): Promise<void> {
@@ -86,6 +89,7 @@ async function sendEmail(email: { to: string; subject: string; text: string; htm
 }
 const backupTables = [
   { name: 'User', columns: ['id', 'name', 'email', 'phone', 'address', 'privacyConsentAt', 'privacyPolicyVersion', 'passwordHash', 'role', 'isActive', 'canManageUsers', 'canManageDetails', 'canManageUpdates', 'createdAt', 'updatedAt'], uniqueColumns: ['email'] },
+  { name: 'OAuthIdentity', columns: ['id', 'provider', 'providerUserId', 'userId', 'createdAt'], uniqueColumns: [], uniqueColumnGroups: [['provider', 'providerUserId']] },
   { name: 'Monastery', columns: ['id', 'name', 'city', 'slug', 'description', 'imageUrl', 'address', 'contact', 'sortOrder', 'createdAt', 'updatedAt'], uniqueColumns: ['slug'] },
   { name: 'Discernment', columns: ['id', 'userId', 'stage', 'monastery', 'note', 'createdAt', 'updatedAt'], uniqueColumns: ['userId'] },
   { name: 'Donation', columns: ['id', 'referenceCode', 'amount', 'type', 'fund', 'paymentMethod', 'xenditInvoiceId', 'xenditInvoiceUrl', 'paymongoPaymentIntentId', 'paymongoQrImageUrl', 'paymongoQrExpiresAt', 'isManual', 'isAnonymous', 'donorName', 'donorEmail', 'donorPhone', 'wantsReceipt', 'receiptEmailSentAt', 'receiptEmailSendingAt', 'paymentReference', 'beneficiaryMonasteryId', 'userId', 'status', 'createdAt', 'updatedAt'], uniqueColumns: ['referenceCode', 'xenditInvoiceId', 'paymongoPaymentIntentId'] },
@@ -99,6 +103,7 @@ const backupTables = [
   { name: 'AuditLog', columns: ['id', 'userId', 'action', 'entity', 'entityId', 'meta', 'createdAt'], uniqueColumns: [], jsonColumns: ['meta'] },
 ] as const
 const backupDependencies: Record<string, Array<{ table: string; column: string }>> = {
+  OAuthIdentity: [{ table: 'User', column: 'userId' }],
   Discernment: [{ table: 'User', column: 'userId' }],
   Donation: [{ table: 'Monastery', column: 'beneficiaryMonasteryId' }, { table: 'User', column: 'userId' }],
   DonationFile: [{ table: 'Donation', column: 'donationId' }],
@@ -467,9 +472,16 @@ app.post('/api/admin/system-backup/import', authenticate, allowRoles('ADMIN'), r
           skippedIds.get(table.name)?.add(row.id)
           continue
         }
-        const uniqueClauses = table.uniqueColumns.flatMap((column) => {
-          if (row[column] === null) return []
-          return [Prisma.sql`${Prisma.raw(`"${column}"`)} = ${backupSqlValue(row[column])}`]
+        const uniqueGroups = [
+          ...table.uniqueColumns.map((column) => [column]),
+          ...('uniqueColumnGroups' in table ? table.uniqueColumnGroups : []),
+        ]
+        const uniqueClauses = uniqueGroups.flatMap((columns) => {
+          const clauses = columns.flatMap((column) => {
+            if (row[column] === null) return []
+            return [Prisma.sql`${Prisma.raw(`"${column}"`)} = ${backupSqlValue(row[column])}`]
+          })
+          return clauses.length === columns.length ? [Prisma.join(clauses, ' AND ')] : []
         })
         if (uniqueClauses.length) {
           const conflicts = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -505,7 +517,7 @@ app.post('/api/admin/system-backup/import', authenticate, allowRoles('ADMIN'), r
   res.json({ ...result, backupExportedAt: backup.exportedAt, importedAt, mode: 'merge' })
 }))
 
-const memberPrivacyVersion = '2026-11-06'
+const memberPrivacyVersion = '2026-11-20'
 const registrationCodeLifetimeMs = 10 * 60 * 1000
 const registrationCodeResendDelayMs = 60 * 1000
 const registrationCodeMaxAttempts = 5
@@ -743,6 +755,115 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
     return res.json({ user: { id: user.id, name: user.name, email: user.email, gender: user.gender, phone: user.phone, address: user.address, avatarImage: user.avatarImage, role: user.role, canManageUsers: user.canManageUsers, canManageDetails: user.canManageDetails, canManageUpdates: user.canManageUpdates } })
   }
   return res.status(401).json({ error: 'Email or password is incorrect.' })
+}))
+const googleAuthSchema = z.object({
+  credential: z.string().min(1).max(20_000),
+  intent: z.enum(['login', 'signup']),
+  privacyConsent: z.boolean().optional(),
+})
+const googleAuthUserSelect = {
+  id: true,
+  name: true,
+  email: true,
+  gender: true,
+  phone: true,
+  address: true,
+  avatarImage: true,
+  role: true,
+  isActive: true,
+  canManageUsers: true,
+  canManageDetails: true,
+  canManageUpdates: true,
+} satisfies Prisma.UserSelect
+app.post('/api/auth/google', asyncRoute(async (req, res) => {
+  if (!googleClientId) return res.status(503).json({ error: 'Google sign-in is not configured yet.' })
+  const parsed = validate(googleAuthSchema, req.body)
+  if (parsed.error) return res.status(400).json({ error: 'Google sign-in could not be started. Please try again.' })
+  const input = parsed.data!
+  if (input.intent === 'signup' && !input.privacyConsent) {
+    return res.status(400).json({ error: 'Please agree to the Privacy Policy and Terms of Service before creating an account.' })
+  }
+
+  let payload
+  try {
+    const ticket = await googleOAuthClient.verifyIdToken({ idToken: input.credential, audience: googleClientId })
+    payload = ticket.getPayload()
+  } catch (error) {
+    console.error('Google ID token verification failed:', error instanceof Error ? error.name : 'Unknown error')
+    return res.status(401).json({ error: 'Google could not verify this sign-in. Please try again.' })
+  }
+  if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+    return res.status(401).json({ error: 'Google did not provide a verified email address for this account.' })
+  }
+
+  const email = payload.email.trim().toLowerCase()
+  if (retiredDemoAccountEmails.has(email)) return res.status(403).json({ error: 'This email address is not available for sign-in.' })
+  const identityWhere = { provider_providerUserId: { provider: 'GOOGLE', providerUserId: payload.sub } }
+  const findGoogleIdentity = () => prisma.oAuthIdentity.findUnique({
+    where: identityWhere,
+    include: { user: { select: googleAuthUserSelect } },
+  })
+  let identity = await findGoogleIdentity()
+  let user = identity?.user ?? null
+  if (!user && input.intent === 'login') {
+    return res.status(401).json({ error: 'No Google-linked member account was found. Create an account or use your existing sign-in method.' })
+  }
+  if (!user) {
+    const existingAccount = await prisma.user.findUnique({ where: { email }, select: { id: true } })
+    if (existingAccount) {
+      return res.status(409).json({ error: 'An account with this email already exists. Sign in with your existing method; accounts are not automatically linked.' })
+    }
+
+    const name = (payload.name?.trim() || email.split('@')[0]).slice(0, 100)
+    const passwordHash = await bcrypt.hash(randomBytes(32).toString('base64url'), 12)
+    try {
+      user = await prisma.user.create({
+        data: {
+          name,
+          email,
+          passwordHash,
+          role: 'USER',
+          privacyConsentAt: new Date(),
+          privacyPolicyVersion: memberPrivacyVersion,
+          discernment: { create: {} },
+          oauthIdentities: { create: { provider: 'GOOGLE', providerUserId: payload.sub } },
+        },
+        select: googleAuthUserSelect,
+      })
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+      identity = await findGoogleIdentity()
+      if (!identity) {
+        return res.status(409).json({ error: 'An account with this email already exists. Sign in with your existing method; accounts are not automatically linked.' })
+      }
+      user = identity.user
+    }
+  }
+  if (!user.isActive || user.role !== 'USER') {
+    return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
+  }
+
+  const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const sessionUser = await prisma.user.update({
+    where: { id: user.id },
+    data: { sessionVersion: { increment: 1 }, sessionExpiresAt: expiresAt },
+    select: { sessionVersion: true },
+  })
+  const token = jwt.sign({ id: user.id, role: user.role, sessionVersion: sessionUser.sessionVersion }, jwtSecret, { expiresIn: '8h' })
+  res.cookie('carmel_session', token, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 })
+  return res.json({ user: {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    gender: user.gender,
+    phone: user.phone,
+    address: user.address,
+    avatarImage: user.avatarImage,
+    role: user.role,
+    canManageUsers: user.canManageUsers,
+    canManageDetails: user.canManageDetails,
+    canManageUpdates: user.canManageUpdates,
+  } })
 }))
 const passwordResetRequestSchema = z.object({ email: z.email().transform((value) => value.toLowerCase()) })
 app.post('/api/auth/password-reset/request', passwordResetRateLimit, asyncRoute(async (req, res) => {
