@@ -529,7 +529,7 @@ const retiredDemoAccountEmails = new Set([
   'demo.formator@carmel.test',
   'demo.member@carmel.test',
 ])
-const registerSchema = z.object({ name: z.string().trim().min(2).max(100), email: z.email().transform((value) => value.toLowerCase()), gender: z.enum(['MALE', 'FEMALE', 'ANONYMOUS']).default('ANONYMOUS'), phone: z.string().trim().min(7).max(30), address: z.string().trim().min(5).max(300), password: z.string().min(10).max(128), privacyConsent: z.literal(true) })
+const registerSchema = z.object({ name: z.string().trim().min(2).max(100), email: z.email().transform((value) => value.toLowerCase()), gender: z.enum(['MALE', 'FEMALE', 'ANONYMOUS']).default('ANONYMOUS'), phone: z.string().trim().min(7).max(30), address: z.string().trim().min(5).max(300), password: z.string().min(10).max(128) })
 const registrationEmailSchema = z.object({ email: z.email().trim().toLowerCase() })
 const registrationVerificationSchema = registrationEmailSchema.extend({ code: z.string().regex(/^\d{6}$/) })
 function registrationCodeHash(email: string, salt: string, code: string) {
@@ -762,7 +762,6 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
 const googleAuthSchema = z.object({
   credential: z.string().min(1).max(20_000),
   intent: z.enum(['login', 'signup']),
-  privacyConsent: z.boolean().optional(),
 })
 const googleAuthUserSelect = {
   id: true,
@@ -783,9 +782,6 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
   const parsed = validate(googleAuthSchema, req.body)
   if (parsed.error) return res.status(400).json({ error: 'Google sign-in could not be started. Please try again.' })
   const input = parsed.data!
-  if (input.intent === 'signup' && !input.privacyConsent) {
-    return res.status(400).json({ error: 'Please agree to the Privacy Policy and Terms of Service before creating an account.' })
-  }
 
   let payload
   try {

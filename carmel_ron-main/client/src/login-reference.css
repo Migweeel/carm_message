@@ -106,8 +106,8 @@
 }
 
 .auth-reference-form {
-  width: min(480px, calc(100% - 64px));
-  max-width: 480px;
+  width: min(400px, calc(100% - 64px));
+  max-width: 400px;
   padding: 64px 0;
   color: #37291f;
 }
@@ -390,6 +390,7 @@
 
 .auth-google-button {
   display: flex;
+  width: 100%;
   max-width: 100%;
   justify-content: center;
 }
@@ -427,7 +428,16 @@
   content: "";
 }
 
-.auth-reference-form .auth-signup-consent a {
+.auth-reference-form .auth-signup-terms-note {
+  width: 100%;
+  margin: 8px 0 0;
+  color: #6f6257;
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.auth-reference-form .auth-signup-terms-note a {
   color: #704214;
   text-decoration: underline;
   text-underline-offset: 2px;

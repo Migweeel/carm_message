@@ -147,11 +147,7 @@
 .privacy-notice-content p{margin:0 0 12px}
 .privacy-notice-content h3{margin:17px 0 5px;color:#37291f;font-size:13px}
 .privacy-notice-content a{color:#704214;text-decoration:underline;overflow-wrap:anywhere}
-.auth-signup-consent{margin:2px 0 14px;padding:12px;border:1px solid #e7dfd5;border-radius:6px;background:#f9f6f1}
-.auth-reference-form .auth-signup-consent label{margin:0;display:flex;align-items:flex-start;gap:9px;color:#554a41;font-size:12px;font-weight:500;line-height:1.55}
-.auth-reference-form .auth-signup-consent input{flex:none;width:17px;height:17px;margin:2px 0 0;accent-color:var(--green)}
 .auth-reference-form .auth-privacy-link{align-self:center;margin:10px 0 0;padding:4px;border:0;background:transparent;color:#704214;font-size:12px;font-weight:600;text-decoration:underline}
-.auth-reference-form .auth-signup-consent .auth-privacy-link{align-self:flex-start;margin:7px 0 0 26px;padding:0}
 .auth-reference-form .auth-privacy-link:hover{color:#a9844d}
 .donation-email-status{max-width:780px;margin:12px auto;padding:12px 16px;border:1px solid #d5e3d2;border-radius:6px;background:#f1f7ef;color:#345b37;font-size:13px;line-height:1.55}
 .donation-email-status.failed{border-color:#ead6cb;background:#fff8f4;color:#8b3c2b}

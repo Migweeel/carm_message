@@ -2364,7 +2364,6 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const [pending, setPending] = useState(false)
   const [resendingCode, setResendingCode] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
-  const [privacyChecked, setPrivacyChecked] = useState(false)
   const [loginEmail, setLoginEmail] = useState(() => {
     const state = location.state
     return state && typeof state === 'object' && 'verifiedEmail' in state && typeof state.verifiedEmail === 'string'
@@ -2395,10 +2394,6 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     if (isSignup) {
-      if (form.get('privacyConsent') !== 'on') {
-        setError('Please agree to the Data Privacy Notice before creating your account.')
-        return
-      }
       if (form.get('password') !== form.get('confirmPassword')) {
         setError('Passwords do not match.')
         return
@@ -2445,7 +2440,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const address = String(form.get('address') || '').trim()
     const password = String(form.get('password') || '')
     try {
-      const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password, privacyConsent: form.get('privacyConsent') === 'on' } : { email, password }) })
+      const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password } : { email, password }) })
       const result = await readAuthResponse(response)
       if (!response.ok) throw new Error(result.error || 'Unable to continue.')
       if (isSignup) {
@@ -2470,10 +2465,6 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     }
   }
   async function continueWithGoogle(credential: string) {
-    if (isSignup && !privacyChecked) {
-      setError('Please agree to the Privacy Policy and Terms of Service before creating an account with Google.')
-      return
-    }
     setPending(true)
     setError('')
     try {
@@ -2481,7 +2472,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential, intent: isSignup ? 'signup' : 'login', privacyConsent: privacyChecked }),
+        body: JSON.stringify({ credential, intent: isSignup ? 'signup' : 'login' }),
       })
       const result = await readAuthResponse(response)
       if (!response.ok) throw new Error(result.error || 'Unable to continue with Google.')
@@ -2567,26 +2558,24 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       <h1>{isSignup ? <>Create <em>Account</em></> : isStaff ? <>Staff <em>Sign in</em></> : <>Login <em>Account</em></>}</h1>
       <p>{isSignup ? 'Create a resident account by providing your information.' : isStaff ? 'Sign in to your Federation staff or administrator account.' : 'Please provide your account information.'}</p>
       {!isStaff && <div className="auth-social-login">
-        {googleClientId ? isSignup && !privacyChecked
-          ? <p className="auth-social-consent-note">Agree to the Privacy Policy and Terms of Service below to continue with Google.</p>
-          : pending
-            ? <p className="auth-social-status" role="status">Connecting to Google…</p>
-            : <GoogleOAuthProvider clientId={googleClientId}>
-              <div className="auth-google-button"><GoogleLogin
-                onSuccess={(response) => {
-                  if (!response.credential) {
-                    setError('Google did not return a sign-in credential. Please try again.')
-                    return
-                  }
-                  void continueWithGoogle(response.credential)
-                }}
-                onError={() => setError('Google sign-in did not complete. Please try again or use your email and password.')}
-                text="continue_with"
-                theme="outline"
-                shape="rectangular"
-                size="large"
-                width="360"
-              /></div>
+        {googleClientId ? pending
+          ? <p className="auth-social-status" role="status">Connecting to Google…</p>
+          : <GoogleOAuthProvider clientId={googleClientId}>
+            <div className="auth-google-button"><GoogleLogin
+              onSuccess={(response) => {
+                if (!response.credential) {
+                  setError('Google did not return a sign-in credential. Please try again.')
+                  return
+                }
+                void continueWithGoogle(response.credential)
+              }}
+              onError={() => setError('Google sign-in did not complete. Please try again or use your email and password.')}
+              text="continue_with"
+              theme="outline"
+              shape="rectangular"
+              size="large"
+              width="400"
+            /></div>
           </GoogleOAuthProvider>
           : <p className="auth-social-consent-note" role="status">Google sign-in is not configured for this website yet.</p>}
         <div className="auth-social-divider" aria-hidden="true"><span>or</span></div>
@@ -2609,11 +2598,8 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       {isSignup && <label>Confirm password<PasswordInput name="confirmPassword" required minLength={10} maxLength={128} autoComplete="new-password" placeholder="Re-enter your password" /></label>}
       {!isSignup && <Link className="auth-forgot-password-link" to="/account/forgot-password">Forgot password?</Link>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="button button-dark full-button" disabled={pending || (isSignup && !privacyChecked)}>{pending ? 'Please wait…' : isSignup ? <>Create member account <ArrowRight size={16} /></> : isStaff ? <>Staff sign in <ArrowRight size={16} /></> : <>Login <ArrowRight size={16} /></>}</button>
-      {isSignup && <div className="auth-signup-consent">
-        <label><input name="privacyConsent" type="checkbox" required checked={privacyChecked} onChange={(event) => { setPrivacyChecked(event.target.checked); setError('') }} /><span>I have read and agree to the <Link to="/privacy">Privacy Policy</Link> and <Link to="/terms">Terms of Service</Link>.</span></label>
-        <button className="auth-privacy-link" type="button" onClick={() => setPrivacyOpen(true)}>Read Data Privacy Notice</button>
-      </div>}
+      <button className="button button-dark full-button" disabled={pending}>{pending ? 'Please wait…' : isSignup ? <>Create member account <ArrowRight size={16} /></> : isStaff ? <>Staff sign in <ArrowRight size={16} /></> : <>Login <ArrowRight size={16} /></>}</button>
+      {isSignup && <p className="auth-signup-terms-note">By creating an account, you agree to the <Link to="/terms">Terms of Service</Link>. For more information about our privacy practices, see our <Link to="/privacy">Privacy Policy</Link>.</p>}
       {isStaff ? <>
         <p className="auth-staff-account-note">Staff accounts are created by a Federation administrator.</p>
         <Link className="signup-link" to="/account/login">Return to user sign in <ArrowRight size={14} /></Link>
