@@ -7,7 +7,7 @@ import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import jwt from 'jsonwebtoken'
 import { Prisma, PrismaClient } from '@prisma/client'
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -150,6 +150,20 @@ const passwordResetRateLimit = rateLimit({
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   handler: (_req, res) => res.setHeader('Retry-After', '900').status(429).json({ error: 'Too many password reset requests. Please wait 15 minutes before trying again.' }),
+})
+const registrationEmailRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (_req, res) => res.setHeader('Retry-After', '900').status(429).json({ error: 'Too many verification emails. Please wait 15 minutes before trying again.' }),
+})
+const registrationVerifyRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (_req, res) => res.setHeader('Retry-After', '900').status(429).json({ error: 'Too many verification attempts. Please wait 15 minutes before trying again.' }),
 })
 app.use('/api/content/interactions', rateLimit({ windowMs: 15 * 60 * 1000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }))
 
@@ -497,27 +511,208 @@ app.post('/api/admin/system-backup/import', authenticate, allowRoles('ADMIN'), r
 }))
 
 const memberPrivacyVersion = '2026-11-06'
+const registrationCodeLifetimeMs = 10 * 60 * 1000
+const registrationCodeResendDelayMs = 60 * 1000
+const registrationCodeMaxAttempts = 5
 const retiredDemoAccountEmails = new Set([
   'demo.admin@carmel.test',
   'demo.formator@carmel.test',
   'demo.member@carmel.test',
 ])
 const registerSchema = z.object({ name: z.string().trim().min(2).max(100), email: z.email().transform((value) => value.toLowerCase()), gender: z.enum(['MALE', 'FEMALE', 'ANONYMOUS']).default('ANONYMOUS'), phone: z.string().trim().min(7).max(30), address: z.string().trim().min(5).max(300), password: z.string().min(10).max(128), privacyConsent: z.literal(true) })
-app.post('/api/auth/register', asyncRoute(async (req, res) => {
+const registrationEmailSchema = z.object({ email: z.email().trim().toLowerCase() })
+const registrationVerificationSchema = registrationEmailSchema.extend({ code: z.string().regex(/^\d{6}$/) })
+function registrationCodeHash(email: string, salt: string, code: string) {
+  return createHmac('sha256', jwtSecret).update(`${email}:${salt}:${code}`).digest('hex')
+}
+function registrationCodeMatches(expectedHash: string, email: string, salt: string, code: string) {
+  const expected = Buffer.from(expectedHash, 'hex')
+  const actual = Buffer.from(registrationCodeHash(email, salt, code), 'hex')
+  return expected.length === actual.length && timingSafeEqual(expected, actual)
+}
+function cleanupExpiredRegistrationVerifications() {
+  void prisma.registrationVerification.deleteMany({ where: { expiresAt: { lte: new Date() } } }).catch((error: unknown) => {
+    console.error('Unable to clean up expired registration verifications:', error instanceof Error ? error.message : 'Unknown error')
+  })
+}
+cleanupExpiredRegistrationVerifications()
+const registrationVerificationCleanupTimer = setInterval(cleanupExpiredRegistrationVerifications, 10 * 60 * 1000)
+registrationVerificationCleanupTimer.unref()
+async function sendRegistrationVerificationEmail(email: string, code: string) {
+  await sendEmail({
+    to: email,
+    subject: 'Verify your Carmels in Communion email',
+    text: `Your Carmels in Communion verification code is ${code}.\n\nEnter this six-digit code to complete your account registration. It expires in 10 minutes. If you did not request this, you can ignore this email.`,
+    html: `<p>Your Carmels in Communion verification code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:8px">${code}</p><p>Enter this six-digit code to complete your account registration. It expires in 10 minutes.</p><p>If you did not request this, you can ignore this email.</p>`,
+  })
+}
+app.post('/api/auth/register', registrationEmailRateLimit, asyncRoute(async (req, res) => {
   const parsed = validate(registerSchema, req.body)
   if (parsed.error) return res.status(400).json({ error: 'Please check the form fields.', details: parsed.error })
-  if (retiredDemoAccountEmails.has(parsed.data!.email)) return res.status(403).json({ error: 'This email address is not available for registration.' })
-  const passwordHash = await bcrypt.hash(parsed.data!.password, 12)
+  const input = parsed.data!
+  if (retiredDemoAccountEmails.has(input.email)) return res.status(403).json({ error: 'This email address is not available for registration.' })
+  if (!resendApiKey || !resendFrom) return res.status(503).json({ error: 'Email verification is not configured yet. Please contact the Federation office for help.' })
+  if (await prisma.user.findUnique({ where: { email: input.email }, select: { id: true } })) {
+    return res.status(409).json({ error: 'An account with this email already exists.' })
+  }
+
+  const now = new Date()
+  await prisma.registrationVerification.deleteMany({ where: { expiresAt: { lte: now } } })
+  const existingVerification = await prisma.registrationVerification.findUnique({ where: { email: input.email } })
+  if (existingVerification) {
+    const waitSeconds = Math.ceil((existingVerification.lastSentAt.getTime() + registrationCodeResendDelayMs - now.getTime()) / 1000)
+    if (waitSeconds > 0) {
+      res.setHeader('Retry-After', String(waitSeconds))
+      return res.status(429).json({ error: `A verification code was just sent. Please wait ${waitSeconds} seconds before requesting another.` })
+    }
+  }
+
+  const passwordHash = await bcrypt.hash(input.password, 12)
+  const code = String(randomInt(100_000, 1_000_000))
+  const codeSalt = randomBytes(16).toString('hex')
+  const codeHash = registrationCodeHash(input.email, codeSalt, code)
+  const expiresAt = new Date(now.getTime() + registrationCodeLifetimeMs)
+  const verification = await prisma.registrationVerification.upsert({
+    where: { email: input.email },
+    create: {
+      email: input.email,
+      name: input.name,
+      gender: input.gender,
+      phone: input.phone,
+      address: input.address,
+      passwordHash,
+      privacyConsentAt: now,
+      privacyPolicyVersion: memberPrivacyVersion,
+      codeHash,
+      codeSalt,
+      attempts: 0,
+      expiresAt,
+      lastSentAt: now,
+    },
+    update: {
+      name: input.name,
+      gender: input.gender,
+      phone: input.phone,
+      address: input.address,
+      passwordHash,
+      privacyConsentAt: now,
+      privacyPolicyVersion: memberPrivacyVersion,
+      codeHash,
+      codeSalt,
+      attempts: 0,
+      expiresAt,
+      lastSentAt: now,
+    },
+  })
   try {
-    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
-    const user = await prisma.user.create({ data: { name: parsed.data!.name, email: parsed.data!.email, gender: parsed.data!.gender, phone: parsed.data!.phone, address: parsed.data!.address, passwordHash, role: 'USER', sessionVersion: 1, sessionExpiresAt: expiresAt, privacyConsentAt: new Date(), privacyPolicyVersion: memberPrivacyVersion, discernment: { create: {} } }, select: { id: true, name: true, email: true, gender: true, phone: true, address: true, role: true, sessionVersion: true } })
-    const token = jwt.sign({ id: user.id, role: user.role, sessionVersion: user.sessionVersion }, jwtSecret, { expiresIn: '8h' })
-    res.cookie('carmel_session', token, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 })
-    res.status(201).json({ user })
+    await sendRegistrationVerificationEmail(input.email, code)
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return res.status(409).json({ error: 'An account with this email already exists.' })
+    console.error('Registration verification email delivery failed:', error instanceof Error ? error.message : 'Unknown error')
+    await prisma.registrationVerification.deleteMany({ where: { id: verification.id, codeHash } })
+    return res.status(503).json({ error: 'We could not send a verification code right now. Please try again later.' })
+  }
+  return res.status(202).json({ verificationRequired: true, email: input.email, resendAfterSeconds: registrationCodeResendDelayMs / 1000 })
+}))
+app.post('/api/auth/register/resend', registrationEmailRateLimit, asyncRoute(async (req, res) => {
+  const parsed = validate(registrationEmailSchema, req.body)
+  if (parsed.error) return res.status(400).json({ error: 'Enter a valid email address.' })
+  if (!resendApiKey || !resendFrom) return res.status(503).json({ error: 'Email verification is not configured yet. Please contact the Federation office for help.' })
+  const email = parsed.data!.email
+  const now = new Date()
+  const verification = await prisma.registrationVerification.findUnique({ where: { email } })
+  if (!verification || verification.expiresAt <= now) {
+    if (verification) await prisma.registrationVerification.deleteMany({ where: { id: verification.id } })
+    return res.status(410).json({ error: 'This registration request expired. Please submit the signup form again.' })
+  }
+  const waitSeconds = Math.ceil((verification.lastSentAt.getTime() + registrationCodeResendDelayMs - now.getTime()) / 1000)
+  if (waitSeconds > 0) {
+    res.setHeader('Retry-After', String(waitSeconds))
+    return res.status(429).json({ error: `Please wait ${waitSeconds} seconds before requesting another code.` })
+  }
+
+  const code = String(randomInt(100_000, 1_000_000))
+  const codeSalt = randomBytes(16).toString('hex')
+  const codeHash = registrationCodeHash(email, codeSalt, code)
+  const expiresAt = new Date(now.getTime() + registrationCodeLifetimeMs)
+  const updated = await prisma.registrationVerification.updateMany({
+    where: { id: verification.id, lastSentAt: verification.lastSentAt, expiresAt: { gt: now } },
+    data: { codeHash, codeSalt, attempts: 0, expiresAt, lastSentAt: now },
+  })
+  if (!updated.count) {
+    res.setHeader('Retry-After', String(registrationCodeResendDelayMs / 1000))
+    return res.status(429).json({ error: 'A new verification code was just requested. Please check your email.' })
+  }
+  try {
+    await sendRegistrationVerificationEmail(email, code)
+  } catch (error) {
+    console.error('Registration verification email delivery failed:', error instanceof Error ? error.message : 'Unknown error')
+    await prisma.registrationVerification.deleteMany({ where: { id: verification.id, codeHash } })
+    return res.status(503).json({ error: 'We could not send a verification code right now. Please try again later.' })
+  }
+  return res.json({ message: 'A new verification code was sent.', resendAfterSeconds: registrationCodeResendDelayMs / 1000 })
+}))
+app.post('/api/auth/register/verify', registrationVerifyRateLimit, asyncRoute(async (req, res) => {
+  const parsed = validate(registrationVerificationSchema, req.body)
+  if (parsed.error) return res.status(400).json({ error: 'Enter the six-digit verification code from your email.' })
+  const { email, code } = parsed.data!
+  const now = new Date()
+  let outcome: { kind: 'verified' } | { kind: 'missing' | 'expired' | 'locked' | 'invalid' | 'stale' }
+  try {
+    outcome = await prisma.$transaction(async (tx) => {
+      const verification = await tx.registrationVerification.findUnique({ where: { email } })
+      if (!verification) return { kind: 'missing' }
+      if (verification.expiresAt <= now) {
+        await tx.registrationVerification.deleteMany({ where: { id: verification.id } })
+        return { kind: 'expired' }
+      }
+      if (verification.attempts >= registrationCodeMaxAttempts) return { kind: 'locked' }
+
+      const matches = registrationCodeMatches(verification.codeHash, email, verification.codeSalt, code)
+      if (!matches) {
+        const updated = await tx.registrationVerification.updateMany({
+          where: { id: verification.id, attempts: verification.attempts, expiresAt: { gt: now } },
+          data: { attempts: { increment: 1 } },
+        })
+        if (!updated.count) return { kind: 'stale' }
+        return { kind: verification.attempts + 1 >= registrationCodeMaxAttempts ? 'locked' : 'invalid' }
+      }
+
+      const claimed = await tx.registrationVerification.updateMany({
+        where: { id: verification.id, codeHash: verification.codeHash, attempts: verification.attempts, expiresAt: { gt: now } },
+        data: { attempts: registrationCodeMaxAttempts },
+      })
+      if (!claimed.count) return { kind: 'stale' }
+      await tx.user.create({
+        data: {
+          name: verification.name,
+          email: verification.email,
+          gender: verification.gender,
+          phone: verification.phone,
+          address: verification.address,
+          passwordHash: verification.passwordHash,
+          role: 'USER',
+          privacyConsentAt: verification.privacyConsentAt,
+          privacyPolicyVersion: verification.privacyPolicyVersion,
+          discernment: { create: {} },
+        },
+      })
+      await tx.registrationVerification.delete({ where: { id: verification.id } })
+      return { kind: 'verified' }
+    })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      await prisma.registrationVerification.deleteMany({ where: { email } })
+      return res.status(409).json({ error: 'An account with this email already exists. Please sign in instead.' })
+    }
     throw error
   }
+
+  if (outcome.kind === 'missing') return res.status(404).json({ error: 'No active verification request was found. Please submit the signup form again.' })
+  if (outcome.kind === 'expired') return res.status(410).json({ error: 'This verification code expired. Please submit the signup form again.' })
+  if (outcome.kind === 'locked') return res.status(429).json({ error: 'Too many incorrect codes. Request a new verification code to continue.' })
+  if (outcome.kind === 'invalid') return res.status(400).json({ error: 'That verification code is incorrect. Please try again.' })
+  if (outcome.kind === 'stale') return res.status(409).json({ error: 'This verification request changed. Please request a new code and try again.' })
+  return res.json({ verified: true, message: 'Your email has been verified and your account is ready. Please sign in.' })
 }))
 const loginSchema = z.object({
   email: z.email().trim().toLowerCase(),

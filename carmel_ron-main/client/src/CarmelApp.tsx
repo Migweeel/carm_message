@@ -2286,6 +2286,11 @@ function isLocalDemoSession() {
 type AuthApiResponse = {
   error?: string
   code?: string
+  email?: string
+  message?: string
+  resendAfterSeconds?: number
+  verificationRequired?: boolean
+  verified?: boolean
   user?: { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: string; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean }
 }
 async function readAuthResponse(response: Response): Promise<AuthApiResponse> {
@@ -2331,15 +2336,40 @@ async function readApiResponse<T>(response: Response, operation: string): Promis
 
 function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const isSignup = mode === 'signup'
   const isStaff = mode === 'staff'
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
+  const [resendingCode, setResendingCode] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [privacyChecked, setPrivacyChecked] = useState(false)
-  const [loginEmail, setLoginEmail] = useState('')
+  const [loginEmail, setLoginEmail] = useState(() => {
+    const state = location.state
+    return state && typeof state === 'object' && 'verifiedEmail' in state && typeof state.verifiedEmail === 'string'
+      ? state.verifiedEmail
+      : ''
+  })
   const [loginPassword, setLoginPassword] = useState('')
   const [accountType, setAccountType] = useState<'admin' | 'staff'>('staff')
+  const [verificationOpen, setVerificationOpen] = useState(false)
+  const [verificationEmail, setVerificationEmail] = useState('')
+  const [verificationCode, setVerificationCode] = useState('')
+  const [verificationError, setVerificationError] = useState('')
+  const [verificationSuccess, setVerificationSuccess] = useState(false)
+  const [verificationCanRestart, setVerificationCanRestart] = useState(false)
+  const [resendAvailableAt, setResendAvailableAt] = useState(0)
+  const [resendRemaining, setResendRemaining] = useState(0)
+  useEffect(() => {
+    if (!verificationOpen || verificationSuccess || !resendAvailableAt) {
+      setResendRemaining(0)
+      return
+    }
+    const updateRemaining = () => setResendRemaining(Math.max(0, Math.ceil((resendAvailableAt - Date.now()) / 1000)))
+    updateRemaining()
+    const timer = window.setInterval(updateRemaining, 1000)
+    return () => window.clearInterval(timer)
+  }, [verificationOpen, verificationSuccess, resendAvailableAt])
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -2397,6 +2427,17 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       const response = await fetch(isSignup ? '/api/auth/register' : '/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isSignup ? { name, email, gender, phone, address, password, privacyConsent: form.get('privacyConsent') === 'on' } : { email, password }) })
       const result = await readAuthResponse(response)
       if (!response.ok) throw new Error(result.error || 'Unable to continue.')
+      if (isSignup) {
+        if (!result.verificationRequired) throw new Error('The registration service did not start email verification. Please try again.')
+        setVerificationEmail(result.email || email)
+        setVerificationCode('')
+        setVerificationError('')
+        setVerificationSuccess(false)
+        setVerificationCanRestart(false)
+        setResendAvailableAt(Date.now() + (result.resendAfterSeconds || 60) * 1000)
+        setVerificationOpen(true)
+        return
+      }
       if (!result.user || result.user.role !== 'USER') throw new Error('Staff accounts use the Federation staff sign-in page.')
       saveServerSessionRole(result.user.role)
       saveMemberSession({ id: result.user.id, name: result.user.name, email: result.user.email, gender: result.user.gender || gender, phone: result.user.phone, address: result.user.address, role: 'USER' })
@@ -2406,6 +2447,61 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     } finally {
       setPending(false)
     }
+  }
+  async function verifyRegistration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setPending(true)
+    setVerificationError('')
+    try {
+      const response = await fetch('/api/auth/register/verify', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: verificationEmail, code: verificationCode }),
+      })
+      const result = await readAuthResponse(response)
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 410) setVerificationCanRestart(true)
+        throw new Error(result.error || 'Unable to verify this email.')
+      }
+      if (!result.verified) throw new Error('The verification service did not confirm this email. Please try again.')
+      setVerificationSuccess(true)
+      setVerificationCode('')
+    } catch (reason) {
+      setVerificationError(reason instanceof Error ? reason.message : 'Unable to verify this email.')
+    } finally {
+      setPending(false)
+    }
+  }
+  async function resendRegistrationCode() {
+    setResendingCode(true)
+    setVerificationError('')
+    try {
+      const response = await fetch('/api/auth/register/resend', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: verificationEmail }),
+      })
+      const result = await readAuthResponse(response)
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 410) setVerificationCanRestart(true)
+        const retryAfter = Number(response.headers.get('Retry-After'))
+        if (retryAfter > 0) setResendAvailableAt(Date.now() + retryAfter * 1000)
+        throw new Error(result.error || 'Unable to resend the verification code.')
+      }
+      setVerificationCode('')
+      setVerificationCanRestart(false)
+      setResendAvailableAt(Date.now() + (result.resendAfterSeconds || 60) * 1000)
+    } catch (reason) {
+      setVerificationError(reason instanceof Error ? reason.message : 'Unable to resend the verification code.')
+    } finally {
+      setResendingCode(false)
+    }
+  }
+  function proceedToSignIn() {
+    setVerificationOpen(false)
+    navigate('/account/login', { replace: true, state: { verifiedEmail: verificationEmail } })
   }
   return <>
   <section className={`login-page auth-reference-page member-auth-page${isSignup ? ' member-auth-signup-page' : isStaff ? ' member-auth-staff-page' : ' member-auth-login-page'}`}>
@@ -2425,7 +2521,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         <label>Full name<input name="name" required minLength={2} maxLength={100} autoComplete="name" placeholder="Name, Initial, Surname" /></label>
         <label>Gender<select className="member-gender-select" name="gender" required defaultValue=""><option value="" disabled>Select gender</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="ANONYMOUS">Anonymous</option></select></label>
         <label>Contact number<input name="phone" type="tel" required minLength={7} maxLength={30} autoComplete="tel" placeholder="e.g. +63 912 345 6789" /></label>
-        <label>Address<textarea name="address" required minLength={5} maxLength={300} rows={2} autoComplete="street-address" placeholder="Your complete address" /></label>
+        <label>Address<textarea className="member-address-input" name="address" required minLength={5} maxLength={300} rows={2} autoComplete="street-address" placeholder="Your complete address" /></label>
       </>}
       <label>Email address<input name="email" type="email" required autoComplete="email" placeholder="name@example.com" value={isSignup ? undefined : loginEmail} onChange={isSignup ? undefined : (event) => setLoginEmail(event.target.value)} /></label>
       <label>Password<PasswordInput name="password" required minLength={isSignup ? 10 : 1} maxLength={128} autoComplete={isSignup ? 'new-password' : 'current-password'} placeholder={isSignup ? 'At least 10 characters' : 'Enter your password'} value={isSignup ? undefined : loginPassword} onChange={isSignup ? undefined : (event) => setLoginPassword(event.target.value)} /></label>
@@ -2447,9 +2543,45 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       </>}
     </form>
   </section>
+  {verificationOpen && <div className="email-verification-backdrop" role="presentation">
+    <section className="email-verification-dialog" role="dialog" aria-modal="true" aria-labelledby="email-verification-title" aria-describedby="email-verification-description">
+      {verificationSuccess ? <>
+        <span className="eyebrow">EMAIL VERIFIED</span>
+        <h2 id="email-verification-title">Your account is ready</h2>
+        <p id="email-verification-description">Your email was verified and your member account was created. Sign in to continue.</p>
+        <button className="button button-dark full-button" type="button" onClick={proceedToSignIn}>Proceed to sign in <ArrowRight size={16} /></button>
+      </> : <>
+        <span className="eyebrow">EMAIL CONFIRMATION</span>
+        <h2 id="email-verification-title">Check your email</h2>
+        <p id="email-verification-description">We sent a six-digit verification code to <strong>{verificationEmail}</strong>. Enter it below to finish creating your account.</p>
+        <form className="email-verification-form" onSubmit={verifyRegistration}>
+          <label htmlFor="registration-verification-code">Verification code</label>
+          <input
+            id="registration-verification-code"
+            name="code"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            required
+            value={verificationCode}
+            onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="Enter 6-digit code"
+          />
+          {verificationError && <p className="form-error" role="alert">{verificationError}</p>}
+          <button className="button button-dark full-button" type="submit" disabled={pending || resendingCode || verificationCode.length !== 6}>{pending ? 'Verifying…' : 'Verify email'}</button>
+        </form>
+        <button className="email-verification-resend" type="button" onClick={() => void resendRegistrationCode()} disabled={pending || resendingCode || resendRemaining > 0}>
+          {resendingCode ? 'Sending…' : resendRemaining > 0 ? `Resend code in ${resendRemaining}s` : 'Resend verification code'}
+        </button>
+        {verificationCanRestart && <button className="email-verification-resend" type="button" onClick={() => setVerificationOpen(false)}>Return to sign up</button>}
+      </>}
+    </section>
+  </div>}
   {privacyOpen && <div className="privacy-consent-backdrop" role="presentation"><section className="privacy-consent-dialog" role="dialog" aria-modal="true" aria-labelledby="privacy-consent-title"><button className="privacy-consent-close" type="button" aria-label="Close privacy notice" onClick={closePrivacyNotice}><X size={18} /></button><span className="eyebrow">CARMEL'S IN COMMUNION</span><h2 id="privacy-consent-title">Data Privacy Notice and Consent</h2><div className="privacy-notice-content">
     <p>Carmel's in Communion is committed to protecting your personal information. This notice explains how information is collected, used, stored, and protected when you register, sign in, and use the website, including its LightFM recommendation feature. Our practices are guided by the Philippine Data Privacy Act of 2012 (Republic Act No. 10173).</p>
-    <h3>1. Information we collect</h3><p>When you register, we collect your full name, gender choice (including Anonymous), contact number, address, email address, and password. These details are used to create and manage your account and communicate with you. Passwords are hashed for authentication and are not stored as plain text. The confirmation-password field is checked in your browser; it is not sent to the server or retained in your account record.</p>
+    <h3>1. Information we collect</h3><p>When you register, we collect your full name, gender choice (including Anonymous), contact number, address, email address, and password. We send a one-time code to verify that you can access the email address. Until verification is completed, registration details and the hashed password are held temporarily to finish account creation. Passwords are hashed for authentication and are not stored as plain text. The confirmation-password field is checked in your browser; it is not sent to the server or retained in your account record.</p>
     <h3>2. LightFM recommendations</h3><p>For signed-in members, teaching views and current bookmarks may be linked to the account and used to learn reading preferences and provide relevant Carmelights suggestions. The recommendation service receives an internal account identifier and reading-interaction data, not your password or login credentials. Anonymous teaching views may contribute to overall popularity counts, but are not linked to an account or used to train LightFM. Recommendations may use a popularity-based fallback when personalization is unavailable or the model has insufficient data.</p>
     <h3>3. How we use information</h3><p>We use account information to create and maintain accounts, authenticate sign-ins, maintain resident records, provide website features, communicate important account-related information, support password recovery, provide relevant recommendations, and improve website functionality.</p>
     <h3>4. Protection and access</h3><p>Reasonable organizational, physical, and technical measures are used to protect personal information against unauthorized access, disclosure, alteration, loss, or misuse. Access is limited to authorized personnel who need the information for their responsibilities. Passwords are not recommendation-system inputs.</p>

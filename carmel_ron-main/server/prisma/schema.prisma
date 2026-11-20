@@ -105,6 +105,26 @@ model PasswordResetToken {
   @@index([expiresAt])
 }
 
+model RegistrationVerification {
+  id                   String   @id @default(cuid())
+  email                String   @unique
+  name                 String
+  gender               Gender   @default(ANONYMOUS)
+  phone                String
+  address              String
+  passwordHash         String
+  privacyConsentAt     DateTime
+  privacyPolicyVersion String
+  codeHash             String
+  codeSalt             String
+  attempts             Int      @default(0)
+  expiresAt            DateTime
+  lastSentAt           DateTime @default(now())
+  createdAt            DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model Discernment {
   id         String           @id @default(cuid())
   userId     String           @unique
