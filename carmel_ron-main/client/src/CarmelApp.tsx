@@ -2574,7 +2574,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
               theme="outline"
               shape="rectangular"
               size="large"
-              width="400"
+              width="480"
             /></div>
           </GoogleOAuthProvider>
           : <p className="auth-social-consent-note" role="status">Google sign-in is not configured for this website yet.</p>}

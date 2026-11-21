@@ -677,8 +677,8 @@
   .auth-reference-form,
   .member-auth-login-page .auth-reference-form,
   .member-auth-staff-page .auth-reference-form {
-    width: min(400px, calc(100% - 36px)) !important;
-    max-width: 400px;
+    width: min(480px, calc(100% - 36px)) !important;
+    max-width: 480px;
   }
 
   .auth-reference-form,
