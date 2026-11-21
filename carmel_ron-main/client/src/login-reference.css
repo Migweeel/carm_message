@@ -417,6 +417,7 @@
   max-width: 100% !important;
 }
 
+.auth-google-button > div > div,
 .auth-google-button > div > div > div {
   width: 100% !important;
 }
@@ -696,8 +697,8 @@
   .auth-reference-form,
   .member-auth-login-page .auth-reference-form,
   .member-auth-staff-page .auth-reference-form {
-    width: min(480px, calc(100% - 36px)) !important;
-    max-width: 480px;
+    width: min(400px, calc(100% - 36px)) !important;
+    max-width: 400px;
   }
 
   .auth-reference-form,
