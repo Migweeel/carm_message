@@ -2575,7 +2575,23 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
               shape="rectangular"
               size="large"
               width="480"
-            /></div>
+            /><button
+              className="auth-google-custom-button"
+              type="button"
+              onClick={(event) => {
+                const googleRoot = event.currentTarget.parentElement
+                const googleButton = googleRoot?.querySelector<HTMLElement>('[role="button"]')
+                googleButton?.click()
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path fill="#4285F4" d="M21.35 12.18c0-.66-.06-1.29-.17-1.9H12v3.59h5.24a4.48 4.48 0 0 1-1.94 2.94v2.52h3.14c1.84-1.7 2.91-4.2 2.91-7.15z" />
+                <path fill="#34A853" d="M12 21.74c2.63 0 4.84-.87 6.45-2.36l-3.14-2.52c-.87.58-1.98.93-3.31.93-2.55 0-4.71-1.72-5.48-4.04H3.27v2.57A9.74 9.74 0 0 0 12 21.74z" />
+                <path fill="#FBBC05" d="M6.52 13.75a5.49 5.49 0 0 1 0-3.5V7.68H3.27a9.74 9.74 0 0 0 0 8.14l3.25-2.07z" />
+                <path fill="#EA4335" d="M12 7.21c1.43 0 2.72.49 3.73 1.46l2.79-2.79A9.35 9.35 0 0 0 12 3.26a9.74 9.74 0 0 0-8.73 5.92l3.25 2.57A5.49 5.49 0 0 1 12 7.21z" />
+              </svg>
+              <span>Continue with Google</span>
+            </button></div>
           </GoogleOAuthProvider>
           : <p className="auth-social-consent-note" role="status">Google sign-in is not configured for this website yet.</p>}
         <div className="auth-social-divider" aria-hidden="true"><span>or</span></div>
