@@ -427,9 +427,18 @@ function CarmelifeReadingDialog({ reading, fullView, onToggleFullView, onClose, 
       <button className="story-modal-close" onClick={onClose} aria-label="Close story"><X size={18} /></button>
       <img src={articleImageFor(reading.image, fallbackImage)} alt={reading.title} />
       <div className="story-modal-body">
-        <button className="button button-outline story-full-view-toggle" type="button" onClick={onToggleFullView}>{fullView ? 'Return to story preview' : 'Read in full view'} <Maximize2 size={15} /></button>
         <span className="eyebrow">{reading.author}</span>
         <h2>{reading.title}</h2>
+        <button
+          className={`button button-outline story-full-view-toggle${fullView ? ' story-full-view-toggle-minimized' : ''}`}
+          type="button"
+          onClick={onToggleFullView}
+          aria-label={fullView ? 'Return to story preview' : 'Read story in full view'}
+          aria-expanded={fullView}
+          title={fullView ? 'Return to story preview' : undefined}
+        >
+          {fullView ? <ChevronDown size={18} /> : <>Read in full view <Maximize2 size={15} /></>}
+        </button>
         <div className="story-full-copy">{reading.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
       </div>
     </article>
