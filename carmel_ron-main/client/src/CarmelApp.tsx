@@ -2594,8 +2594,10 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
                 text="continue_with"
                 theme="outline"
                 shape="rectangular"
-                size="large"
+                size="medium"
                 width="400"
+                auto_select={false}
+                use_fedcm_for_button={false}
               />}
           </div>
           : <p className="auth-social-consent-note" role="status">Google sign-in is not configured for this website yet.</p>}
