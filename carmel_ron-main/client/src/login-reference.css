@@ -425,6 +425,7 @@
 .auth-google-button [role="button"] {
   width: 400px !important;
   max-width: 100% !important;
+  border-right: 1px solid #dadce0 !important;
 }
 
 .auth-social-consent-note,
