@@ -404,40 +404,17 @@
   justify-content: center;
 }
 
-.auth-google-button > div:not(.auth-google-custom-button) {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-}
-
-.auth-google-custom-button {
+.auth-google-button > div {
   display: flex;
   width: 100%;
-  min-height: 44px;
-  align-items: center;
+  min-width: 0;
+  max-width: 100%;
   justify-content: center;
-  gap: 10px;
-  border: 1px solid #dad2c6;
-  border-radius: 8px;
-  background: #fff;
-  color: #3c4043;
-  font-family: Google Sans, Arial, sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
 }
 
-.auth-google-custom-button:hover {
-  border-color: #c8bfB2;
-  background: #fafafa;
-}
-
-.auth-google-custom-button:focus-visible {
-  outline: 3px solid rgba(169, 132, 77, 0.18);
-  outline-offset: 2px;
+.auth-google-button iframe {
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 .auth-social-consent-note,

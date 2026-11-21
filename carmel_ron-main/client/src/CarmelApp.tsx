@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, RotateCw, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
 import attractedByTheVeilImage from './assets/attracted-by-the-veil.jpg'
@@ -2371,6 +2371,8 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const isStaff = mode === 'staff'
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
+  const [googlePending, setGooglePending] = useState(false)
+  const googleRequestInFlight = useRef(false)
   const [resendingCode, setResendingCode] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [loginEmail, setLoginEmail] = useState(() => {
@@ -2474,7 +2476,11 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     }
   }
   async function continueWithGoogle(credential: string) {
-    setPending(true)
+    if (googleRequestInFlight.current) return
+    googleRequestInFlight.current = true
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 20_000)
+    setGooglePending(true)
     setError('')
     try {
       const response = await fetch('/api/auth/google', {
@@ -2482,6 +2488,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential, intent: isSignup ? 'signup' : 'login' }),
+        signal: controller.signal,
       })
       const result = await readAuthResponse(response)
       if (!response.ok) throw new Error(result.error || 'Unable to continue with Google.')
@@ -2499,9 +2506,13 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       })
       navigate(isSignup ? '/account' : '/', { replace: true })
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to connect to the Google sign-in service.')
+      setError(reason instanceof Error && reason.name === 'AbortError'
+        ? 'Google sign-in took too long. Check your connection and try again.'
+        : reason instanceof Error ? reason.message : 'Unable to connect to the Google sign-in service.')
     } finally {
-      setPending(false)
+      window.clearTimeout(timeoutId)
+      googleRequestInFlight.current = false
+      setGooglePending(false)
     }
   }
   async function verifyRegistration(event: FormEvent<HTMLFormElement>) {
@@ -2567,41 +2578,26 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       <h1>{isSignup ? <>Create <em>Account</em></> : isStaff ? <>Staff <em>Sign in</em></> : <>Login <em>Account</em></>}</h1>
       <p>{isSignup ? 'Create a resident account by providing your information.' : isStaff ? 'Sign in to your Federation staff or administrator account.' : 'Please provide your account information.'}</p>
       {!isStaff && <div className="auth-social-login">
-        {googleClientId ? pending
-          ? <p className="auth-social-status" role="status">Connecting to Google…</p>
-          : <GoogleOAuthProvider clientId={googleClientId}>
-            <div className="auth-google-button"><GoogleLogin
-              onSuccess={(response) => {
-                if (!response.credential) {
-                  setError('Google did not return a sign-in credential. Please try again.')
-                  return
-                }
-                void continueWithGoogle(response.credential)
-              }}
-              onError={() => setError('Google sign-in did not complete. Please try again or use your email and password.')}
-              text="continue_with"
-              theme="outline"
-              shape="rectangular"
-              size="large"
-              width="480"
-            /><button
-              className="auth-google-custom-button"
-              type="button"
-              onClick={(event) => {
-                const googleRoot = event.currentTarget.parentElement
-                const googleButton = googleRoot?.querySelector<HTMLElement>('[role="button"]')
-                googleButton?.click()
-              }}
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                <path fill="#4285F4" d="M21.35 12.18c0-.66-.06-1.29-.17-1.9H12v3.59h5.24a4.48 4.48 0 0 1-1.94 2.94v2.52h3.14c1.84-1.7 2.91-4.2 2.91-7.15z" />
-                <path fill="#34A853" d="M12 21.74c2.63 0 4.84-.87 6.45-2.36l-3.14-2.52c-.87.58-1.98.93-3.31.93-2.55 0-4.71-1.72-5.48-4.04H3.27v2.57A9.74 9.74 0 0 0 12 21.74z" />
-                <path fill="#FBBC05" d="M6.52 13.75a5.49 5.49 0 0 1 0-3.5V7.68H3.27a9.74 9.74 0 0 0 0 8.14l3.25-2.07z" />
-                <path fill="#EA4335" d="M12 7.21c1.43 0 2.72.49 3.73 1.46l2.79-2.79A9.35 9.35 0 0 0 12 3.26a9.74 9.74 0 0 0-8.73 5.92l3.25 2.57A5.49 5.49 0 0 1 12 7.21z" />
-              </svg>
-              <span>Continue with Google</span>
-            </button></div>
-          </GoogleOAuthProvider>
+        {googleClientId
+          ? <div className="auth-google-button">
+            {pending || googlePending
+              ? <p className="auth-social-status" role="status">{googlePending ? 'Connecting to Google…' : 'Please wait…'}</p>
+              : <GoogleLogin
+                onSuccess={(response) => {
+                  if (!response.credential) {
+                    setError('Google did not return a sign-in credential. Please try again.')
+                    return
+                  }
+                  void continueWithGoogle(response.credential)
+                }}
+                onError={() => setError('Google sign-in did not complete. Please try again or use your email and password.')}
+                text="continue_with"
+                theme="outline"
+                shape="rectangular"
+                size="large"
+                width="400"
+              />}
+          </div>
           : <p className="auth-social-consent-note" role="status">Google sign-in is not configured for this website yet.</p>}
         <div className="auth-social-divider" aria-hidden="true"><span>or</span></div>
       </div>}
@@ -5807,6 +5803,12 @@ function AdminPage() {
   void MessagesPage
   return <AdminShell user={user} onUserUpdated={setUser}><Routes><Route index element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /><Route path="messages" element={<DirectMessagesPage user={user} />} /><Route path="updates" element={user.role === 'ADMIN' || user.canManageUpdates ? <UpdatesAdminPage /> : <Navigate to="/admin" replace />} /><Route path="users" element={user.role === 'ADMIN' || user.canManageUsers ? <RoleAwareUsersPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="discerners" element={user.role === 'ADMIN' || user.canManageUsers ? <AdminDiscernmentPage /> : <Navigate to="/admin" replace />} /><Route path="donations" element={user.role === 'ADMIN' ? <DonationAdminPage /> : <Navigate to="/admin" replace />} /><Route path="content" element={user.role === 'ADMIN' || user.canManageDetails ? <GenericAdmin title="Manage details" /> : <Navigate to="/admin" replace />} /><Route path="system-backup" element={user.role === 'ADMIN' ? <SystemBackupPage /> : <Navigate to="/admin" replace />} /><Route path="audit" element={user.role === 'ADMIN' || user.role === 'FORMATOR' ? <AuditLogsPage user={user} /> : <Navigate to="/admin" replace />} /><Route path="*" element={user.role === 'ADMIN' ? <DashboardPage /> : <FormatorDashboard user={user} />} /></Routes></AdminShell>
 }
+function GoogleAuthProviderLayout() {
+  return googleClientId
+    ? <GoogleOAuthProvider clientId={googleClientId}><Outlet /></GoogleOAuthProvider>
+    : <Outlet />
+}
+
 function AppRoutes() {
   return <>
     <SessionMonitor />
@@ -5827,8 +5829,10 @@ function AppRoutes() {
     <Route path="/terms" element={<PublicLayout><TermsOfServicePage /></PublicLayout>} />
     <Route path="/contact" element={<PublicLayout><ContactPage /></PublicLayout>} />
     <Route path="/donations" element={<PublicLayout><DonationsPage /></PublicLayout>} />
-    <Route path="/account/login" element={<MemberAuthPage mode="login" />} />
-    <Route path="/account/signup" element={<MemberAuthPage mode="signup" />} />
+    <Route element={<GoogleAuthProviderLayout />}>
+      <Route path="/account/login" element={<MemberAuthPage mode="login" />} />
+      <Route path="/account/signup" element={<MemberAuthPage mode="signup" />} />
+    </Route>
     <Route path="/account/forgot-password" element={<PasswordRecoveryPage />} />
     <Route path="/account/reset-password" element={<PasswordRecoveryPage />} />
     <Route path="/staff/login" element={<MemberAuthPage mode="staff" />} />
