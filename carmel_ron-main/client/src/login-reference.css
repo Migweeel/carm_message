@@ -403,6 +403,16 @@
   justify-content: center;
 }
 
+.auth-google-button [role="button"],
+.auth-google-button .S9gUrf-YoZ4jf,
+.auth-google-button .S9gUrf-YoZ4jf > div,
+.auth-google-button .nsm7Bb-HzV7m-LgbsSe {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box;
+}
+
 .auth-google-button iframe {
   max-width: 100%;
 }
