@@ -673,6 +673,38 @@
   }
 }
 
+@media (max-width: 760px) {
+  .auth-reference-form,
+  .member-auth-login-page .auth-reference-form,
+  .member-auth-staff-page .auth-reference-form {
+    width: min(400px, calc(100% - 36px)) !important;
+    max-width: 400px;
+  }
+
+  .auth-reference-form,
+  .auth-reference-form > *,
+  .auth-social-login,
+  .auth-google-button,
+  .auth-google-button > div,
+  .auth-reference-form .full-button,
+  .auth-reference-form > label,
+  .auth-reference-form > label input,
+  .auth-reference-form > label select,
+  .auth-reference-form > label textarea,
+  .auth-password-field,
+  .auth-password-field input {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .auth-google-button [role="button"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
 .email-verification-backdrop {
   position: fixed;
   z-index: 120;
