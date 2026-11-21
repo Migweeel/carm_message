@@ -125,6 +125,7 @@ app.disable('x-powered-by')
 app.set('trust proxy', 1)
 app.use(helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   contentSecurityPolicy: {
     directives: {
       connectSrc: ["'self'", 'https://accounts.google.com/gsi/'],
