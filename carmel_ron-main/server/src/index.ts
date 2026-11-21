@@ -778,6 +778,24 @@ const googleAuthUserSelect = {
   canManageDetails: true,
   canManageUpdates: true,
 } satisfies Prisma.UserSelect
+const identityWhereForGoogle = (providerUserId: string) => ({
+  provider_providerUserId: { provider: 'GOOGLE', providerUserId },
+})
+const linkGoogleIdentityToUser = async (userId: string, providerUserId: string) => {
+  try {
+    await prisma.oAuthIdentity.create({
+      data: { provider: 'GOOGLE', providerUserId, userId },
+    })
+    return true
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+    const existingIdentity = await prisma.oAuthIdentity.findUnique({
+      where: identityWhereForGoogle(providerUserId),
+      select: { userId: true },
+    })
+    return existingIdentity?.userId === userId
+  }
+}
 app.post('/api/auth/google', asyncRoute(async (req, res) => {
   if (!googleClientId) return res.status(503).json({ error: 'Google sign-in is not configured yet.' })
   const parsed = validate(googleAuthSchema, req.body)
@@ -798,47 +816,63 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
 
   const email = payload.email.trim().toLowerCase()
   if (retiredDemoAccountEmails.has(email)) return res.status(403).json({ error: 'This email address is not available for sign-in.' })
-  const identityWhere = { provider_providerUserId: { provider: 'GOOGLE', providerUserId: payload.sub } }
   const findGoogleIdentity = () => prisma.oAuthIdentity.findUnique({
-    where: identityWhere,
+    where: identityWhereForGoogle(payload.sub),
     include: { user: { select: googleAuthUserSelect } },
   })
   let identity = await findGoogleIdentity()
   let user = identity?.user ?? null
-  if (!user && input.intent === 'login') {
-    return res.status(401).json({ error: 'No Google-linked member account was found. Create an account or use your existing sign-in method.' })
-  }
   if (!user) {
-    const existingAccount = await prisma.user.findUnique({ where: { email }, select: { id: true } })
+    const existingAccount = await prisma.user.findUnique({ where: { email }, select: googleAuthUserSelect })
     if (existingAccount) {
-      return res.status(409).json({ error: 'An account with this email already exists. Sign in with your existing method; accounts are not automatically linked.' })
+      if (!existingAccount.isActive || existingAccount.role !== 'USER') {
+        return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
+      }
+      if (!await linkGoogleIdentityToUser(existingAccount.id, payload.sub)) {
+        return res.status(409).json({ error: 'This Google account is already linked to a different member account.' })
+      }
+      user = existingAccount
+    } else if (input.intent === 'login') {
+      return res.status(401).json({ error: 'No Google-linked member account was found. Create an account or use your existing sign-in method.' })
     }
 
-    const name = (payload.name?.trim() || email.split('@')[0]).slice(0, 100)
-    const passwordHash = await bcrypt.hash(randomBytes(32).toString('base64url'), 12)
-    try {
-      user = await prisma.user.create({
-        data: {
-          name,
-          email,
-          passwordHash,
-          role: 'USER',
-          privacyConsentAt: new Date(),
-          privacyPolicyVersion: memberPrivacyVersion,
-          discernment: { create: {} },
-          oauthIdentities: { create: { provider: 'GOOGLE', providerUserId: payload.sub } },
-        },
-        select: googleAuthUserSelect,
-      })
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
-      identity = await findGoogleIdentity()
-      if (!identity) {
-        return res.status(409).json({ error: 'An account with this email already exists. Sign in with your existing method; accounts are not automatically linked.' })
+    if (!existingAccount) {
+      const name = (payload.name?.trim() || email.split('@')[0]).slice(0, 100)
+      const passwordHash = await bcrypt.hash(randomBytes(32).toString('base64url'), 12)
+      try {
+        user = await prisma.user.create({
+          data: {
+            name,
+            email,
+            passwordHash,
+            role: 'USER',
+            privacyConsentAt: new Date(),
+            privacyPolicyVersion: memberPrivacyVersion,
+            discernment: { create: {} },
+            oauthIdentities: { create: { provider: 'GOOGLE', providerUserId: payload.sub } },
+          },
+          select: googleAuthUserSelect,
+        })
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+        identity = await findGoogleIdentity()
+        if (identity) {
+          user = identity.user
+        } else {
+          const accountCreatedConcurrently = await prisma.user.findUnique({ where: { email }, select: googleAuthUserSelect })
+          if (!accountCreatedConcurrently) throw error
+          if (!accountCreatedConcurrently.isActive || accountCreatedConcurrently.role !== 'USER') {
+            return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
+          }
+          if (!await linkGoogleIdentityToUser(accountCreatedConcurrently.id, payload.sub)) {
+            return res.status(409).json({ error: 'This Google account is already linked to a different member account.' })
+          }
+          user = accountCreatedConcurrently
+        }
       }
-      user = identity.user
     }
   }
+  if (!user) throw new Error('Google sign-in completed without resolving an account.')
   if (!user.isActive || user.role !== 'USER') {
     return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
   }
