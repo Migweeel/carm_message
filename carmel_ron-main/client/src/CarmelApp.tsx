@@ -863,7 +863,7 @@ function Brand({ light = false }: { light?: boolean }) {
 }
 const staffSessionUpdatedEvent = 'carmel-staff-session-updated'
 const siteSearchHistoryKey = 'carmel-site-search-history'
-type PublicProfile = { id: string; name: string; email: string; role: 'USER' | 'ADMIN' | 'FORMATOR'; prototype?: boolean }
+type PublicProfile = { id: string; name: string; email: string; avatarImage?: string | null; role: 'USER' | 'ADMIN' | 'FORMATOR'; prototype?: boolean }
 type SiteSearchItem = { title: string; detail: string; path: string; searchableText: string }
 function readSiteSearchHistory(): string[] {
   try {
@@ -984,7 +984,7 @@ function Navbar() {
           <button className="mobile-nav-close" type="button" aria-label="Close navigation" onClick={closeNavigation}><X size={19} /></button>
           {profile && <div className="mobile-nav-account">
             <button className="mobile-nav-account-toggle" type="button" aria-expanded={profileOpen} aria-controls="mobile-nav-account-links" onClick={() => setProfileOpen((value) => !value)}>
-              <i>{profile.name[0]?.toUpperCase()}</i>
+              <i>{profile.avatarImage ? <img src={profile.avatarImage} alt="" /> : profile.name[0]?.toUpperCase()}</i>
               <span>{profile.name}<small>{profile.role === 'USER' ? 'My profile' : profile.role === 'ADMIN' ? 'Administrator' : 'Staff'}</small></span>
               <ChevronDown size={16} />
             </button>
@@ -1000,7 +1000,7 @@ function Navbar() {
           <button className="mobile-search-trigger icon-button" type="button" aria-label="Search this site" onClick={() => { setMobileSearchQuery(''); setMobileSearchOpen(true) }}><Search size={19} /></button>
           {profile ? <div className="member-profile-control">
             <button className="member-profile-trigger" type="button" aria-haspopup="menu" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)}>
-              <i>{profile.name[0]?.toUpperCase()}</i><span>{profile.name}<small>{profile.role === 'USER' ? 'My profile' : profile.role === 'ADMIN' ? 'Administrator' : 'Staff'}</small></span><ChevronDown size={14} />
+              <i>{profile.avatarImage ? <img src={profile.avatarImage} alt="" /> : profile.name[0]?.toUpperCase()}</i><span>{profile.name}<small>{profile.role === 'USER' ? 'My profile' : profile.role === 'ADMIN' ? 'Administrator' : 'Staff'}</small></span><ChevronDown size={14} />
             </button>
             {profileOpen && <div className="member-profile-dropdown" role="menu">
               {accountMenuItems}
@@ -2817,11 +2817,6 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
   }
   return <form className="member-account-form member-profile-form" onSubmit={save}>
     <div className="member-section-heading"><span className="eyebrow">YOUR ACCOUNT</span><h2>Profile details</h2><p>Keep your contact details current for messages from the Federation.</p></div>
-    <label>Full name<input required minLength={2} maxLength={100} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /></label>
-    <label>Gender<select value={gender} onChange={(event) => setGender(parseMemberGender(event.target.value))}><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="ANONYMOUS">Anonymous</option></select></label>
-    <label>Contact number<input required type="tel" minLength={7} maxLength={30} autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="e.g. +63 912 345 6789" /></label>
-    <label>Email address<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-    <label>Address<textarea required minLength={5} maxLength={300} rows={3} autoComplete="street-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Your complete address" /></label>
     <section className="member-profile-avatar-editor" aria-labelledby="member-profile-avatar-title">
       <div className="member-profile-avatar-preview">
         {avatarImage ? <img src={avatarImage} alt="" /> : <User size={26} aria-hidden="true" />}
@@ -2835,6 +2830,11 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
         </div>
       </div>
     </section>
+    <label>Full name<input required minLength={2} maxLength={100} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /></label>
+    <label>Gender<select value={gender} onChange={(event) => setGender(parseMemberGender(event.target.value))}><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="ANONYMOUS">Anonymous</option></select></label>
+    <label>Contact number<input required type="tel" minLength={7} maxLength={30} autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="e.g. +63 912 345 6789" /></label>
+    <label>Email address<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+    <label>Address<textarea required minLength={5} maxLength={300} rows={3} autoComplete="street-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Your complete address" /></label>
     <div className="member-account-form-actions">
       {error && <p className="form-error" role="alert">{error}</p>}
       {saved && <p className="member-success form-success" role="status" aria-live="polite">Profile details updated successfully.</p>}

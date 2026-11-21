@@ -30,6 +30,19 @@
   object-fit: cover;
 }
 
+.member-profile-trigger > i,
+.site-header .mobile-nav-account-toggle > i {
+  overflow: hidden;
+}
+
+.member-profile-trigger > i img,
+.site-header .mobile-nav-account-toggle > i img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
 .member-profile-avatar-content {
   min-width: 0;
 }
