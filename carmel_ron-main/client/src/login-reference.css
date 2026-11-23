@@ -492,10 +492,6 @@
 
 .auth-google-button iframe {
   display: block;
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
-  margin-inline: auto !important;
 }
 
 .auth-google-button > div > div,

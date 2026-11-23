@@ -982,8 +982,17 @@ app.post('/api/auth/facebook', asyncRoute(async (req, res) => {
     const debugUrl = new URL('https://graph.facebook.com/v27.0/debug_token')
     debugUrl.searchParams.set('input_token', input.accessToken)
     debugUrl.searchParams.set('access_token', `${facebookAppId}|${facebookAppSecret}`)
-    const debugResponse = await fetch(debugUrl, { signal: AbortSignal.timeout(10_000) })
-    const debugPayload: unknown = await debugResponse.json()
+    const profileUrl = new URL('https://graph.facebook.com/v27.0/me')
+    profileUrl.searchParams.set('fields', 'id,name,email')
+    profileUrl.searchParams.set('access_token', input.accessToken)
+    const [debugResponse, profileResponse] = await Promise.all([
+      fetch(debugUrl, { signal: AbortSignal.timeout(10_000) }),
+      fetch(profileUrl, { signal: AbortSignal.timeout(10_000) }),
+    ])
+    const [debugPayload, profilePayload] = await Promise.all([
+      debugResponse.json() as Promise<unknown>,
+      profileResponse.json() as Promise<unknown>,
+    ])
     const debug = facebookTokenDebugSchema.safeParse(debugPayload)
     const tokenInfo = debug.success ? debug.data.data : null
     if (
@@ -996,11 +1005,6 @@ app.post('/api/auth/facebook', asyncRoute(async (req, res) => {
       return res.status(401).json({ error: 'Facebook could not verify this sign-in. Please try again.' })
     }
 
-    const profileUrl = new URL('https://graph.facebook.com/v27.0/me')
-    profileUrl.searchParams.set('fields', 'id,name,email')
-    profileUrl.searchParams.set('access_token', input.accessToken)
-    const profileResponse = await fetch(profileUrl, { signal: AbortSignal.timeout(10_000) })
-    const profilePayload: unknown = await profileResponse.json()
     const profile = facebookProfileSchema.safeParse(profilePayload)
     if (!profileResponse.ok || !profile.success || profile.data.id !== tokenInfo.user_id) {
       return res.status(401).json({ error: 'Facebook could not verify this sign-in. Please try again.' })
