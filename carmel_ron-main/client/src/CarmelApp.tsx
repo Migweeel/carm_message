@@ -2059,10 +2059,8 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const suppressPopularClick = useRef(false)
   const articles = isLife ? content.carmelife : content.carmelights
   const selected = articles.find((article) => article.id === selectedId)
+    || popularTeachings.find((teaching) => teaching.id === selectedId)
   const desc = isLife ? 'Vocation stories and glimpses of a contemplative life rooted in prayer and sisterhood.' : 'Discover words of wisdom from Carmelite saints—quotes that invite prayer, deepen trust, and draw the heart closer to God.'
-  function scrollPopular(direction: -1 | 1) {
-    popularListRef.current?.scrollBy({ left: direction * 420, behavior: 'smooth' })
-  }
   function startPopularDrag(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.pointerType === 'mouse' && event.button !== 0) return
     popularDrag.current = {
@@ -2090,7 +2088,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
     event.currentTarget.classList.remove('is-dragging')
     if (!drag.moved) return
     suppressPopularClick.current = true
-    window.setTimeout(() => { suppressPopularClick.current = false }, 0)
+    window.setTimeout(() => { suppressPopularClick.current = false }, 400)
   }
   useEffect(() => {
     if (kind === 'updates' || !content.isReady) return
@@ -2176,11 +2174,6 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
               <span className="carmelights-popular-rank">{rank}</span><ImageWithLoader src={articleImageFor(teaching.image, photo.chapel)} alt="" /><span className="carmelights-popular-copy"><small>{teaching.category || 'Prayer'} · {teaching.views.toLocaleString()} {teaching.views === 1 ? 'view' : 'views'}</small><b>{teaching.title}</b><em>{teaching.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
             </button>
           })}</div>
-          {popularTeachings.length > 2 && <nav className="carmelights-popular-pagination" aria-label="Browse most-viewed quotes">
-            <button type="button" onClick={() => scrollPopular(-1)} aria-label="Show previous most-viewed quotes"><ChevronLeft size={17} /></button>
-            <span aria-live="polite">{popularTeachings.length} popular quotes</span>
-            <button type="button" onClick={() => scrollPopular(1)} aria-label="Show more most-viewed quotes"><ChevronRight size={17} /></button>
-          </nav>}
         </> : <p>No published quotes are available yet.</p>}
       </section>
       <div className="carmelights-toolbar">
