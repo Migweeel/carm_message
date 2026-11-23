@@ -2093,11 +2093,11 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   useEffect(() => {
     if (kind === 'updates' || !content.isReady) return
     const readingId = new URLSearchParams(location.search).get('reading')
-    if (readingId && articles.some((article) => article.id === readingId)) {
+    if (readingId && (articles.some((article) => article.id === readingId) || popularTeachings.some((teaching) => teaching.id === readingId))) {
       setSelectedId(readingId)
       setFullView(false)
     }
-  }, [articles, content.isReady, kind, location.search])
+  }, [articles, popularTeachings, content.isReady, kind, location.search])
   useEffect(() => {
     if (isLife || kind === 'updates') return
     let active = true
@@ -6238,7 +6238,6 @@ function SessionMonitor() {
           saveMemberSession(null)
           window.dispatchEvent(new Event(staffSessionUpdatedEvent))
           setNotice('You were signed out because this account signed in on another device.')
-          navigateRef.current(role === 'USER' ? '/account/login' : '/staff/login', { replace: true })
         } else if (!response.ok) {
           console.error(`Session status check failed with HTTP ${response.status}; it will retry.`)
         }
