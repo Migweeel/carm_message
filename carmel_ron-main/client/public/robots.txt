@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Allow: /account/login
+Allow: /account/signup
+Allow: /account/forgot-password
+
+Sitemap: https://carmelsincommunion.org/sitemap.xml

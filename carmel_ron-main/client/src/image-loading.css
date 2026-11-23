@@ -1,0 +1,22 @@
+.site-image-loading[data-image-state="loading"],
+.site-image-loading[data-image-state="empty"],
+.site-image-loading[data-image-state="error"] {
+  background-color: #574638;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 28px 28px;
+}
+
+.site-image-loading[data-image-state="loading"] {
+  background-image: url('./assets/image-loading.svg');
+}
+
+.site-image-loading[data-image-state="empty"],
+.site-image-loading[data-image-state="error"] {
+  background-image: none;
+}
+
+.site-image-loading[data-image-state="loaded"] {
+  background-color: transparent;
+  background-image: none;
+}
