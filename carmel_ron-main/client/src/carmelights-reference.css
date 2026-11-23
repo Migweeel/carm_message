@@ -77,3 +77,40 @@
 .carmelights-reading-dialog-full-view .carmelights-reading-image{height:min(38vh,360px);margin-bottom:0}
 @media(max-width:560px){.carmelights-reading-backdrop{padding:16px}.carmelights-reading-dialog{max-height:calc(100vh - 32px);padding:34px 25px 28px;border-radius:8px}.carmelights-reading-dialog>.carmelights-category-tag{margin-bottom:13px}.carmelights-reading-close{top:14px;right:14px;width:40px;height:40px}.carmelights-reading-dialog h2{padding-right:20px;font-size:30px}.carmelights-reading-author{font-size:14px}.carmelights-reading-copy{margin-top:18px;padding:15px}.carmelights-reading-copy p{font-size:17px;line-height:1.8}.carmelights-reading-dialog h2+.story-full-view-toggle{top:calc(100% + 8px);max-width:calc(100% - 16px);min-height:40px;padding-inline:12px;gap:7px;font-size:11px}}
 @media(max-width:560px){.carmelights-reading-dialog-full-view{max-height:calc(100vh - 32px);padding:34px 25px 28px}.carmelights-reading-dialog-full-view h2{font-size:30px}.carmelights-reading-dialog-full-view .carmelights-reading-copy{margin-top:18px}.carmelights-reading-dialog-full-view .carmelights-reading-copy p{font-size:17px;line-height:1.8}.carmelights-reading-image{height:170px}.carmelights-reading-dialog-full-view .carmelights-reading-image{height:170px}}
+
+.carmelights-popular-list{display:flex;gap:13px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x mandatory;scrollbar-width:none;touch-action:pan-y;cursor:grab;user-select:none}
+.carmelights-popular-list::-webkit-scrollbar{display:none}
+.carmelights-popular-list.is-dragging{scroll-snap-type:none;cursor:grabbing}
+.carmelights-popular-card{position:relative;flex:0 0 300px;width:300px;min-width:300px;height:335px;padding:12px;border-radius:8px;display:flex;flex-direction:column;align-items:stretch;gap:8px;scroll-snap-align:start}
+.carmelights-popular-card>img{order:1;flex:none;width:100%;height:145px;border-radius:5px;object-fit:cover;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.carmelights-popular-rank{position:absolute;z-index:2;top:20px;left:20px}
+.carmelights-popular-copy{order:2;min-width:0;flex:1;display:grid;align-content:start;gap:4px;padding:2px 4px}
+.carmelights-popular-open{position:absolute;right:16px;bottom:12px}
+.carmelights-teaching-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.carmelights-teaching-card{position:relative;width:100%;height:335px;min-height:335px;padding:14px 16px 12px}
+.carmelights-teaching-image{order:1;width:100%;height:155px;margin:0 0 12px}
+.carmelights-card-top{position:absolute;z-index:3;top:22px;left:24px;right:24px;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0}
+.carmelights-card-eyebrow{order:2;margin:0 0 7px}
+.carmelights-teaching-card h2{order:3;margin:0 0 2px}
+.carmelights-card-author{order:4}
+.carmelights-teaching-card p{display:none}
+.carmelights-read-link{order:6}
+/* Compact 335px reading cards used by the deployed Railway app */
+.carmelights-popular-list{display:flex;gap:13px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x mandatory;scrollbar-width:none;touch-action:pan-y;cursor:grab;user-select:none}
+.carmelights-popular-list::-webkit-scrollbar{display:none}
+.carmelights-popular-list.is-dragging{scroll-snap-type:none;cursor:grabbing}
+.carmelights-popular-card{flex:0 0 300px;width:300px;min-width:300px;height:335px;padding:12px;border-radius:8px;display:flex;flex-direction:column;align-items:stretch;gap:8px;scroll-snap-align:start}
+.carmelights-popular-card.featured{box-shadow:0 5px 16px rgba(116,79,39,.08)}
+.carmelights-popular-rank{position:absolute;z-index:2;top:20px;left:20px}
+.carmelights-popular-card>img{order:1;flex:none;width:100%;height:145px;border-radius:5px;object-fit:cover;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.carmelights-popular-copy{order:2;min-width:0;flex:1;display:grid;align-content:start;gap:4px;padding:2px 4px}
+.carmelights-popular-open{position:absolute;right:16px;bottom:12px}
+.carmelights-teaching-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.carmelights-teaching-card{position:relative;width:100%;height:335px;min-height:335px;padding:14px 16px 12px}
+.carmelights-teaching-image{order:1;width:100%;height:155px;margin:0 0 12px}
+.carmelights-card-top{position:absolute;z-index:3;top:22px;left:24px;right:24px;display:flex;margin:0}
+.carmelights-card-eyebrow{order:2;margin:0 0 7px}
+.carmelights-teaching-card h2{order:3;margin:0 0 2px}
+.carmelights-card-author{order:4}
+.carmelights-teaching-card p{display:none}
+.carmelights-read-link{order:6}

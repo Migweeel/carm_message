@@ -2052,12 +2052,46 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const navigate = useNavigate()
   const { favorites, error: favoriteError, setFavorite } = useMemberFavorites(member)
   const [popularTeachings, setPopularTeachings] = useState<PopularTeaching[]>([])
-  const [popularPage, setPopularPage] = useState(0)
   const [popularTeachingsLoading, setPopularTeachingsLoading] = useState(true)
   const [popularTeachingsError, setPopularTeachingsError] = useState('')
+  const popularListRef = useRef<HTMLDivElement>(null)
+  const popularDrag = useRef<{ pointerId: number; startX: number; startScrollLeft: number; moved: boolean } | null>(null)
+  const suppressPopularClick = useRef(false)
   const articles = isLife ? content.carmelife : content.carmelights
   const selected = articles.find((article) => article.id === selectedId)
   const desc = isLife ? 'Vocation stories and glimpses of a contemplative life rooted in prayer and sisterhood.' : 'Discover words of wisdom from Carmelite saints—quotes that invite prayer, deepen trust, and draw the heart closer to God.'
+  function scrollPopular(direction: -1 | 1) {
+    popularListRef.current?.scrollBy({ left: direction * 420, behavior: 'smooth' })
+  }
+  function startPopularDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    popularDrag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: event.currentTarget.scrollLeft,
+      moved: false,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  function movePopularDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = popularDrag.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const distance = event.clientX - drag.startX
+    if (!drag.moved && Math.abs(distance) < 5) return
+    if (!drag.moved) drag.moved = true
+    event.preventDefault()
+    event.currentTarget.classList.add('is-dragging')
+    event.currentTarget.scrollLeft = drag.startScrollLeft - distance
+  }
+  function endPopularDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = popularDrag.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    popularDrag.current = null
+    event.currentTarget.classList.remove('is-dragging')
+    if (!drag.moved) return
+    suppressPopularClick.current = true
+    window.setTimeout(() => { suppressPopularClick.current = false }, 0)
+  }
   useEffect(() => {
     if (kind === 'updates' || !content.isReady) return
     const readingId = new URLSearchParams(location.search).get('reading')
@@ -2116,8 +2150,6 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   if (!isLife) {
     const categories = [...new Set([...carmelightsCategories, ...articles.map((article) => article.category?.trim()).filter((category): category is string => Boolean(category))])].sort((a, b) => a.localeCompare(b))
     const saints = [...new Set(articles.map((article) => article.author.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
-    const popularPageCount = Math.ceil(popularTeachings.length / 2)
-    const visiblePopularTeachings = popularTeachings.slice(popularPage * 2, popularPage * 2 + 2)
     const visibleTeachings = articles.filter((article) => {
       const matchesCategory = teachingCategory === 'All' || (article.category || 'Prayer') === teachingCategory
       const matchesSaint = teachingSaint === 'All' || article.author.trim() === teachingSaint
@@ -2133,16 +2165,21 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       <section className="carmelights-most-viewed" aria-labelledby="most-viewed-title">
         <div className="carmelights-most-viewed-heading"><span><Award size={15} /> Reader favorites</span><h2 id="most-viewed-title">Most viewed quotes</h2><p>Ranked by views over the last 30 days.</p></div>
         {popularTeachingsError ? <p className="form-error" role="alert">{popularTeachingsError}</p> : popularTeachingsLoading ? <p role="status">Loading most-viewed quotes…</p> : popularTeachings.length ? <>
-          <div className="carmelights-popular-list">{visiblePopularTeachings.map((teaching, index) => {
-            const rank = popularPage * 2 + index + 1
+          <div className="carmelights-popular-list" ref={popularListRef} onPointerDown={startPopularDrag} onPointerMove={movePopularDrag} onPointerUp={endPopularDrag} onPointerCancel={endPopularDrag} onPointerLeave={endPopularDrag} onClickCapture={(event) => {
+            if (suppressPopularClick.current) {
+              event.preventDefault()
+              event.stopPropagation()
+            }
+          }}>{popularTeachings.map((teaching, index) => {
+            const rank = index + 1
             return <button type="button" className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} onClick={() => setSelectedId(teaching.id)}>
               <span className="carmelights-popular-rank">{rank}</span><ImageWithLoader src={articleImageFor(teaching.image, photo.chapel)} alt="" /><span className="carmelights-popular-copy"><small>{teaching.category || 'Prayer'} · {teaching.views.toLocaleString()} {teaching.views === 1 ? 'view' : 'views'}</small><b>{teaching.title}</b><em>{teaching.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
             </button>
           })}</div>
-          {popularPageCount > 1 && <nav className="carmelights-popular-pagination" aria-label="Browse most-viewed quotes">
-            <button type="button" onClick={() => setPopularPage((page) => Math.max(0, page - 1))} disabled={popularPage === 0} aria-label="Show previous most-viewed quotes"><ChevronLeft size={17} /></button>
-            <span aria-live="polite">{popularPage * 2 + 1}–{Math.min(popularPage * 2 + 2, popularTeachings.length)} of {popularTeachings.length}</span>
-            <button type="button" onClick={() => setPopularPage((page) => Math.min(popularPageCount - 1, page + 1))} disabled={popularPage >= popularPageCount - 1} aria-label="Show more most-viewed quotes"><ChevronRight size={17} /></button>
+          {popularTeachings.length > 2 && <nav className="carmelights-popular-pagination" aria-label="Browse most-viewed quotes">
+            <button type="button" onClick={() => scrollPopular(-1)} aria-label="Show previous most-viewed quotes"><ChevronLeft size={17} /></button>
+            <span aria-live="polite">{popularTeachings.length} popular quotes</span>
+            <button type="button" onClick={() => scrollPopular(1)} aria-label="Show more most-viewed quotes"><ChevronRight size={17} /></button>
           </nav>}
         </> : <p>No published quotes are available yet.</p>}
       </section>
