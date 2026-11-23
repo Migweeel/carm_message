@@ -1806,14 +1806,13 @@ const discernmentSteps = [
 function CarmelifePage() {
   const { carmelife: articles, isLoading, isReady } = useManagedContent('carmelife')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [selectedReading, setSelectedReading] = useState<ManagedArticle | null>(null)
   const [fullView, setFullView] = useState(false)
   const [quoteIndex, setQuoteIndex] = useState(0)
   const quoteTouchStart = useRef<{ x: number; y: number } | null>(null)
   const selected = articles.find((article) => article.id === selectedId)
   const featuredArticles = articles.slice(0, 6)
   const quote = vocationQuotes[quoteIndex]
-  function closeStory() { setSelectedId(null); setSelectedReading(null); setFullView(false) }
+  function closeStory() { setSelectedId(null); setFullView(false) }
   function changeQuote(direction: number) {
     setQuoteIndex((index) => (index + direction + vocationQuotes.length) % vocationQuotes.length)
   }
@@ -2043,6 +2042,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const content = useManagedContent(kind === 'updates' ? 'contactDetails' : isLife ? 'carmelife' : 'carmelights')
   const location = useLocation()
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedReading, setSelectedReading] = useState<ManagedArticle | null>(null)
   const [fullView, setFullView] = useState(false)
   const [teachingQuery, setTeachingQuery] = useState('')
   const [teachingCategory, setTeachingCategory] = useState('All')
