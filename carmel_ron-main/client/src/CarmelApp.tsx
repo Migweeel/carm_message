@@ -519,32 +519,7 @@ const photo = {
   garden: 'https://images.unsplash.com/photo-1497250681960-ef046c08a56e?auto=format&fit=crop&w=1200&q=85',
   cosmos: 'https://images.unsplash.com/photo-1494972308805-463bc619d34e?auto=format&fit=crop&w=1800&q=85',
 }
-const mainVocationStory: ManagedArticle = {
-  id: 'life-attracted-by-the-veil',
-  title: 'Attracted by the Veil',
-  author: 'Sr. Frances of the Immaculate Heart, OCD of Lipa Carmel',
-  body: [
-    'I was eight years old when I first saw the younger sister of my father in her religious habit. Sr. Flor, my aunt, was then a novice from the Religious of the Good Shepherd. It was her veil which immediately caught my attention and it led to a quiet conviction within me that someday I will also wear a veil like her.',
-    'Since then, when teachers asked about who I want to be when I grow up, I would always answer, “I want to be a nun.” I remember my classmates teasingly call me “Sr. Frances.” That strong attraction somehow faded after my elementary days.',
-    'As a teenager I was engrossed in my attraction in arts. I joined competitions and won several times in different places. I began seeing myself more as a cartoonist or a professional artist than a nun.',
-    'I later finished AB Fine Arts in the College of the Holy Spirit in Manila as an intern student. I am from Batangas City and my parents opted that I live inside the campus with the Sisters and other boarding students for the next four years of my college life. (An experience which unknowingly prepared me to be a cloistered nun years later.)',
-    'I was in second year college when I joined the campus vigil with other students in solidarity with the anti-charter change advocacy. In that vigil the film “Brother Sun, Sister Moon” was shown. I was so mesmerized by the life of Saint Francis of Assisi that I kept thinking about it long after I had seen the film. There was something in Saint Francis’ life that made me deeply realize the kind of life that is meant for me. I knew immediately where my true happiness lies.',
-    'Our Lord used the movie, “Brother Sun, Sister Moon” in leading me back to my desire to enter the religious life. The desire has changed from how it felt when I was in grade school. There was now a firm certainty and a deep focus. I knew with all my heart that God was “calling” me. It was persistent and would haunt me day and night.',
-    'I prayed and told our Lord to show me where He wanted me to enter. I wanted it to come from Him as an assurance that the congregation would be his choice for me. I felt then that I was ready to stop my studies and immediately become a nun.',
-    'But nothing came. There was no sign at all. I graduated from college and while waiting for Our Lord’s inspiration I continued with my artworks. I had a painting exhibit in Batangan Plaza and De la Salle Lipa.',
-    'I eventually worked for a short time as a caricature artist in Avon Batangas and was given another opportunity to have an exhibit in one of Avon’s seminars in Calatagan Batangas. I even joined a barangay beauty pageant as I did not want to hurt our barangay captain in saying no.',
-    'I was 21 years old in the great jubilee year 2000 when the relics of Saint Therese of the Child Jesus visited our parish for the first time. It was a visit from a great Saint that changed my life. As soon as I saw the reliquary of the relics, I felt a certain shower of strong love from above that made me cry hard throughout the mass. It was my first time to experience that kind of feeling.',
-    'Cardinal Gaudencio Rosales, the then Archbishop of Batangas, was the homilist. He shared about the life in Carmel. God finally revealed to me that He wanted me in Carmel. That evening, I told my parents of my decision to become a Carmelite.',
-    'I was an only girl with four brothers in our family and I understood how my parents reacted the night I shared with them my decision. They were against it and my father said, “Are you going crazy? If you enter Carmel, we will consider you as dead already.”',
-    'Few days later my father told me that he simply found me too young for such a discernment. He also wanted me to spend more time with them family as I was just 21 years old. He added that, if ever I enter the religious life, he wants me to join the Religious of the Good Shepherd like my aunt. My mother was more open about my plans and quietly prayed for God’s will.',
-    'I tried to explain my side to them only once and then I decided not to speak about it anymore. Now and then it would be mentioned by my parents and all I could do was to cry. It was a very difficult time for me, but I carefully treasured the grace I received when the relics of Saint Therese visited our parish.',
-    'After some months, in prayer before the Holy Trinity image of the Jubilee Cross, I told Our Lord, “Just a word of ‘okay’ or ‘sige na’ from Papa, I will consider it as Your time for me to already apply in Carmel.”',
-    'I was still in prayer when Papa called me. He was sleepy. It was a form of lambing that he would usually place his head on my lap whenever I was at home. I would then gently stroke his hair as he slept. As I was stroking his hair I started crying again and my tears fell on his face. He opened his eyes, looked at me and he said, “Umiiyak ka na naman….sige na.”',
-    'I was overjoyed with what I heard from Papa. It was the answer to my prayer just before Papa called me. With more tears I returned to prayer when he was already asleep. I knelt again before the Jubilee Cross filled with thanksgiving and peace.',
-    'I immediately recounted everything to Papa when he woke up and he finally gave me his blessing to already apply to Carmel.',
-  ].join('\n\n'),
-  image: attractedByTheVeilImage,
-}
+const legacyCarmelifeDemoIds = new Set(['life-listening', 'life-home', 'life-ordinary'])
 const defaultManagedContent: ManagedSiteContent = {
   homeHeroImage: 'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=2000&q=85',
   aboutImages: {
@@ -599,12 +574,7 @@ const defaultManagedContent: ManagedSiteContent = {
   },
   monasteries: monasteryCities.map((city, index) => ({ id: `monastery-${index}`, name: city === 'Iloilo' ? 'Jaro Carmel' : `${city} Carmel`, city, description: `A Carmelite community in ${city}${city === 'Kuching' ? ', Malaysia' : ', Philippines'}.`, image: monasteryAssetByCity[city] || [photo.chapel, photo.garden, photo.flower][index % 3] })),
   monasteriesVersion: 2,
-  carmelife: [
-    mainVocationStory,
-    { id: 'life-listening', title: 'A heart that learned to listen', author: 'A sister of Carmel', body: 'A vocation often begins quietly: in prayer, in the ordinary work of each day, and in the growing desire to give one’s life to God.', image: photo.garden },
-    { id: 'life-home', title: 'Finding home in the silence', author: 'A sister of Carmel', body: 'Silence is not an absence of life. It is a place to listen, to receive, and to discover the freedom of belonging to God and to a community.', image: photo.flower },
-    { id: 'life-ordinary', title: 'The joy of ordinary days', author: 'A sister of Carmel', body: 'Prayer, work, and sisterhood shape the daily rhythm of Carmel. Grace is found in showing up faithfully, together.', image: photo.chapel },
-  ],
+  carmelife: [],
   carmelights: [
     { id: 'saint-john', title: 'Seeking God in stillness', author: 'St. John of the Cross', body: 'John points toward an attentive, inward prayer that makes space for God beyond noise and distraction.', image: photo.chapel, category: 'Prayer' },
     { id: 'saint-teresa', title: 'Prayer as friendship', author: 'St. Teresa of Avila', body: 'Teresa describes prayer as a loving friendship with God, nurtured through honest and faithful conversation.', image: photo.garden, category: 'Prayer' },
@@ -646,7 +616,7 @@ function readManagedContent(): ManagedSiteContent {
         image: savedMonastery.image && !savedMonastery.image.includes('unsplash.com') ? savedMonastery.image : defaultMonastery.image,
       }
     }).concat(savedMonasteries.filter((monastery) => !monasteryCities.some((city) => city.toLowerCase() === monastery.city.toLowerCase()) && monastery.city.toLowerCase() !== 'ozamis'))
-    const content = { ...defaultManagedContent, ...stored, aboutImages: { ...defaultManagedContent.aboutImages, ...stored?.aboutImages }, aboutText: { ...defaultManagedContent.aboutText, ...stored?.aboutText }, contactDetails: { ...defaultManagedContent.contactDetails, ...stored?.contactDetails }, monasteries, monasteriesVersion: 2, carmelife: stored?.carmelife || defaultManagedContent.carmelife, carmelights: stored?.carmelights || defaultManagedContent.carmelights }
+    const content = { ...defaultManagedContent, ...stored, aboutImages: { ...defaultManagedContent.aboutImages, ...stored?.aboutImages }, aboutText: { ...defaultManagedContent.aboutText, ...stored?.aboutText }, contactDetails: { ...defaultManagedContent.contactDetails, ...stored?.contactDetails }, monasteries, monasteriesVersion: 2, carmelife: (stored?.carmelife || defaultManagedContent.carmelife).filter((article) => !legacyCarmelifeDemoIds.has(article.id)), carmelights: stored?.carmelights || defaultManagedContent.carmelights }
     if (isLocalDemoSession() && stored && stored.monasteriesVersion !== 2) localStorage.setItem(managedContentKey, JSON.stringify(content))
     return content
   } catch { return defaultManagedContent }
@@ -1554,7 +1524,7 @@ async function persistSiteUpdateRecord(id: string, update: SiteUpdate | null) {
     throw new Error(result.error || 'Updates could not be saved.')
   }
 }
-function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
+function LegacyStoryPage({ kind }: { kind: 'updates' }) {
   const location = useLocation()
   const [selectedArticle, setSelectedArticle] = useState<string | null>(null)
   const [query, setQuery] = useState(() => new URLSearchParams(location.search).get('search') || '')
@@ -1563,9 +1533,6 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const [activeHighlight, setActiveHighlight] = useState(0)
   const highlightTouchStart = useRef<number | null>(null)
   const swipedHighlight = useRef(false)
-  const title = kind === 'life' ? 'Carmelife' : kind === 'stories' ? 'Carmelights' : 'Carmelinks'
-  const desc = kind === 'life' ? 'A contemplative life rooted in prayer, sisterhood, and the search for God.' : kind === 'stories' ? 'Small glimpses of vocation, friendship, and grace from our Carmelite sisters.' : 'News, reflections, and shared moments from the Carmels in our communion.'
-  const articles = kind === 'life' ? ['A day in Carmel', 'Prayer at the heart of the Church', 'The Teresian charism'] : kind === 'stories' ? ['A heart that learned to listen', 'Finding home in the silence', 'The joy of ordinary days'] : ['14th General Assembly', 'A season of prayer and renewal', 'Remembering our shared mission']
   const [updates, setUpdates] = useState<SiteUpdate[]>(readSiteUpdates)
   const [loadError, setLoadError] = useState('')
   useEffect(() => {
@@ -1706,7 +1673,7 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       {selectedUpdate && <div className="story-modal-backdrop" role="presentation" onClick={() => setSelectedArticle(null)}><article className="story-modal" role="dialog" aria-modal="true" aria-labelledby="story-modal-title" onClick={(event) => event.stopPropagation()}><button className="story-modal-close" onClick={() => setSelectedArticle(null)} aria-label="Close update"><X size={20} /></button>{selectedUpdate.video ? <UpdateVideoPlayer className="story-modal-video" source={selectedUpdate.video} title={selectedUpdate.title} poster={selectedUpdate.image || undefined} /> : selectedUpdate.image ? <ImageWithLoader src={selectedUpdate.image} alt="Carmelite community life" /> : <div className="story-modal-no-image"><HandHeart size={34} /></div>}<div className="story-modal-body"><span className="eyebrow">{selectedUpdate.category.toUpperCase()} · {selectedUpdate.date}</span><h2 id="story-modal-title">{selectedUpdate.title}</h2><p>{selectedUpdate.body}</p><p>In the quiet rhythm of community life, every gathering becomes an invitation to listen, to give thanks, and to walk together in hope.</p><button className="button button-dark" onClick={() => setSelectedArticle(null)}>Close update</button></div></article></div>}
     </section>
   }
-  return <section className="content-page section-wrap"><div className="story-page-intro"><div><span className="eyebrow">{kind === 'life' ? 'A CONTEMPLATIVE WAY' : 'VOICES FROM CARMEL'}</span><h1>{title}</h1></div><p className="page-lead">{desc}</p></div><div className="story-grid">{articles.map((article, i) => <article className="story-card" key={article}><ImageWithLoader src={[photo.garden, photo.flower, photo.chapel][i]} alt="A glimpse of Carmelite life" /><div><span className="eyebrow">CARMELITE LIFE</span><h3>{article}</h3><p>In the quiet rhythm of community life, every day offers a new way to listen and to love.</p><a className="text-link" href="#read">Read story <ArrowRight size={15} /></a></div></article>)}</div></section>
+  return null
 }
 function UpdateDetailPage() {
   const { id = '' } = useParams()
