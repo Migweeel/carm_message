@@ -2761,6 +2761,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
                 text="continue_with"
                 theme="outline"
                 shape="rectangular"
+                logo_alignment="center"
                 size="medium"
                 width="400"
                 auto_select={false}

@@ -486,13 +486,16 @@
   display: flex;
   width: 100%;
   min-width: 0;
-  max-width: 100%;
+  max-width: 400px;
   justify-content: center;
 }
 
 .auth-google-button iframe {
+  display: block;
   width: 100% !important;
   max-width: 100% !important;
+  min-width: 0 !important;
+  margin-inline: auto !important;
 }
 
 .auth-google-button > div > div,
