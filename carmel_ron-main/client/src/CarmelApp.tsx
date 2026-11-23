@@ -2786,7 +2786,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
                 theme="outline"
                 shape="rectangular"
                 logo_alignment="center"
-                size="medium"
+                size="large"
                 width={String(googleButtonWidth)}
                 auto_select={false}
                 use_fedcm_for_button={false}
