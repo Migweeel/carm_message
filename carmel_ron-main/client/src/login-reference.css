@@ -410,6 +410,68 @@
   pointer-events: none;
 }
 
+.auth-facebook-button-wrapper {
+  position: relative;
+  display: flex;
+  min-height: 40px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-facebook-button-pending {
+  pointer-events: none;
+}
+
+.auth-facebook-button-wrapper > .auth-social-status {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: #f8f5ee;
+}
+
+.auth-facebook-button {
+  display: flex;
+  min-height: 40px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  background: #fff;
+  color: #3c4043;
+  font: 500 14px Arial, Helvetica, sans-serif;
+  cursor: pointer;
+}
+
+.auth-facebook-button:hover:not(:disabled) {
+  background: #f8faff;
+  border-color: #c6dafc;
+}
+
+.auth-facebook-button:focus-visible {
+  outline: 2px solid #1877f2;
+  outline-offset: 2px;
+}
+
+.auth-facebook-button:disabled {
+  cursor: wait;
+}
+
+.auth-facebook-mark {
+  color: #1877f2;
+  font: 700 20px/1 Arial, Helvetica, sans-serif;
+}
+
 .auth-google-button > .auth-social-status {
   position: absolute;
   inset: 0;
@@ -723,6 +785,8 @@
   .auth-social-login,
   .auth-google-button,
   .auth-google-button > div,
+  .auth-facebook-button-wrapper,
+  .auth-facebook-button,
   .auth-reference-form .full-button,
   .auth-reference-form > label,
   .auth-reference-form > label input,

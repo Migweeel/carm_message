@@ -39,6 +39,24 @@ import { PrivacyNoticeContent, PrivacyPolicyPage, TermsOfServicePage } from './L
 
 const DonationChart = lazy(() => import('./DonationChart'))
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || ''
+const facebookAppId = import.meta.env.VITE_FACEBOOK_APP_ID?.trim() || '1160654559836016'
+
+type FacebookLoginResponse = {
+  status?: string
+  authResponse?: { accessToken?: string }
+}
+
+type FacebookSdk = {
+  init: (options: { appId: string; cookie: boolean; xfbml: boolean; version: string }) => void
+  login: (callback: (response: FacebookLoginResponse) => void, options: { scope: string }) => void
+}
+
+declare global {
+  interface Window {
+    FB?: FacebookSdk
+    fbAsyncInit?: () => void
+  }
+}
 
 function imageDataUrlToBlob(dataUrl: string) {
   const commaIndex = dataUrl.indexOf(',')
@@ -2400,7 +2418,10 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
   const [googlePending, setGooglePending] = useState(false)
+  const [facebookPending, setFacebookPending] = useState(false)
+  const [facebookSdkLoaded, setFacebookSdkLoaded] = useState(false)
   const googleRequestInFlight = useRef(false)
+  const facebookRequestInFlight = useRef(false)
   const [resendingCode, setResendingCode] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [loginEmail, setLoginEmail] = useState(() => {
@@ -2435,6 +2456,37 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const timer = window.setInterval(updateRemaining, 1000)
     return () => window.clearInterval(timer)
   }, [verificationOpen, verificationSuccess, resendAvailableAt])
+  useEffect(() => {
+    if (isStaff || !facebookAppId) return
+    const initializeFacebook = () => {
+      try {
+        window.FB?.init({ appId: facebookAppId, cookie: true, xfbml: false, version: 'v27.0' })
+        setFacebookSdkLoaded(Boolean(window.FB))
+      } catch {
+        setError('Facebook sign-in could not be initialized. Please try again or use your email and password.')
+      }
+    }
+    const handleScriptError = () => {
+      setError('Facebook sign-in could not be loaded. Please try again or use your email and password.')
+    }
+    window.fbAsyncInit = initializeFacebook
+    const existingScript = document.getElementById('facebook-jssdk')
+    if (window.FB) {
+      initializeFacebook()
+    } else if (!existingScript) {
+      const script = document.createElement('script')
+      script.id = 'facebook-jssdk'
+      script.src = 'https://connect.facebook.net/en_US/sdk.js'
+      script.async = true
+      script.defer = true
+      script.addEventListener('error', handleScriptError, { once: true })
+      document.body.appendChild(script)
+    }
+    return () => {
+      if (window.fbAsyncInit === initializeFacebook) delete window.fbAsyncInit
+      document.getElementById('facebook-jssdk')?.removeEventListener('error', handleScriptError)
+    }
+  }, [isStaff])
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -2559,6 +2611,78 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       setGooglePending(false)
     }
   }
+  async function continueWithFacebook(accessToken: string) {
+    if (facebookRequestInFlight.current) return
+    facebookRequestInFlight.current = true
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 20_000)
+    setFacebookPending(true)
+    setError('')
+    try {
+      const response = await fetch('/api/auth/facebook', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken, intent: isSignup ? 'signup' : 'login' }),
+        signal: controller.signal,
+      })
+      const result = await readAuthResponse(response)
+      if (isSignup && result.code === 'ACCOUNT_ALREADY_REGISTERED') {
+        navigate('/account/login', {
+          replace: true,
+          state: {
+            existingEmail: result.email || '',
+            accountNotice: result.error || 'This Facebook account is already registered. Please sign in instead.',
+          },
+        })
+        return
+      }
+      if (!response.ok) throw new Error(result.error || 'Unable to continue with Facebook.')
+      if (!result.user || result.user.role !== 'USER') throw new Error('Facebook sign-in did not return a member account.')
+      saveServerSessionRole('USER')
+      saveMemberSession({
+        id: result.user.id,
+        name: result.user.name,
+        email: result.user.email,
+        gender: result.user.gender || 'ANONYMOUS',
+        phone: result.user.phone,
+        address: result.user.address,
+        avatarImage: result.user.avatarImage,
+        role: 'USER',
+      })
+      navigate(isSignup ? '/account' : '/', { replace: true })
+    } catch (reason) {
+      setError(reason instanceof Error && reason.name === 'AbortError'
+        ? 'Facebook sign-in took too long. Check your connection and try again.'
+        : reason instanceof Error ? reason.message : 'Unable to connect to the Facebook sign-in service.')
+    } finally {
+      window.clearTimeout(timeoutId)
+      facebookRequestInFlight.current = false
+      setFacebookPending(false)
+    }
+  }
+  function handleFacebookLogin() {
+    if (!window.FB) {
+      setError('Facebook sign-in is still loading. Please try again in a moment.')
+      return
+    }
+    setError('')
+    setFacebookPending(true)
+    try {
+      window.FB.login((response) => {
+        const accessToken = response.status === 'connected' ? response.authResponse?.accessToken : undefined
+        if (!accessToken) {
+          setFacebookPending(false)
+          setError('Facebook sign-in was cancelled or did not complete. Please try again.')
+          return
+        }
+        void continueWithFacebook(accessToken)
+      }, { scope: 'public_profile,email' })
+    } catch {
+      setFacebookPending(false)
+      setError('Facebook sign-in could not be started. Please try again or use your email and password.')
+    }
+  }
   async function verifyRegistration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPending(true)
@@ -2624,7 +2748,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       {accountNotice && <p className="form-error" role="status">{accountNotice}</p>}
       {!isStaff && <div className="auth-social-login">
         {googleClientId
-          ? <div className={`auth-google-button${pending || googlePending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || undefined}>
+          ? <div className={`auth-google-button${pending || googlePending || facebookPending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>
             <GoogleLogin
                 onSuccess={(response) => {
                   if (!response.credential) {
@@ -2642,9 +2766,18 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
                 auto_select={false}
                 use_fedcm_for_button={false}
               />
-            {(pending || googlePending) && <p className="auth-social-status" role="status">{googlePending ? 'Connecting to Google…' : 'Please wait…'}</p>}
+            {(pending || googlePending || facebookPending) && <p className="auth-social-status" role="status">{googlePending ? 'Connecting to Google…' : facebookPending ? 'Connecting to Facebook…' : 'Please wait…'}</p>}
           </div>
           : <p className="auth-social-consent-note" role="status">Google sign-in is not configured for this website yet.</p>}
+        {facebookAppId
+          ? <div className={`auth-facebook-button-wrapper${pending || googlePending || facebookPending ? ' auth-facebook-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>
+            <button className="auth-facebook-button" type="button" onClick={handleFacebookLogin} disabled={!facebookSdkLoaded || pending || googlePending || facebookPending}>
+              <span className="auth-facebook-mark" aria-hidden="true">f</span>
+              Continue with Facebook
+            </button>
+            {(pending || googlePending || facebookPending) && <p className="auth-social-status" role="status">{facebookPending ? 'Connecting to Facebook…' : googlePending ? 'Connecting to Google…' : 'Please wait…'}</p>}
+          </div>
+          : <p className="auth-social-consent-note" role="status">Facebook sign-in is not configured for this website yet.</p>}
         <div className="auth-social-divider" aria-hidden="true"><span>or</span></div>
       </div>}
       {isStaff && <fieldset className="auth-role-selection">

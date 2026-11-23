@@ -38,6 +38,10 @@ The website runs at http://localhost:5173 and the API runs at http://localhost:4
 
 Google member sign-in uses the Google OAuth client ID in both the client build and API server. Add the same web client ID to `client/.env.local` as `VITE_GOOGLE_CLIENT_ID` and to `server/.env` as `GOOGLE_CLIENT_ID`. In Google Cloud, authorize `https://carmelsincommunion.org` and `http://localhost:5173` as JavaScript origins. Add both variables to the Railway `carm_message` service as well; the `VITE_` variable must be available when Railway builds the client. The client ID is public; no Google client secret is used by this ID-token flow. The API verifies each ID token and only creates accounts from the sign-up page after privacy and terms consent.
 
+Facebook member sign-in uses the Facebook JavaScript SDK. Set `VITE_FACEBOOK_APP_ID` in `client/.env.local` and set `FACEBOOK_APP_ID` plus `FACEBOOK_APP_SECRET` in the server's environment; use the same App ID for both. Add the App ID to the Railway client build environment and both server variables to the Railway server environment. In Meta for Developers, enable Facebook Login and configure the app domains and valid website origins for `carmelsincommunion.org` and `localhost:5173`. The API validates each user access token against Meta before linking or creating a member account.
+
+The Facebook App ID is public. The App Secret is not: keep it only in the server environment, never in `client/.env`, a `VITE_` variable, source code, or a commit. The App Secret shared in chat must be rotated in Meta for Developers before use; configure the replacement only in the server environment.
+
 Member and staff sign-in pages include password recovery. To deliver reset links and donation acknowledgment emails, create a Resend API key, verify a sending domain in Resend, and set these values in `server/.env`:
 
 ```env

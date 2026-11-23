@@ -61,6 +61,8 @@ const xenditCallbackToken = process.env.XENDIT_CALLBACK_TOKEN || ''
 const resendApiKey = process.env.RESEND_API_KEY || ''
 const resendFrom = process.env.RESEND_FROM || ''
 const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim() || ''
+const facebookAppId = process.env.FACEBOOK_APP_ID?.trim() || ''
+const facebookAppSecret = process.env.FACEBOOK_APP_SECRET?.trim() || ''
 const googleOAuthClient = new OAuth2Client()
 const systemBackupFormat = 'carmels-in-communion-backup'
 const maxBackupPlaintextBytes = 45 * 1024 * 1024
@@ -128,11 +130,11 @@ app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   contentSecurityPolicy: {
     directives: {
-      connectSrc: ["'self'", 'https://accounts.google.com/gsi/'],
-      imgSrc: ["'self'", 'data:', 'blob:', 'https://images.unsplash.com'],
+      connectSrc: ["'self'", 'https://accounts.google.com/gsi/', 'https://connect.facebook.net', 'https://graph.facebook.com', 'https://www.facebook.com'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://images.unsplash.com', 'https://www.facebook.com', 'https://static.xx.fbcdn.net'],
       mediaSrc: ["'self'", 'data:'],
-      frameSrc: ["'self'", 'https://www.youtube-nocookie.com', 'https://player.vimeo.com', 'https://accounts.google.com/gsi/'],
-      scriptSrc: ["'self'", 'https://accounts.google.com/gsi/client'],
+      frameSrc: ["'self'", 'https://www.youtube-nocookie.com', 'https://player.vimeo.com', 'https://accounts.google.com/gsi/', 'https://www.facebook.com', 'https://staticxx.facebook.com'],
+      scriptSrc: ["'self'", 'https://accounts.google.com/gsi/client', 'https://connect.facebook.net'],
     },
   },
 }))
@@ -908,6 +910,185 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
   if (!user) throw new Error('Google sign-in completed without resolving an account.')
   if (!user.isActive || user.role !== 'USER') {
     return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
+  }
+
+  const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const sessionUser = await prisma.user.update({
+    where: { id: user.id },
+    data: { sessionVersion: { increment: 1 }, sessionExpiresAt: expiresAt },
+    select: { sessionVersion: true },
+  })
+  const token = jwt.sign({ id: user.id, role: user.role, sessionVersion: sessionUser.sessionVersion }, jwtSecret, { expiresIn: '8h' })
+  res.cookie('carmel_session', token, { ...cookieOptions, maxAge: 8 * 60 * 60 * 1000 })
+  return res.json({ user: {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    gender: user.gender,
+    phone: user.phone,
+    address: user.address,
+    avatarImage: user.avatarImage,
+    role: user.role,
+    canManageUsers: user.canManageUsers,
+    canManageDetails: user.canManageDetails,
+    canManageUpdates: user.canManageUpdates,
+  } })
+}))
+const facebookAuthSchema = z.object({
+  accessToken: z.string().min(1).max(20_000),
+  intent: z.enum(['login', 'signup']),
+})
+const facebookTokenDebugSchema = z.object({
+  data: z.object({
+    app_id: z.string(),
+    is_valid: z.boolean(),
+    user_id: z.string().optional(),
+    expires_at: z.number().optional(),
+  }),
+})
+const facebookProfileSchema = z.object({
+  id: z.string(),
+  name: z.string().nullish(),
+  email: z.email().nullish(),
+})
+const identityWhereForFacebook = (providerUserId: string) => ({
+  provider_providerUserId: { provider: 'FACEBOOK', providerUserId },
+})
+const linkFacebookIdentityToUser = async (userId: string, providerUserId: string) => {
+  try {
+    await prisma.oAuthIdentity.create({
+      data: { provider: 'FACEBOOK', providerUserId, userId },
+    })
+    return true
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+    const existingIdentity = await prisma.oAuthIdentity.findUnique({
+      where: identityWhereForFacebook(providerUserId),
+      select: { userId: true },
+    })
+    return existingIdentity?.userId === userId
+  }
+}
+app.post('/api/auth/facebook', asyncRoute(async (req, res) => {
+  if (!facebookAppId || !facebookAppSecret) {
+    return res.status(503).json({ error: 'Facebook sign-in is not configured yet.' })
+  }
+  const parsed = validate(facebookAuthSchema, req.body)
+  if (parsed.error) return res.status(400).json({ error: 'Facebook sign-in could not be started. Please try again.' })
+  const input = parsed.data!
+
+  let facebookProfile: { id: string; name?: string | null; email: string }
+  try {
+    const debugUrl = new URL('https://graph.facebook.com/v27.0/debug_token')
+    debugUrl.searchParams.set('input_token', input.accessToken)
+    debugUrl.searchParams.set('access_token', `${facebookAppId}|${facebookAppSecret}`)
+    const debugResponse = await fetch(debugUrl, { signal: AbortSignal.timeout(10_000) })
+    const debugPayload: unknown = await debugResponse.json()
+    const debug = facebookTokenDebugSchema.safeParse(debugPayload)
+    const tokenInfo = debug.success ? debug.data.data : null
+    if (
+      !debugResponse.ok
+      || !tokenInfo?.is_valid
+      || tokenInfo.app_id !== facebookAppId
+      || !tokenInfo.user_id
+      || (tokenInfo.expires_at !== undefined && tokenInfo.expires_at > 0 && tokenInfo.expires_at * 1000 <= Date.now())
+    ) {
+      return res.status(401).json({ error: 'Facebook could not verify this sign-in. Please try again.' })
+    }
+
+    const profileUrl = new URL('https://graph.facebook.com/v27.0/me')
+    profileUrl.searchParams.set('fields', 'id,name,email')
+    profileUrl.searchParams.set('access_token', input.accessToken)
+    const profileResponse = await fetch(profileUrl, { signal: AbortSignal.timeout(10_000) })
+    const profilePayload: unknown = await profileResponse.json()
+    const profile = facebookProfileSchema.safeParse(profilePayload)
+    if (!profileResponse.ok || !profile.success || profile.data.id !== tokenInfo.user_id) {
+      return res.status(401).json({ error: 'Facebook could not verify this sign-in. Please try again.' })
+    }
+    if (!profile.data.email) {
+      return res.status(401).json({ error: 'Facebook did not provide an email address. Grant email permission and try again.' })
+    }
+    facebookProfile = { ...profile.data, email: profile.data.email }
+  } catch (error) {
+    console.error('Facebook token verification request failed:', error instanceof Error ? error.name : 'Unknown error')
+    return res.status(502).json({ error: 'Facebook could not verify this sign-in right now. Please try again.' })
+  }
+
+  const email = facebookProfile.email.trim().toLowerCase()
+  if (retiredDemoAccountEmails.has(email)) return res.status(403).json({ error: 'This email address is not available for sign-in.' })
+  const alreadyRegisteredForSignup = () => res.status(409).json({
+    code: 'ACCOUNT_ALREADY_REGISTERED',
+    error: 'This Facebook account is already registered. Please sign in instead.',
+    email,
+  })
+  const findFacebookIdentity = () => prisma.oAuthIdentity.findUnique({
+    where: identityWhereForFacebook(facebookProfile.id),
+    include: { user: { select: googleAuthUserSelect } },
+  })
+  let identity = await findFacebookIdentity()
+  let user = identity?.user ?? null
+  if (user && input.intent === 'signup') {
+    if (!user.isActive || user.role !== 'USER') {
+      return res.status(403).json({ error: 'Facebook sign-in is only available for active member accounts.' })
+    }
+    return alreadyRegisteredForSignup()
+  }
+  if (!user) {
+    const existingAccount = await prisma.user.findUnique({ where: { email }, select: googleAuthUserSelect })
+    if (existingAccount) {
+      if (!existingAccount.isActive || existingAccount.role !== 'USER') {
+        return res.status(403).json({ error: 'Facebook sign-in is only available for active member accounts.' })
+      }
+      if (input.intent === 'signup') return alreadyRegisteredForSignup()
+      if (!await linkFacebookIdentityToUser(existingAccount.id, facebookProfile.id)) {
+        return res.status(409).json({ error: 'This Facebook account is already linked to a different member account.' })
+      }
+      user = existingAccount
+    } else if (input.intent === 'login') {
+      return res.status(401).json({ error: 'No Facebook-linked member account was found. Create an account or use your existing sign-in method.' })
+    }
+
+    if (!existingAccount) {
+      const name = (facebookProfile.name?.trim() || email.split('@')[0]).slice(0, 100)
+      const passwordHash = await bcrypt.hash(randomBytes(32).toString('base64url'), 12)
+      try {
+        user = await prisma.user.create({
+          data: {
+            name,
+            email,
+            passwordHash,
+            role: 'USER',
+            privacyConsentAt: new Date(),
+            privacyPolicyVersion: memberPrivacyVersion,
+            discernment: { create: {} },
+            oauthIdentities: { create: { provider: 'FACEBOOK', providerUserId: facebookProfile.id } },
+          },
+          select: googleAuthUserSelect,
+        })
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+        identity = await findFacebookIdentity()
+        if (identity) {
+          if (input.intent === 'signup') return alreadyRegisteredForSignup()
+          user = identity.user
+        } else {
+          const accountCreatedConcurrently = await prisma.user.findUnique({ where: { email }, select: googleAuthUserSelect })
+          if (!accountCreatedConcurrently) throw error
+          if (!accountCreatedConcurrently.isActive || accountCreatedConcurrently.role !== 'USER') {
+            return res.status(403).json({ error: 'Facebook sign-in is only available for active member accounts.' })
+          }
+          if (input.intent === 'signup') return alreadyRegisteredForSignup()
+          if (!await linkFacebookIdentityToUser(accountCreatedConcurrently.id, facebookProfile.id)) {
+            return res.status(409).json({ error: 'This Facebook account is already linked to a different member account.' })
+          }
+          user = accountCreatedConcurrently
+        }
+      }
+    }
+  }
+  if (!user) throw new Error('Facebook sign-in completed without resolving an account.')
+  if (!user.isActive || user.role !== 'USER') {
+    return res.status(403).json({ error: 'Facebook sign-in is only available for active member accounts.' })
   }
 
   const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
