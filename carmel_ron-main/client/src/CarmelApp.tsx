@@ -545,7 +545,6 @@ const mainVocationStory: ManagedArticle = {
   ].join('\n\n'),
   image: attractedByTheVeilImage,
 }
-const mainVocationStorySeedKey = 'carmel-main-vocation-story-full-v2'
 const defaultManagedContent: ManagedSiteContent = {
   homeHeroImage: 'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=2000&q=85',
   aboutImages: {
@@ -649,15 +648,6 @@ function readManagedContent(): ManagedSiteContent {
     }).concat(savedMonasteries.filter((monastery) => !monasteryCities.some((city) => city.toLowerCase() === monastery.city.toLowerCase()) && monastery.city.toLowerCase() !== 'ozamis'))
     const content = { ...defaultManagedContent, ...stored, aboutImages: { ...defaultManagedContent.aboutImages, ...stored?.aboutImages }, aboutText: { ...defaultManagedContent.aboutText, ...stored?.aboutText }, contactDetails: { ...defaultManagedContent.contactDetails, ...stored?.contactDetails }, monasteries, monasteriesVersion: 2, carmelife: stored?.carmelife || defaultManagedContent.carmelife, carmelights: stored?.carmelights || defaultManagedContent.carmelights }
     if (isLocalDemoSession() && stored && stored.monasteriesVersion !== 2) localStorage.setItem(managedContentKey, JSON.stringify(content))
-    if (stored && localStorage.getItem(mainVocationStorySeedKey) !== 'true') {
-      const existingIndex = content.carmelife.findIndex((article) => article.id === mainVocationStory.id)
-      if (existingIndex < 0) content.carmelife = [mainVocationStory, ...content.carmelife]
-      else content.carmelife[existingIndex] = mainVocationStory
-      if (isLocalDemoSession()) {
-        localStorage.setItem(managedContentKey, JSON.stringify(content))
-        localStorage.setItem(mainVocationStorySeedKey, 'true')
-      }
-    }
     return content
   } catch { return defaultManagedContent }
 }
@@ -717,16 +707,20 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
   const isLoading = !isLocalDemo && (loadState.subset !== subset || loadState.isLoading)
   const isReady = isLocalDemo || (loadState.subset === subset && loadState.isReady)
   useEffect(() => {
+    let active = true
+    let requestGeneration = 0
     const refresh = (event?: Event) => {
+      if (event?.type === 'storage' && event instanceof StorageEvent && event.key !== managedContentKey && event.key !== null) return
       const eventContent = event instanceof CustomEvent ? event.detail as ManagedSiteContent | undefined : undefined
+      requestGeneration += 1
       setContent(eventContent || readManagedContent())
       setLoadState({ subset, isLoading: false, isReady: true })
     }
-    let active = true
     async function load() {
       if (isLocalDemoSession()) {
         return
       }
+      const currentRequest = ++requestGeneration
       let ready = false
       try {
         const query = subset ? `?collection=${encodeURIComponent(subset)}` : ''
@@ -737,7 +731,7 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
         }
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Saved website content could not be loaded.')
-        if (active) {
+        if (active && currentRequest === requestGeneration) {
           if (result.content?.blocks) {
             setContent({
               ...defaultManagedContent,
@@ -750,15 +744,27 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
           ready = true
         }
       } catch (error) {
-        if (active) console.error('Unable to load saved website content.', error)
+        if (active && currentRequest === requestGeneration) console.error('Unable to load saved website content.', error)
       } finally {
-        if (active) setLoadState({ subset, isLoading: false, isReady: ready })
+        if (active && currentRequest === requestGeneration) setLoadState({ subset, isLoading: false, isReady: ready })
       }
+    }
+    const reload = () => {
+      if (isLocalDemoSession()) return
+      setLoadState({ subset, isLoading: true, isReady: false })
+      void load()
     }
     void load()
     window.addEventListener('storage', refresh)
     window.addEventListener(managedContentEvent, refresh)
-    return () => { active = false; window.removeEventListener('storage', refresh); window.removeEventListener(managedContentEvent, refresh) }
+    window.addEventListener('focus', reload)
+    return () => {
+      active = false
+      requestGeneration += 1
+      window.removeEventListener('storage', refresh)
+      window.removeEventListener(managedContentEvent, refresh)
+      window.removeEventListener('focus', reload)
+    }
   }, [subset])
   return { ...content, isLoading, isReady }
 }
@@ -1806,7 +1812,7 @@ function CarmelifePage() {
 
     <section className="life-section life-stories-section">
       <div className="centered-life-heading"><h2>Stories from <em>Carmel</em></h2><p>Read reflections and vocation stories shared by our sisters.</p></div>
-      {featuredArticles.length ? <div className="life-card-grid">{featuredArticles.map((article) => <article className="life-card" key={article.id}><ImageWithLoader src={isReady ? articleImageFor(article.image, seekingFaceImage) : undefined} pending={isLoading} alt={article.title} /><div><small>{article.author || 'CARMELITE LIFE'}</small><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button type="button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story &rarr;</button></div></article>)}</div> : <p className="content-empty">New entries will appear here when published.</p>}
+      {isLoading ? <p role="status">Loading stories…</p> : !isReady ? <p className="form-error" role="alert">Stories could not be loaded. Please refresh.</p> : featuredArticles.length ? <div className="life-card-grid">{featuredArticles.map((article) => <article className="life-card" key={article.id}><ImageWithLoader src={articleImageFor(article.image, seekingFaceImage)} alt={article.title} /><div><small>{article.author || 'CARMELITE LIFE'}</small><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button type="button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story &rarr;</button></div></article>)}</div> : <p className="content-empty">New entries will appear here when published.</p>}
       <Link className="button button-outline life-stories-more" to="/carmelife/stories">View more stories <ArrowRight size={15} /></Link>
     </section>
 
@@ -1954,13 +1960,13 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const selected = articles.find((article) => article.id === selectedId)
   const desc = isLife ? 'Vocation stories and glimpses of a contemplative life rooted in prayer and sisterhood.' : 'Discover words of wisdom from Carmelite saints—quotes that invite prayer, deepen trust, and draw the heart closer to God.'
   useEffect(() => {
-    if (kind === 'updates') return
+    if (kind === 'updates' || !content.isReady) return
     const readingId = new URLSearchParams(location.search).get('reading')
     if (readingId && articles.some((article) => article.id === readingId)) {
       setSelectedId(readingId)
       setFullView(false)
     }
-  }, [articles, kind, location.search])
+  }, [articles, content.isReady, kind, location.search])
   useEffect(() => {
     if (isLife || kind === 'updates') return
     let active = true
@@ -2054,7 +2060,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
           </label>
         </div>
       </div>
-      <div className="carmelights-teaching-grid">{visibleTeachings.map((article) => <article className="carmelights-teaching-card" key={article.id}>
+      <div className="carmelights-teaching-grid">{content.isReady && visibleTeachings.map((article) => <article className="carmelights-teaching-card" key={article.id}>
         <div className="carmelights-card-top"><span className="carmelights-category-tag">{article.category || 'Prayer'}</span><button type="button" className={`favorite-teaching ${favorites.includes(article.id) ? 'saved' : ''}`} onClick={() => toggleFavorite(article.id)} aria-label={favorites.includes(article.id) ? `Remove ${article.title} from favorites` : `Save ${article.title} to favorites`} aria-pressed={favorites.includes(article.id)} title={favorites.includes(article.id) ? 'Remove from favorites' : 'Save quote'}><Heart size={16} fill={favorites.includes(article.id) ? 'currentColor' : 'none'} /></button></div>
         <ImageWithLoader className="carmelights-teaching-image" src={content.isReady ? articleImageFor(article.image, photo.chapel) : undefined} pending={content.isLoading} alt={article.title} loading="lazy" decoding="async" />
         <span className="carmelights-card-eyebrow">SAINTS’ QUOTE</span>
@@ -2062,7 +2068,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
         <p>{article.body.split(/\n\s*\n/)[0]}</p>
         <button type="button" className="carmelights-read-link" onClick={() => setSelectedId(article.id)}><span><BookOpen size={14} />Read full quote</span><ArrowRight size={14} /></button>
       </article>)}</div>
-      {visibleTeachings.length === 0 && <p className="content-empty">No teachings match your search.</p>}
+      {!content.isReady ? content.isLoading ? <p role="status">Loading teachings…</p> : <p className="form-error" role="alert">Teachings could not be loaded. Please refresh.</p> : visibleTeachings.length === 0 && <p className="content-empty">No teachings match your search.</p>}
       {selected && <CarmelightsReadingDialog reading={selected} fullView={fullView} onToggleFullView={() => setFullView(!fullView)} onClose={closeStory} imagePending={content.isLoading || !content.isReady} />}
     </section>
   }
@@ -2071,12 +2077,12 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       <div>{isLife && <span className="eyebrow">VOICES FROM CARMEL</span>}<h1>{isLife ? <>Stories from <em>Carmel</em></> : <>Teachings of <em>Carmel</em></>}</h1></div>
       <p className="page-lead">{isLife ? 'Explore reflections and vocation stories shared by our sisters.' : desc}</p>
     </div>
-    <div className="story-grid">{articles.map((article) => <article className="story-card" key={article.id}>
+    <div className="story-grid">{content.isReady && articles.map((article) => <article className="story-card" key={article.id}>
       <ImageWithLoader src={content.isReady ? articleImageFor(article.image, isLife ? photo.garden : photo.chapel) : undefined} pending={content.isLoading} alt={article.title} loading="lazy" decoding="async" />
       {!isLife && <button type="button" className={`favorite-teaching ${favorites.includes(article.id) ? 'saved' : ''}`} onClick={() => toggleFavorite(article.id)} aria-label={favorites.includes(article.id) ? `Remove ${article.title} from favorites` : `Save ${article.title} to favorites`} title={favorites.includes(article.id) ? 'Remove from favorites' : 'Save teaching'}><Heart size={17} fill={favorites.includes(article.id) ? 'currentColor' : 'none'} /></button>}
       <div><span className="eyebrow">{article.author || (isLife ? 'VOCATION STORY' : 'CARMELITE SAINT')}</span><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button className="text-link story-read-button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story <ArrowRight size={15} /></button></div>
     </article>)}</div>
-    {articles.length === 0 && <p className="content-empty">New entries will appear here when published.</p>}
+    {!content.isReady ? content.isLoading ? <p role="status">Loading stories…</p> : <p className="form-error" role="alert">Stories could not be loaded. Please refresh.</p> : articles.length === 0 && <p className="content-empty">New entries will appear here when published.</p>}
     {selected && <CarmelifeReadingDialog
       reading={selected}
       fullView={fullView}
@@ -2605,10 +2611,8 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       <p>{isSignup ? 'Create a resident account by providing your information.' : isStaff ? 'Sign in to your Federation staff or administrator account.' : 'Please provide your account information.'}</p>
       {!isStaff && <div className="auth-social-login">
         {googleClientId
-          ? <div className="auth-google-button">
-            {pending || googlePending
-              ? <p className="auth-social-status" role="status">{googlePending ? 'Connecting to Google…' : 'Please wait…'}</p>
-              : <GoogleLogin
+          ? <div className={`auth-google-button${pending || googlePending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || undefined}>
+            <GoogleLogin
                 onSuccess={(response) => {
                   if (!response.credential) {
                     setError('Google did not return a sign-in credential. Please try again.')
@@ -2624,7 +2628,8 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
                 width="400"
                 auto_select={false}
                 use_fedcm_for_button={false}
-              />}
+              />
+            {(pending || googlePending) && <p className="auth-social-status" role="status">{googlePending ? 'Connecting to Google…' : 'Please wait…'}</p>}
           </div>
           : <p className="auth-social-consent-note" role="status">Google sign-in is not configured for this website yet.</p>}
         <div className="auth-social-divider" aria-hidden="true"><span>or</span></div>
@@ -2647,7 +2652,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       {isSignup && <label>Confirm password<PasswordInput name="confirmPassword" required minLength={10} maxLength={128} autoComplete="new-password" placeholder="Re-enter your password" /></label>}
       {!isSignup && <Link className="auth-forgot-password-link" to="/account/forgot-password">Forgot password?</Link>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="button button-dark full-button" disabled={pending}>{pending ? 'Please wait…' : isSignup ? <>Create member account <ArrowRight size={16} /></> : isStaff ? <>Staff sign in <ArrowRight size={16} /></> : <>Login <ArrowRight size={16} /></>}</button>
+      <button className="button button-dark full-button" disabled={pending}>{pending ? isSignup ? 'Sending verification code…' : 'Signing in…' : isSignup ? <>Create member account <ArrowRight size={16} /></> : isStaff ? <>Staff sign in <ArrowRight size={16} /></> : <>Login <ArrowRight size={16} /></>}</button>
       {isSignup && <p className="auth-signup-terms-note">By creating an account, you agree to the <Link to="/terms">Terms of Service</Link>. For more information about our privacy practices, see our <Link to="/privacy">Privacy Policy</Link>.</p>}
       {isStaff ? <>
         <p className="auth-staff-account-note">Staff accounts are created by a Federation administrator.</p>
@@ -4475,16 +4480,21 @@ function ContentAdminPage() {
     if (savingManagedContent) return
     if (!contentReady) { setError('Saved website content is still loading. Please try again.'); return }
     const nextContent = { ...content, [articleKey]: articles.filter((item) => item.id !== id) }
+    const localDemo = isLocalDemoSession()
     setSavingManagedContent(true)
     setError('')
     setSuccess('Saving changes…')
     try {
-      cacheManagedContent(nextContent)
-      await saveManagedContentRecord(articleKey, id, null)
+      if (localDemo) {
+        cacheManagedContent(nextContent)
+      } else {
+        await saveManagedContentRecord(articleKey, id, null)
+        cacheManagedContent(nextContent)
+      }
       setError('')
-      setSuccess(isLocalDemoSession() ? 'Entry removed in this browser.' : 'Entry removed successfully.')
+      setSuccess(localDemo ? 'Entry removed in this browser.' : 'Entry removed successfully.')
     } catch (saveError) {
-      cacheManagedContent(content)
+      if (localDemo) cacheManagedContent(content)
       setSuccess('')
       setError(saveError instanceof Error ? saveError.message : 'The entry could not be removed.')
     } finally {
@@ -4557,12 +4567,12 @@ function ContentAdminPage() {
       </div>
       <section className="admin-panel content-records">
         <div className="panel-heading"><div><h2>Communities</h2><p>{content.monasteries.length} public records</p></div></div>
-        {content.monasteries.map((item) => <article className="content-record" key={item.id}>
+        {content.isReady ? content.monasteries.map((item) => <article className="content-record" key={item.id}>
           <ImageWithLoader src={monasteryImageFor(item)} pending={!contentReady} alt="" />
           <div><b>{item.name}</b><small>{item.city}</small></div>
           <button type="button" aria-label={`Edit ${item.name}`} onClick={() => editMonastery(item)}><Pencil size={15} /></button>
           <button type="button" aria-label={`Delete ${item.name}`} onClick={() => setPendingRemoval({ kind: 'monastery', id: item.id, label: item.name })}><X size={16} /></button>
-        </article>)}
+        </article>) : <p role={content.isLoading ? 'status' : 'alert'}>{content.isLoading ? 'Loading communities…' : 'Communities could not be loaded. Please refresh.'}</p>}
       </section>
     </div> : isLife || isSaints ? <div className="content-admin-layout">
       <div className={editingArticle ? 'content-editor-modal-backdrop' : 'content-editor-inline'} role={editingArticle ? 'presentation' : undefined} onMouseDown={editingArticle ? (event) => { if (event.target === event.currentTarget) cancelArticleEdit() } : undefined} onKeyDown={editingArticle ? (event) => { if (event.key === 'Escape') cancelArticleEdit() } : undefined}>
@@ -4668,12 +4678,12 @@ function ContentAdminPage() {
       </div>
       <section className="admin-panel content-records">
         <div className="panel-heading"><div><h2>Published entries</h2><p>{articles.length} visible on {isLife ? 'Carmelife' : 'Carmelights'}</p></div></div>
-        {articles.map((item) => <article className="content-record" key={item.id}>
+        {content.isReady ? articles.map((item) => <article className="content-record" key={item.id}>
           <ImageWithLoader src={articleImageFor(item.image, photo.chapel)} pending={!contentReady} alt="" />
           <div><b>{item.title}</b><small>{item.author}</small></div>
           <button type="button" aria-label={`Edit ${item.title}`} onClick={() => editArticle(item)}><Pencil size={15} /></button>
           <button type="button" aria-label={`Delete ${item.title}`} onClick={() => setPendingRemoval({ kind: 'article', id: item.id, label: item.title })}><X size={16} /></button>
-        </article>)}
+        </article>) : <p role={content.isLoading ? 'status' : 'alert'}>{content.isLoading ? 'Loading entries…' : 'Entries could not be loaded. Please refresh.'}</p>}
       </section>
     </div> : <form className="admin-panel content-editor content-image-editor home-hero-image-editor" onSubmit={saveHomeImage}>
       <div className="panel-heading"><div><h2>Homepage hero images</h2><p>{isLocalDemoSession() ? 'Images are saved only in this browser and are not included in website builds.' : 'Images rotate automatically every 3 seconds on the home hero. Save to publish your changes.'}</p></div></div>

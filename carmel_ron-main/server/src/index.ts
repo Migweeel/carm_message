@@ -569,13 +569,15 @@ app.post('/api/auth/register', registrationEmailRateLimit, asyncRoute(async (req
   const input = parsed.data!
   if (retiredDemoAccountEmails.has(input.email)) return res.status(403).json({ error: 'This email address is not available for registration.' })
   if (!resendApiKey || !resendFrom) return res.status(503).json({ error: 'Email verification is not configured yet. Please contact the Federation office for help.' })
-  if (await prisma.user.findUnique({ where: { email: input.email }, select: { id: true } })) {
+  const now = new Date()
+  const [existingUser, existingVerification] = await Promise.all([
+    prisma.user.findUnique({ where: { email: input.email }, select: { id: true } }),
+    prisma.registrationVerification.findUnique({ where: { email: input.email }, select: { lastSentAt: true } }),
+  ])
+  if (existingUser) {
     return res.status(409).json({ error: 'An account with this email already exists.' })
   }
 
-  const now = new Date()
-  await prisma.registrationVerification.deleteMany({ where: { expiresAt: { lte: now } } })
-  const existingVerification = await prisma.registrationVerification.findUnique({ where: { email: input.email } })
   if (existingVerification) {
     const waitSeconds = Math.ceil((existingVerification.lastSentAt.getTime() + registrationCodeResendDelayMs - now.getTime()) / 1000)
     if (waitSeconds > 0) {
@@ -740,7 +742,24 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
   if (parsed.error) return res.status(400).json({ error: 'Enter a valid email and password.' })
   const input = parsed.data!
   if (retiredDemoAccountEmails.has(input.email)) return res.status(401).json({ error: 'Email or password is incorrect.' })
-  const user = await prisma.user.findUnique({ where: { email: input.email } })
+  const user = await prisma.user.findUnique({
+    where: { email: input.email },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      gender: true,
+      phone: true,
+      address: true,
+      avatarImage: true,
+      passwordHash: true,
+      role: true,
+      isActive: true,
+      canManageUsers: true,
+      canManageDetails: true,
+      canManageUpdates: true,
+    },
+  })
   if (user) {
     if (!user.isActive || !(await bcrypt.compare(input.password, user.passwordHash))) return res.status(401).json({ error: 'Email or password is incorrect.' })
     const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)

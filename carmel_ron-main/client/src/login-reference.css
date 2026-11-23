@@ -398,10 +398,26 @@
 .auth-google-button {
   position: relative;
   display: flex;
+  min-height: 40px;
   width: 100%;
   min-width: 0;
   max-width: 100%;
+  align-items: center;
   justify-content: center;
+}
+
+.auth-google-button-pending {
+  pointer-events: none;
+}
+
+.auth-google-button > .auth-social-status {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: #f8f5ee;
 }
 
 .auth-google-button > div {
