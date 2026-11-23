@@ -1994,6 +1994,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const content = useManagedContent(kind === 'updates' ? 'contactDetails' : isLife ? 'carmelife' : 'carmelights')
   const location = useLocation()
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedReading, setSelectedReading] = useState<ManagedArticle | null>(null)
   const [fullView, setFullView] = useState(false)
   const [teachingQuery, setTeachingQuery] = useState('')
   const [teachingCategory, setTeachingCategory] = useState('All')
@@ -2010,7 +2011,8 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const popularDrag = useRef<{ pointerId: number; startX: number; startScrollLeft: number; moved: boolean } | null>(null)
   const suppressPopularClick = useRef(false)
   const articles = isLife ? content.carmelife : content.carmelights
-  const selected = articles.find((article) => article.id === selectedId)
+  const selected = selectedReading
+    || articles.find((article) => article.id === selectedId)
     || popularTeachings.find((teaching) => teaching.id === selectedId)
   const desc = isLife ? 'Vocation stories and glimpses of a contemplative life rooted in prayer and sisterhood.' : 'Discover words of wisdom from Carmelite saints—quotes that invite prayer, deepen trust, and draw the heart closer to God.'
   function startPopularDrag(event: ReactPointerEvent<HTMLDivElement>) {
@@ -2126,7 +2128,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
             }
           }}>{popularTeachings.map((teaching, index) => {
             const rank = index + 1
-            return <button type="button" className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} onClick={() => setSelectedId(teaching.id)}>
+            return <button type="button" className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} onClick={() => { setSelectedReading(teaching); setSelectedId(teaching.id); setFullView(false) }}>
               <span className="carmelights-popular-rank">{rank}</span><ImageWithLoader src={articleImageFor(teaching.image, photo.chapel)} alt="" /><span className="carmelights-popular-copy"><small>{teaching.category || 'Prayer'} · {teaching.views.toLocaleString()} {teaching.views === 1 ? 'view' : 'views'}</small><b>{teaching.title}</b><em>{teaching.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
             </button>
           })}</div>
