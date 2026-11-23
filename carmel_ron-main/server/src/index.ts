@@ -835,18 +835,30 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
 
   const email = payload.email.trim().toLowerCase()
   if (retiredDemoAccountEmails.has(email)) return res.status(403).json({ error: 'This email address is not available for sign-in.' })
+  const alreadyRegisteredForSignup = () => res.status(409).json({
+    code: 'ACCOUNT_ALREADY_REGISTERED',
+    error: 'This Google account is already registered. Please sign in instead.',
+    email,
+  })
   const findGoogleIdentity = () => prisma.oAuthIdentity.findUnique({
     where: identityWhereForGoogle(payload.sub),
     include: { user: { select: googleAuthUserSelect } },
   })
   let identity = await findGoogleIdentity()
   let user = identity?.user ?? null
+  if (user && input.intent === 'signup') {
+    if (!user.isActive || user.role !== 'USER') {
+      return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
+    }
+    return alreadyRegisteredForSignup()
+  }
   if (!user) {
     const existingAccount = await prisma.user.findUnique({ where: { email }, select: googleAuthUserSelect })
     if (existingAccount) {
       if (!existingAccount.isActive || existingAccount.role !== 'USER') {
         return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
       }
+      if (input.intent === 'signup') return alreadyRegisteredForSignup()
       if (!await linkGoogleIdentityToUser(existingAccount.id, payload.sub)) {
         return res.status(409).json({ error: 'This Google account is already linked to a different member account.' })
       }
@@ -876,6 +888,7 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
         if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
         identity = await findGoogleIdentity()
         if (identity) {
+          if (input.intent === 'signup') return alreadyRegisteredForSignup()
           user = identity.user
         } else {
           const accountCreatedConcurrently = await prisma.user.findUnique({ where: { email }, select: googleAuthUserSelect })
@@ -883,6 +896,7 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
           if (!accountCreatedConcurrently.isActive || accountCreatedConcurrently.role !== 'USER') {
             return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
           }
+          if (input.intent === 'signup') return alreadyRegisteredForSignup()
           if (!await linkGoogleIdentityToUser(accountCreatedConcurrently.id, payload.sub)) {
             return res.status(409).json({ error: 'This Google account is already linked to a different member account.' })
           }

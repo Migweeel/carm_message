@@ -2405,8 +2405,14 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [loginEmail, setLoginEmail] = useState(() => {
     const state = location.state
-    return state && typeof state === 'object' && 'verifiedEmail' in state && typeof state.verifiedEmail === 'string'
-      ? state.verifiedEmail
+    if (!state || typeof state !== 'object') return ''
+    if ('verifiedEmail' in state && typeof state.verifiedEmail === 'string') return state.verifiedEmail
+    return 'existingEmail' in state && typeof state.existingEmail === 'string' ? state.existingEmail : ''
+  })
+  const [accountNotice] = useState(() => {
+    const state = location.state
+    return state && typeof state === 'object' && 'accountNotice' in state && typeof state.accountNotice === 'string'
+      ? state.accountNotice
       : ''
   })
   const [loginPassword, setLoginPassword] = useState('')
@@ -2519,6 +2525,16 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         signal: controller.signal,
       })
       const result = await readAuthResponse(response)
+      if (isSignup && result.code === 'ACCOUNT_ALREADY_REGISTERED') {
+        navigate('/account/login', {
+          replace: true,
+          state: {
+            existingEmail: result.email || '',
+            accountNotice: result.error || 'This Google account is already registered. Please sign in instead.',
+          },
+        })
+        return
+      }
       if (!response.ok) throw new Error(result.error || 'Unable to continue with Google.')
       if (!result.user || result.user.role !== 'USER') throw new Error('Google sign-in did not return a member account.')
       saveServerSessionRole('USER')
@@ -2605,6 +2621,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       <span className="eyebrow">{isSignup ? 'HELLO' : isStaff ? 'FEDERATION STAFF' : 'WELCOME BACK'}</span>
       <h1>{isSignup ? <>Create <em>Account</em></> : isStaff ? <>Staff <em>Sign in</em></> : <>Login <em>Account</em></>}</h1>
       <p>{isSignup ? 'Create a resident account by providing your information.' : isStaff ? 'Sign in to your Federation staff or administrator account.' : 'Please provide your account information.'}</p>
+      {accountNotice && <p className="form-error" role="status">{accountNotice}</p>}
       {!isStaff && <div className="auth-social-login">
         {googleClientId
           ? <div className={`auth-google-button${pending || googlePending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || undefined}>
@@ -5866,8 +5883,8 @@ function AppRoutes() {
     <Route path="/contact" element={<PublicLayout><ContactPage /></PublicLayout>} />
     <Route path="/donations" element={<PublicLayout><DonationsPage /></PublicLayout>} />
     <Route element={<GoogleAuthProviderLayout />}>
-      <Route path="/account/login" element={<MemberAuthPage mode="login" />} />
-      <Route path="/account/signup" element={<MemberAuthPage mode="signup" />} />
+      <Route path="/account/login" element={<MemberAuthPage key="login" mode="login" />} />
+      <Route path="/account/signup" element={<MemberAuthPage key="signup" mode="signup" />} />
     </Route>
     <Route path="/account/forgot-password" element={<PasswordRecoveryPage />} />
     <Route path="/account/reset-password" element={<PasswordRecoveryPage />} />
