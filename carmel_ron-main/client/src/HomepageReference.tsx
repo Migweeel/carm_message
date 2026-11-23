@@ -11,6 +11,8 @@ const maxInlineHeroImageLength = 350_000
 
 export default function HomepageReference() {
   const cards = useRef<HTMLDivElement>(null)
+  const cardDrag = useRef<{ pointerId: number; startX: number; startScrollLeft: number; moved: boolean } | null>(null)
+  const suppressCardClick = useRef(false)
   const [heroImages, setHeroImages] = useState<string[]>([])
   const [heroImageLoading, setHeroImageLoading] = useState(true)
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
@@ -54,6 +56,53 @@ export default function HomepageReference() {
       }
     })
     setActiveCardIndex((current) => current === closestIndex ? current : closestIndex)
+  }
+
+  function startCardDrag(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return
+    cardDrag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: event.currentTarget.scrollLeft,
+      moved: false,
+    }
+  }
+
+  function moveCardDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = cardDrag.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+
+    const distance = event.clientX - drag.startX
+    if (!drag.moved && Math.abs(distance) < 5) return
+    if (!drag.moved) {
+      drag.moved = true
+      event.currentTarget.setPointerCapture(event.pointerId)
+      event.currentTarget.classList.add('is-dragging')
+    }
+
+    event.preventDefault()
+    event.currentTarget.scrollLeft = drag.startScrollLeft - distance
+  }
+
+  function endCardDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = cardDrag.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+
+    cardDrag.current = null
+    event.currentTarget.classList.remove('is-dragging')
+    if (!drag.moved) return
+
+    suppressCardClick.current = true
+    window.setTimeout(() => {
+      suppressCardClick.current = false
+    }, 0)
+  }
+
+  function handleCardClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (!suppressCardClick.current) return
+    event.preventDefault()
+    event.stopPropagation()
+    suppressCardClick.current = false
   }
 
   const activeHeroImage = heroImages[activeHeroIndex]
@@ -167,7 +216,7 @@ export default function HomepageReference() {
     </section>
     <section className="reference-ticker"><strong>Philippine Federation of Discalced Carmelite Nuns</strong><div className="reference-ticker-window"><div className="reference-ticker-track">{cities.map((city) => <span key={city}>{city}<i>·</i></span>)}{cities.map((city) => <span key={`duplicate-${city}`} aria-hidden="true">{city}<i>·</i></span>)}</div></div></section>
     <section className="reference-discernment"><ImageWithLoader src="/assets/images/whiteflowers.webp" alt="White flowers in a garden" /><div><h2>Is <b>GOD</b> calling you to be a<br /> Discalced Carmelite Nun?</h2><p>Are you discerning if God is calling you to Carmel? Let us assist you in your discernment as you explore the pages of this site.</p><Link className="reference-primary" to="/monasteries">Meet Our Monasteries</Link></div></section>
-    <section className="reference-explore" id="home-explore"><div className="reference-explore-heading"><div><p className="reference-kicker">FIND YOUR WAY IN</p><h2>Explore</h2></div><p>Learn about our charism, communities, and the women who have found a home in Carmel.</p></div><div className="reference-carousel"><button type="button" onClick={() => scrollCards(-1)} aria-label="Scroll left"><ArrowLeft size={18} /></button><div className="reference-cards" ref={cards} onScroll={updateActiveCard}>{homeSectionCards.map(({ key, label, title, to, image }) => <Link className="reference-card" key={key} to={to}><ImageWithLoader src={sectionImagesReady ? sectionImages[key] || image : undefined} pending={sectionImagesLoading} alt="" loading="lazy" decoding="async" /><span>{label}</span><div><h3>{title}</h3><b>Learn More <ArrowRight size={14} /></b></div></Link>)}</div><button type="button" onClick={() => scrollCards(1)} aria-label="Scroll right"><ArrowRight size={18} /></button></div><div className="reference-carousel-dots" role="group" aria-label="Explore categories">{homeSectionCards.map(({ key, label }, index) => <button key={key} type="button" className={index === activeCardIndex ? 'reference-carousel-dot is-active' : 'reference-carousel-dot'} aria-label={`Go to ${label.toLowerCase()} slide`} aria-current={index === activeCardIndex ? 'true' : undefined} onClick={() => scrollToCard(index)} />)}</div></section>
+    <section className="reference-explore" id="home-explore"><div className="reference-explore-heading"><div><p className="reference-kicker">FIND YOUR WAY IN</p><h2>Explore</h2></div><p>Learn about our charism, communities, and the women who have found a home in Carmel.</p></div><div className="reference-carousel"><button type="button" onClick={() => scrollCards(-1)} aria-label="Scroll left"><ArrowLeft size={18} /></button><div className="reference-cards" ref={cards} onScroll={updateActiveCard} onPointerDown={startCardDrag} onPointerMove={moveCardDrag} onPointerUp={endCardDrag} onPointerCancel={endCardDrag} onClickCapture={handleCardClick}>{homeSectionCards.map(({ key, label, title, to, image }) => <Link className="reference-card" key={key} to={to}><ImageWithLoader src={sectionImagesReady ? sectionImages[key] || image : undefined} pending={sectionImagesLoading} alt="" loading="lazy" decoding="async" /><span>{label}</span><div><h3>{title}</h3><b>Learn More <ArrowRight size={14} /></b></div></Link>)}</div><button type="button" onClick={() => scrollCards(1)} aria-label="Scroll right"><ArrowRight size={18} /></button></div><div className="reference-carousel-dots" role="group" aria-label="Explore categories">{homeSectionCards.map(({ key, label }, index) => <button key={key} type="button" className={index === activeCardIndex ? 'reference-carousel-dot is-active' : 'reference-carousel-dot'} aria-label={`Go to ${label.toLowerCase()} slide`} aria-current={index === activeCardIndex ? 'true' : undefined} onClick={() => scrollToCard(index)} />)}</div></section>
     <section className="reference-quote"><ImageWithLoader src="/assets/images/pinkflower.webp" alt="Pink flower" /><div><p>Carmel symbolizes prayer. More than a geographical place, it is a sacred space in the cloister of the heart where the Carmelite nun encounters God.</p><Link className="reference-secondary" to="/contact">Contact us</Link></div></section>
   </div>
 }

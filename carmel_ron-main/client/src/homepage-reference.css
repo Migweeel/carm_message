@@ -39,8 +39,10 @@
 .reference-explore-heading>p{max-width:600px;margin:0;font-size:16px}
 .reference-carousel{display:flex;align-items:center;gap:12px}
 .reference-carousel>button{display:inline-flex;flex:0 0 44px;align-items:center;justify-content:center;width:44px;height:44px;border:1px solid #7042142e;border-radius:50%;background:#ffffffd1;color:#704214;cursor:pointer}
-.reference-cards{display:flex;flex:1;gap:24px;overflow-x:auto;padding:4px 0 18px;scroll-behavior:smooth;scrollbar-width:thin}
-.reference-card{position:relative;display:flex;flex:0 0 248px;height:272px;flex-direction:column;justify-content:flex-end;overflow:hidden;border-radius:12px;background:#574638;color:#fff}
+.reference-cards{display:flex;flex:1;gap:24px;overflow-x:auto;padding:4px 0 18px;scroll-behavior:smooth;scroll-snap-type:x mandatory;scrollbar-width:none;touch-action:pan-x;cursor:grab}
+.reference-cards::-webkit-scrollbar{display:none}
+.reference-cards.is-dragging{scroll-behavior:auto;scroll-snap-type:none;cursor:grabbing}
+.reference-card{position:relative;display:flex;flex:0 0 248px;height:272px;flex-direction:column;justify-content:flex-end;overflow:hidden;border-radius:12px;background:#574638;color:#fff;scroll-snap-align:start}
 .reference-card::before{position:absolute;z-index:1;inset:0;background:linear-gradient(transparent 10%,rgba(20,10,4,.82));content:""}
 .reference-card>img{position:absolute;z-index:0;inset:0;width:100%;height:100%;object-fit:cover}
 .reference-card>span{position:relative;padding:20px 16px 0;color:#c9a87c;font-size:11px;font-weight:700;letter-spacing:.08em}
