@@ -1917,6 +1917,40 @@ const discernmentGuideStages = [
 ] as const
 
 function DiscernmentGuidePage() {
+  const stageDrag = useRef<{ pointerId: number; startX: number; startScrollLeft: number; moved: boolean } | null>(null)
+
+  function startStageDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    stageDrag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: event.currentTarget.scrollLeft,
+      moved: false,
+    }
+  }
+
+  function moveStageDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = stageDrag.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+
+    const distance = event.clientX - drag.startX
+    if (!drag.moved && Math.abs(distance) < 5) return
+    if (!drag.moved) {
+      drag.moved = true
+      event.currentTarget.setPointerCapture(event.pointerId)
+      event.currentTarget.classList.add('is-dragging')
+    }
+
+    event.preventDefault()
+    event.currentTarget.scrollLeft = drag.startScrollLeft - distance
+  }
+
+  function endStageDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!stageDrag.current || stageDrag.current.pointerId !== event.pointerId) return
+    stageDrag.current = null
+    event.currentTarget.classList.remove('is-dragging')
+  }
+
   return <main className="discernment-guide-page">
     <section className="discernment-guide-hero">
       <span className="eyebrow">A COMPANION FOR YOUR JOURNEY</span>
@@ -1934,7 +1968,17 @@ function DiscernmentGuidePage() {
         <h2 id="discernment-stages-title">Possible next steps on your journey</h2>
         <p>Everyone begins by exploring. These are guideposts, not requirements or a test—take the next step when it feels right, with guidance from the community.</p>
       </div>
-      <div className="discernment-guide-stage-list">
+      <div
+        className="discernment-guide-stage-list"
+        role="region"
+        aria-label="Possible next steps on your journey"
+        tabIndex={0}
+        onDragStart={(event) => event.preventDefault()}
+        onPointerDown={startStageDrag}
+        onPointerMove={moveStageDrag}
+        onPointerUp={endStageDrag}
+        onPointerCancel={endStageDrag}
+      >
         {discernmentGuideStages.map((stage, index) => <article className="discernment-guide-stage" key={stage.id}>
           <span className="discernment-guide-stage-number">0{index + 1}</span>
           <div>

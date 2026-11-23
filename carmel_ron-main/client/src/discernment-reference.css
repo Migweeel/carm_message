@@ -72,19 +72,52 @@
 }
 
 .discernment-guide-stage-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  padding: 4px 0 16px;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  scrollbar-color: #b7a88f #f4f1eb;
+  scrollbar-width: thin;
+  touch-action: pan-y;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.discernment-guide-stage-list::-webkit-scrollbar {
+  height: 8px;
+}
+
+.discernment-guide-stage-list::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: #f4f1eb;
+}
+
+.discernment-guide-stage-list::-webkit-scrollbar-thumb {
+  border: 2px solid #f4f1eb;
+  border-radius: 999px;
+  background: #b7a88f;
+}
+
+.discernment-guide-stage-list.is-dragging {
+  scroll-behavior: auto;
+  scroll-snap-type: none;
+  cursor: grabbing;
 }
 
 .discernment-guide-stage {
   display: grid;
+  flex: 0 0 clamp(340px, 42vw, 460px);
   grid-template-columns: 48px minmax(0, 1fr);
   gap: 17px;
   padding: 26px;
   border: 1px solid #e8dfd4;
   border-radius: 10px;
   background: #fff;
+  scroll-snap-align: start;
 }
 
 .discernment-guide-stage-number {
@@ -160,16 +193,30 @@
   max-width: 800px;
 }
 
+.discernment-vocation-requirements .discernment-guide-heading h2 {
+  position: relative;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+}
+
+.discernment-vocation-requirements .discernment-guide-heading h2::after {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 52px;
+  height: 2px;
+  background: var(--guide-gold);
+  content: "";
+}
+
 .discernment-requirements-box {
-  padding: 18px 26px;
-  border: 1px solid #e8dfd4;
-  border-radius: 10px;
-  background: #fff;
+  min-width: 0;
 }
 
 .discernment-requirements-list {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -177,25 +224,24 @@
 
 .discernment-requirements-list li {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
   gap: 14px;
-  padding: 18px 0;
-  border-bottom: 1px solid #eee7df;
-}
-
-.discernment-requirements-list li:first-child {
-  padding-top: 6px;
+  min-height: 126px;
+  padding: 22px;
+  border: 1px solid #e8e5da;
+  border-radius: 7px;
+  background: #fbfaf5;
 }
 
 .discernment-requirements-list li:last-child {
-  border-bottom: 0;
+  grid-column: 1 / -1;
 }
 
 .discernment-requirements-list li > span {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border-radius: 50%;
   background: #f3ece3;
@@ -394,11 +440,18 @@
     padding-block: 48px;
   }
 
-  .discernment-guide-stage-list,
   .discernment-requirements-list,
   .discernment-guide-practice-grid {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .discernment-guide-stage-list {
+    gap: 16px;
+  }
+
+  .discernment-guide-stage {
+    flex-basis: min(82vw, 400px);
   }
 
   .discernment-guide-practical {
@@ -516,10 +569,11 @@
   }
 
   .discernment-guide-stage-list {
-    gap: 10px;
+    gap: 12px;
   }
 
   .discernment-guide-stage {
+    flex-basis: min(86vw, 380px);
     grid-template-columns: 32px minmax(0, 1fr);
     gap: 11px;
     padding: 17px 14px;
@@ -559,20 +613,23 @@
   }
 
   .discernment-requirements-box {
-    padding: 4px 16px;
-    border-radius: 9px;
-    box-shadow: 0 3px 12px #3d2e2408;
+    padding: 0;
   }
 
   .discernment-requirements-list {
-    gap: 0;
+    gap: 10px;
+    grid-template-columns: 1fr;
   }
 
   .discernment-requirements-list li,
-  .discernment-requirements-list li:first-child {
+  .discernment-requirements-list li:last-child {
+    grid-column: auto;
     grid-template-columns: 30px minmax(0, 1fr);
     gap: 11px;
-    padding: 14px 0;
+    min-height: 0;
+    padding: 16px;
+    border-radius: 9px;
+    box-shadow: 0 3px 12px #3d2e2408;
   }
 
   .discernment-requirements-list li > span {
