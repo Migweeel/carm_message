@@ -384,10 +384,34 @@ function monasteryImageFor(monastery: Pick<ManagedMonastery, 'city' | 'image'>) 
     ? optimizedImage
     : monastery.image
 }
+const bundledImageByName: Record<string, string> = {
+  'attracted-by-the-veil': attractedByTheVeilImage,
+  'vocation-to-carmel': vocationHeroImage,
+  'seeking-the-face': seekingFaceImage,
+  'discerning-your-vocation': discerningImage,
+  'practical-aids': practicalAidsImage,
+  landingcarm: aboutAssemblyImage,
+  elected_officers: aboutOfficersImage,
+  aboutus_flower: aboutFlowerImage,
+  purpose1: purposeOneImage,
+  purpose2: purposeTwoImage,
+  purpose3: purposeThreeImage,
+  purpose4: purposeFourImage,
+  'auth-floral': loginFloralImage,
+}
+function resolveBundledImage(image: string) {
+  const path = image.replace(/^https?:\/\/[^/]+/i, '').split(/[?#]/, 1)[0]
+  if (!path.startsWith('/assets/')) return image
+  const fileName = path.slice(path.lastIndexOf('/') + 1)
+  const originalName = fileName
+    .replace(/\.(?:avif|gif|jpe?g|png|webp)$/i, '')
+    .replace(/-[a-z0-9_-]{8}$/i, '')
+  return bundledImageByName[originalName.toLowerCase()] || image
+}
 function articleImageFor(image: string, fallback: string) {
   const legacyPath = image.replace(/^https?:\/\/[^/]+/i, '')
   if (legacyPath === '/src/assets/attracted-by-the-veil.jpg') return attractedByTheVeilImage
-  return image || fallback
+  return resolveBundledImage(image) || fallback
 }
 function CarmelightsReadingDialog({ reading, fullView, onToggleFullView, onClose, imagePending = false }: {
   reading: ManagedArticle
@@ -1258,7 +1282,11 @@ const aboutTextFields: Array<{ key: keyof ManagedAboutText; label: string; rows?
 ]
 function AboutPage() {
   const { aboutImages, aboutText, isLoading, isReady } = useManagedContent('about')
-  const purposeImages = [aboutImages.purposeOne, aboutImages.purposeTwo, aboutImages.purposeThree, aboutImages.purposeFour]
+  const spiritualityImage = resolveBundledImage(aboutImages.spirituality)
+  const assemblyImage = resolveBundledImage(aboutImages.assembly)
+  const officersImage = resolveBundledImage(aboutImages.officers)
+  const purposeImages = [aboutImages.purposeOne, aboutImages.purposeTwo, aboutImages.purposeThree, aboutImages.purposeFour].map(resolveBundledImage)
+  const quoteImage = resolveBundledImage(aboutImages.quote)
   const purposes = [aboutText.purposeOne, aboutText.purposeTwo, aboutText.purposeThree, aboutText.purposeFour]
   return <div className="about-reference">
     <section className="about-reference-top">
@@ -1288,7 +1316,7 @@ function AboutPage() {
         <span>{aboutText.spiritualitySignoff}</span>
       </div>
       <Link to="/spirituality" className="about-reference-spirituality-card">
-        <ImageWithLoader src={isReady ? aboutImages.spirituality : undefined} pending={isLoading} alt={aboutText.spiritualityAlt} />
+        <ImageWithLoader src={isReady ? spiritualityImage : undefined} pending={isLoading} alt={aboutText.spiritualityAlt} />
         <span className="about-reference-spirituality-overlay" />
         <span className="about-reference-spirituality-title">{aboutText.spiritualityCardTitle}</span>
         <span className="about-reference-spirituality-link">{aboutText.spiritualityCardLink} <ArrowRight size={13} /></span>
@@ -1297,14 +1325,14 @@ function AboutPage() {
 
     <section className="about-reference-photo-section">
       <div className="about-reference-container">
-        <ImageWithLoader src={isReady ? aboutImages.assembly : undefined} pending={isLoading} alt={aboutText.assemblyAlt} />
+        <ImageWithLoader src={isReady ? assemblyImage : undefined} pending={isLoading} alt={aboutText.assemblyAlt} />
         <p>{aboutText.assemblyCaption.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
       </div>
     </section>
 
     <section className="about-reference-photo-section about-reference-officers">
       <div className="about-reference-container">
-        <ImageWithLoader src={isReady ? aboutImages.officers : undefined} pending={isLoading} alt={aboutText.officersAlt} />
+        <ImageWithLoader src={isReady ? officersImage : undefined} pending={isLoading} alt={aboutText.officersAlt} />
         <p>{aboutText.officersCaption.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
       </div>
     </section>
@@ -1325,7 +1353,7 @@ function AboutPage() {
         </div>
       </div>
       <div className="about-reference-quote">
-        <div className="about-reference-quote-image"><ImageWithLoader src={isReady ? aboutImages.quote : undefined} pending={isLoading} alt={aboutText.quoteAlt} /></div>
+        <div className="about-reference-quote-image"><ImageWithLoader src={isReady ? quoteImage : undefined} pending={isLoading} alt={aboutText.quoteAlt} /></div>
         <div className="about-reference-quote-content">
           <span className="about-reference-quote-mark">&quot;</span>
           <blockquote>{aboutText.quoteText.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</blockquote>
