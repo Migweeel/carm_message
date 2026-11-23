@@ -2023,7 +2023,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       startScrollLeft: event.currentTarget.scrollLeft,
       moved: false,
     }
-    event.currentTarget.setPointerCapture(event.pointerId)
+    if (event.pointerType !== 'mouse') event.currentTarget.setPointerCapture(event.pointerId)
   }
   function movePopularDrag(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = popularDrag.current
@@ -2128,7 +2128,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
             }
           }}>{popularTeachings.map((teaching, index) => {
             const rank = index + 1
-            return <button type="button" className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} onClick={() => { setSelectedReading(teaching); setSelectedId(teaching.id); setFullView(false) }}>
+            return <button type="button" className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedReading(teaching); setSelectedId(teaching.id); setFullView(false) }}>
               <span className="carmelights-popular-rank">{rank}</span><ImageWithLoader src={articleImageFor(teaching.image, photo.chapel)} alt="" /><span className="carmelights-popular-copy"><small>{teaching.category || 'Prayer'} · {teaching.views.toLocaleString()} {teaching.views === 1 ? 'view' : 'views'}</small><b>{teaching.title}</b><em>{teaching.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
             </button>
           })}</div>
