@@ -273,6 +273,8 @@
 .donation-admin-tabs a span{min-width:20px;padding:3px 6px;border-radius:12px;background:#f3eee8;color:#806c59;text-align:center;font-size:9px}
 .donation-entry-form,.donation-transactions-panel{display:grid;gap:18px}
 .donation-entry-form .panel-heading,.donation-transactions-panel .panel-heading{margin-bottom:0}
+.donation-reference-search{width:min(360px,100%);min-height:40px;padding:0 12px;border:1px solid #ded4ca;border-radius:4px;display:flex;align-items:center;gap:8px;background:#fff;color:#8e8175}
+.donation-reference-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--brown-900);font-size:11px}
 .donation-entry-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .donation-entry-grid label,.donation-proof-picker{min-width:0;display:grid;align-content:start;gap:7px;color:#6e6258;font-size:10px;font-weight:700}
 .donation-entry-grid input,.donation-entry-grid select{width:100%;min-height:41px;padding:9px 11px;border:1px solid #ded4ca;border-radius:4px;background:#fff;color:var(--brown-900);font-size:11px}
