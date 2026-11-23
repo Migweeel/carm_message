@@ -132,8 +132,7 @@
   object-fit: cover;
 }
 
-.carmelife-page .centered-life-heading > h2,
-.carmelife-page .discernment-section-life > h2 {
+.carmelife-page .centered-life-heading > h2 {
   font-size: clamp(2rem, 4vw, 3.2rem);
   font-weight: 400;
   text-align: center;
@@ -236,31 +235,76 @@
   color: var(--life-gold);
 }
 
-.carmelife-page .discernment-section-life > h2 {
-  margin: 2rem 0;
-  text-align: center;
+.carmelife-page .discernment-section-life {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  align-items: center;
+  gap: clamp(32px, 6vw, 80px);
 }
 
 .carmelife-page .wide-life-image {
-  height: 390px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 0.96 / 1;
   overflow: hidden;
   border: 1px solid #c0824633;
-  border-radius: 1rem;
+  border-radius: 12px 88px 12px 12px;
   box-shadow: 0 8px 20px #3d2e241a;
 }
 
 .carmelife-page .discernment-copy {
-  max-width: 980px;
-  margin: 3rem auto 0;
-  text-align: center;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  text-align: left;
+}
+
+.carmelife-page .discernment-copy > .eyebrow {
+  color: var(--life-gold);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
+.carmelife-page .discernment-copy h2 {
+  margin: 14px 0 20px;
+  color: var(--life-dark);
+  font-family: Inter, system-ui, sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.12;
+}
+
+.carmelife-page .discernment-copy h2 em {
+  color: var(--life-gold);
+  font-style: italic;
 }
 
 .carmelife-page .discernment-copy h3 {
-  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  margin: 0 0 12px;
+  color: var(--life-text);
+  font-size: clamp(1.15rem, 2vw, 1.4rem);
+  font-style: normal;
 }
 
 .carmelife-page .discernment-copy p {
+  margin-top: 1rem;
+  font-size: 0.95rem;
+  line-height: 1.75;
+  text-indent: 0;
   text-align: left;
+}
+
+.carmelife-page .discernment-copy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.carmelife-page .discernment-copy-actions .button {
+  min-height: 48px;
+  font-size: 14px;
 }
 
 .carmelife-page .life-slider-quote {
@@ -325,6 +369,11 @@
 @media (max-width: 800px) {
   .carmelife-page .face-of-god {
     grid-template-columns: 1fr;
+  }
+
+  .carmelife-page .discernment-section-life {
+    grid-template-columns: 1fr;
+    gap: 24px;
   }
 
   .carmelife-page .life-card-grid {
