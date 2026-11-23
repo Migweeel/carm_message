@@ -2391,9 +2391,22 @@ function DonationsPage() {
     const donationReference = reference
     let active = true
     setReceiptCode(donationReference)
-    setDonationStatus('PENDING')
+    setDonationStatus('RECONCILING')
     setReceiptEmailSending(false)
     async function refreshDonationStatus() {
+      let refreshError = ''
+      try {
+        const refreshResponse = await fetch(`/api/donations/${encodeURIComponent(donationReference)}/refresh`, { method: 'POST', credentials: 'include' })
+        const refreshed = await refreshResponse.json() as { donation?: { status?: string; receiptEmailSent?: boolean; receiptEmailSending?: boolean }; error?: string }
+        if (!refreshResponse.ok) throw new Error(refreshed.error || 'Could not refresh the donation status.')
+        if (!refreshed.donation?.status) throw new Error('The donation status was missing from the response.')
+        if (!active) return
+        setDonationStatus(refreshed.donation.status)
+        setReceiptEmailSent(refreshed.donation.receiptEmailSent === true)
+        setReceiptEmailSending(refreshed.donation.receiptEmailSending === true)
+      } catch (reason) {
+        refreshError = reason instanceof Error ? reason.message : 'Could not refresh the donation status.'
+      }
       for (let attempt = 0; attempt < 12; attempt += 1) {
         const response = await fetch(`/api/donations/${encodeURIComponent(donationReference)}`)
         const result = await response.json() as { donation?: { status?: string; receiptEmailSent?: boolean; receiptEmailSending?: boolean }; error?: string }
@@ -2406,6 +2419,7 @@ function DonationsPage() {
         const emailSending = result.donation?.receiptEmailSending === true
         setReceiptEmailSending(emailSending)
         if (status !== 'PENDING' && status !== 'RECONCILING') {
+          setError('')
           if (emailSending && attempt < 11) {
             await new Promise((resolve) => window.setTimeout(resolve, 5000))
             continue
@@ -2415,6 +2429,7 @@ function DonationsPage() {
         }
         if (attempt < 11) await new Promise((resolve) => window.setTimeout(resolve, 5000))
       }
+      if (active && refreshError) setError(refreshError)
     }
     void refreshDonationStatus().catch((reason) => {
       if (active) setError(reason instanceof Error ? reason.message : 'Could not load the donation status.')
@@ -2465,21 +2480,22 @@ function DonationsPage() {
           </div>
           <div className="donor-fields">
             {!gift.anonymous && <label>Your name<input value={gift.name} onChange={(e) => setGift({ ...gift, name: e.target.value })} placeholder="Full name" /></label>}
-            <label>Email address for donation confirmation<input type="email" value={gift.email} onChange={(e) => setGift({ ...gift, email: e.target.value })} placeholder="you@example.com" autoComplete="email" /></label>
+            <label>Email address for donation acknowledgment<input type="email" value={gift.email} onChange={(e) => setGift({ ...gift, email: e.target.value })} placeholder="you@example.com" autoComplete="email" /></label>
             {!gift.anonymous && <label>Phone number<input type="tel" value={gift.phone} onChange={(e) => setGift({ ...gift, phone: e.target.value })} placeholder="+63" /></label>}
           </div>
-          <p className="form-note">{gift.anonymous ? 'Your name stays private. We’ll use your email only for payment confirmation and your donation history.' : 'We’ll email you a confirmation after your payment is confirmed.'}</p>
+          <p className="form-note">{gift.anonymous ? 'Your name stays private. We’ll use your email to send a donation acknowledgment and link your gift to any existing account.' : 'We’ll send a donation acknowledgment to this email after payment.'}</p>
         </>
       )}
       {step === 3 && <><span className="eyebrow">STEP FOUR</span><h2>Review & complete</h2><p>Please check the details below and send your offering.</p><div className="review-box"><div><small>OFFERING AMOUNT</small><strong>{money(amount)}</strong></div><div><small>PAYMENT CHANNEL</small><b>{gift.payment}</b></div><div><small>DONOR</small><b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></div></div>{xenditEnabled ? <div className="payment-instructions xendit-checkout"><p>You’ll continue to Xendit’s secure checkout to complete your test payment.</p><button className="button button-gold full-button" disabled={checkoutStarting} onClick={complete}>{checkoutStarting ? 'Opening secure checkout…' : 'Continue to secure checkout'} <ArrowRight size={16} /></button></div> : gift.payment === 'CARD' ? <div className="notice">Card checkout is coming soon. Select another payment method to continue.</div> : <div className="payment-instructions"><div className="qr-placeholder"><span>SCAN<br />TO GIVE</span><i>GCASH · MAYA</i></div><div><small>ACCOUNT</small><b>FEDERATION OF DISCALCED CARMELITE NUNS</b><div className="account-number">0921-419-2267 <button onClick={() => { navigator.clipboard?.writeText('0921-419-2267'); setCopied(true); setTimeout(() => setCopied(false), 1600) }} aria-label="Copy account number">{copied ? <Check size={15} /> : <Clipboard size={15} />}{copied ? 'Copied!' : 'Copy'}</button></div></div><label>Payment reference number <small>(optional)</small><input value={gift.reference} onChange={(e) => setGift({ ...gift, reference: e.target.value })} placeholder="From your GCash / bank SMS" /></label><button className="button button-gold full-button" onClick={complete}>I have sent {money(amount)} <ArrowRight size={16} /></button></div>}</>}{error && <p className="form-error">{error}</p>}</div><div className="donation-card-foot"><button className="button button-outline" disabled={step === 0} onClick={() => { setError(''); setStep(Math.max(0, step - 1)) }}><ArrowLeft size={15} /> Back</button><span>{steps[step]}</span>{step < 3 && <button className="button button-dark" onClick={next}>Continue <ArrowRight size={15} /></button>}</div></section> : <section className="confirmation-card">
       <span className="confirm-icon"><Check /></span>
-      <span className="eyebrow">{donationConfirmed ? 'DONATION SUCCESSFUL' : donationStatus === 'FAILED' ? 'PAYMENT NOT COMPLETED' : 'PAYMENT PENDING'}</span>
-      <h2>{donationConfirmed ? 'Your donation was successfully received.' : donationStatus === 'FAILED' ? 'Your payment was not completed.' : 'Your payment is being confirmed.'}</h2>
-      <p>{donationConfirmed ? 'Your payment has been confirmed by the payment provider.' : donationStatus === 'FAILED' ? 'The payment provider did not complete this transaction.' : 'Your donation will be marked successful automatically when the payment provider confirms it.'}</p>
-      <div className="receipt"><b>DONATION ACKNOWLEDGMENT</b><strong>{receiptCode}</strong><span>Beneficiary <b>Discalced Carmelite Nuns</b></span><span>Offering amount <b>{money(amount)}</b></span><span>Payment method <b>{gift.payment}</b></span><span>Donor <b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></span><span>Status <b>{donationConfirmed ? 'Success' : donationStatus === 'FAILED' ? 'Failed' : 'Pending'}</b></span><span>Date <b>{new Date().toLocaleDateString('en-PH')}</b></span></div>
+      <span className="eyebrow">{donationConfirmed ? 'DONATION SUCCESSFUL' : donationStatus === 'FAILED' ? 'PAYMENT NOT COMPLETED' : 'THANK YOU'}</span>
+      <h2>{donationConfirmed ? 'Thank you for your generous donation.' : donationStatus === 'FAILED' ? 'Your payment was not completed.' : 'Thank you for supporting Carmelite formation.'}</h2>
+      <p>{donationConfirmed ? 'Your generosity helps support formation and the life of Carmelite communities.' : donationStatus === 'FAILED' ? 'The payment provider did not complete this transaction.' : 'Your support means so much to the Carmelite communities.'}</p>
+      <div className="receipt"><b>DONATION ACKNOWLEDGMENT</b><strong>{receiptCode}</strong><span>Beneficiary <b>Discalced Carmelite Nuns</b></span><span>Offering amount <b>{money(amount)}</b></span><span>Payment method <b>{gift.payment}</b></span><span>Donor <b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></span><span>Status <b>{donationConfirmed ? 'Success' : donationStatus === 'FAILED' ? 'Failed' : 'Processing'}</b></span><span>Date <b>{new Date().toLocaleDateString('en-PH')}</b></span></div>
       <div className="confirmation-actions"><button className="button button-outline" onClick={() => window.print()}><FileText size={16} /> Print acknowledgment</button><button className="button button-dark" onClick={() => { setReceiptCode(''); setDonationStatus(''); setReceiptEmailSent(false); setReceiptEmailSending(false); setStep(0); setGift(initialDonation); sessionStorage.removeItem('carmel-gift') }}>Make another offering <ArrowRight size={15} /></button></div>
     </section>}
-    {receiptCode && gift.email && <p className={`donation-email-status ${donationStatus === 'FAILED' ? 'failed' : !donationConfirmed || receiptEmailSending ? 'pending' : receiptEmailSent ? 'sent' : 'failed'}`} role="status">{donationStatus === 'FAILED' ? 'No confirmation email was sent because the payment was not completed.' : !donationConfirmed ? 'A confirmation email will be sent automatically once your payment is confirmed.' : receiptEmailSending ? `Your confirmation email is being sent to ${gift.email}.` : receiptEmailSent ? `Your donation was successful, and a confirmation email was sent to ${gift.email}.` : 'Your donation was successful, but we could not send the confirmation email. Please contact ocdnuns.vocpromph@gmail.com for help.'}</p>}
+    {receiptCode && error && <p className="form-error" role="alert">{error}</p>}
+    {receiptCode && gift.email && <p className={`donation-email-status ${donationStatus === 'FAILED' ? 'failed' : !donationConfirmed || receiptEmailSending ? 'pending' : receiptEmailSent ? 'sent' : 'failed'}`} role="status">{donationStatus === 'FAILED' ? 'No donation acknowledgment was sent because the payment was not completed.' : !donationConfirmed ? `Your donation acknowledgment will be sent automatically to ${gift.email} after payment.` : receiptEmailSending ? `Your donation acknowledgment is being sent to ${gift.email}.` : receiptEmailSent ? `Thank you! A donation acknowledgment was sent to ${gift.email}.` : 'Your donation was successful, but we could not send the acknowledgment email. Please contact ocdnuns.vocpromph@gmail.com for help.'}</p>}
     {!receiptCode && <div className="trust-row"><span><ShieldCheck />100% Direct to Monasteries</span><span><User />Anonymous Giving Supported</span><span><Smartphone />Helpline: (0921) 419-2267</span></div>}</div>
 }
 type StaffRole = 'ADMIN' | 'FORMATOR'

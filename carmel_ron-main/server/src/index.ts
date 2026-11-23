@@ -1491,9 +1491,9 @@ async function sendDonationAcknowledgment(referenceCode: string): Promise<boolea
   try {
     await sendEmail({
       to: donation.donorEmail,
-      subject: `Donation received — ${donation.referenceCode}`,
-      text: `Dear ${name},\n\nThank you for your generous donation to Carmels in Communion. Your payment has been confirmed and your donation was successfully received.\n\nAcknowledgment reference: ${donation.referenceCode}\nAmount: ${donation.amount.toFixed(2)} PHP\nPayment method: ${donation.paymentMethod}\nDate: ${donation.createdAt.toLocaleDateString('en-PH')}\n\nPlease keep this email as your acknowledgment. If you have questions, contact ocdnuns.vocpromph@gmail.com.\n\nWith gratitude,\nCarmels in Communion`,
-      html: `<p>Dear ${escapeHtml(name)},</p><p>Thank you for your generous donation to Carmels in Communion. Your payment has been confirmed and your donation was successfully received.</p><table><tbody><tr><th align="left">Acknowledgment reference</th><td>${escapeHtml(donation.referenceCode)}</td></tr><tr><th align="left">Amount</th><td>PHP ${escapeHtml(donation.amount.toFixed(2))}</td></tr><tr><th align="left">Payment method</th><td>${escapeHtml(donation.paymentMethod)}</td></tr><tr><th align="left">Date</th><td>${escapeHtml(donation.createdAt.toLocaleDateString('en-PH'))}</td></tr></tbody></table><p>Please keep this email as your acknowledgment. For questions, contact <a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a>.</p><p>With gratitude,<br />Carmels in Communion</p>`,
+      subject: `Thank you for your donation — ${donation.referenceCode}`,
+      text: `Dear ${name},\n\nThank you for your generous donation to Carmels in Communion. Your gift supports Carmelite formation and the life of our communities.\n\nAcknowledgment reference: ${donation.referenceCode}\nAmount: ${donation.amount.toFixed(2)} PHP\nPayment method: ${donation.paymentMethod}\nDate: ${donation.createdAt.toLocaleDateString('en-PH')}\n\nPlease keep this email as your donation acknowledgment. If you have questions, contact ocdnuns.vocpromph@gmail.com.\n\nWith gratitude,\nCarmels in Communion`,
+      html: `<p>Dear ${escapeHtml(name)},</p><p>Thank you for your generous donation to Carmels in Communion. Your gift supports Carmelite formation and the life of our communities.</p><table><tbody><tr><th align="left">Acknowledgment reference</th><td>${escapeHtml(donation.referenceCode)}</td></tr><tr><th align="left">Amount</th><td>PHP ${escapeHtml(donation.amount.toFixed(2))}</td></tr><tr><th align="left">Payment method</th><td>${escapeHtml(donation.paymentMethod)}</td></tr><tr><th align="left">Date</th><td>${escapeHtml(donation.createdAt.toLocaleDateString('en-PH'))}</td></tr></tbody></table><p>Please keep this email as your donation acknowledgment. For questions, contact <a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a>.</p><p>With gratitude,<br />Carmels in Communion</p>`,
     })
     await prisma.donation.updateMany({
       where: { id: donation.id, receiptEmailSendingAt: sentAt },
@@ -1508,6 +1508,71 @@ async function sendDonationAcknowledgment(referenceCode: string): Promise<boolea
     console.error(`Donation acknowledgment email delivery failed for ${donation.referenceCode}:`, error instanceof Error ? error.message : 'Unknown error')
     return false
   }
+}
+const xenditInvoiceStatusSchema = z.object({
+  id: z.string().min(1),
+  external_id: z.string().min(1),
+  amount: z.coerce.number().finite().positive(),
+  status: z.string().min(1),
+}).passthrough()
+async function refreshXenditDonationStatus(donation: {
+  id: string
+  referenceCode: string
+  amount: Prisma.Decimal
+  xenditInvoiceId: string | null
+}) {
+  if (!xenditSecretKey || !donation.xenditInvoiceId) return
+  let response: Awaited<ReturnType<typeof fetch>>
+  try {
+    response = await fetch(`https://api.xendit.co/v2/invoices/${encodeURIComponent(donation.xenditInvoiceId)}`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${xenditSecretKey}:`).toString('base64')}` },
+      signal: AbortSignal.timeout(15000),
+    })
+  } catch (error) {
+    console.error('Xendit invoice status request failed:', error instanceof Error ? error.message : 'Unknown network error')
+    throw new Error('Could not reach the payment provider to check this donation.')
+  }
+  if (!response.ok) {
+    console.error(`Xendit invoice status request failed (HTTP ${response.status}).`)
+    throw new Error('Could not check the payment status with the payment provider.')
+  }
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    console.error('Xendit returned an unreadable invoice status response.')
+    throw new Error('The payment provider returned an unreadable status.')
+  }
+  const parsedInvoice = xenditInvoiceStatusSchema.safeParse(body)
+  if (!parsedInvoice.success) {
+    console.error('Xendit returned an invalid invoice status response.')
+    throw new Error('The payment provider returned an invalid status.')
+  }
+  const invoice = parsedInvoice.data
+  if (invoice.id !== donation.xenditInvoiceId || invoice.external_id !== donation.referenceCode) {
+    console.error(`Xendit invoice details did not match donation ${donation.referenceCode}.`)
+    throw new Error('The payment invoice did not match this donation.')
+  }
+  if (!donation.amount.equals(new Prisma.Decimal(invoice.amount))) {
+    console.error(`Xendit invoice amount did not match donation ${donation.referenceCode}.`)
+    throw new Error('The payment amount did not match this donation.')
+  }
+  if (invoice.status !== 'PAID' && invoice.status !== 'EXPIRED') return
+  const nextStatus = invoice.status === 'PAID' ? 'COMPLETED' : 'FAILED'
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.donation.updateMany({
+      where: { id: donation.id, status: { in: ['PENDING', 'RECONCILING'] } },
+      data: { status: nextStatus },
+    })
+    if (updated.count) {
+      await tx.auditLog.create({ data: {
+        action: invoice.status === 'PAID' ? 'DONATION_PAID' : 'DONATION_EXPIRED',
+        entity: 'Donation',
+        entityId: donation.id,
+        meta: { referenceCode: donation.referenceCode, status: nextStatus, source: 'XENDIT_INVOICE_LOOKUP' },
+      } })
+    }
+  })
 }
 app.post('/api/donations/xendit-webhook', asyncRoute(async (req, res) => {
   if (!xenditCallbackToken) return res.status(503).json({ error: 'Xendit webhook verification is not configured.' })
@@ -1687,6 +1752,42 @@ app.post('/api/account/conversation/messages', authenticate, allowRoles('USER'),
     })
   })
   res.status(201).json({ conversation })
+}))
+app.post('/api/donations/:reference/refresh', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 6,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+}), asyncRoute(async (req, res) => {
+  const referenceCode = routeParam(req, 'reference')
+  const donation = await prisma.donation.findUnique({
+    where: { referenceCode },
+    select: { id: true, referenceCode: true, amount: true, status: true, wantsReceipt: true, receiptEmailSentAt: true, xenditInvoiceId: true },
+  })
+  if (!donation) return res.status(404).json({ error: 'Acknowledgment not found.' })
+  if (['PENDING', 'RECONCILING'].includes(donation.status)) await refreshXenditDonationStatus(donation)
+  let updatedDonation = await prisma.donation.findUniqueOrThrow({
+    where: { referenceCode },
+    select: { status: true, wantsReceipt: true, receiptEmailSentAt: true },
+  })
+  if (['COMPLETED', 'VERIFIED'].includes(updatedDonation.status) && updatedDonation.wantsReceipt && !updatedDonation.receiptEmailSentAt) {
+    await sendDonationAcknowledgment(referenceCode)
+    updatedDonation = await prisma.donation.findUniqueOrThrow({
+      where: { referenceCode },
+      select: { status: true, wantsReceipt: true, receiptEmailSentAt: true },
+    })
+  }
+  const emailState = await prisma.donation.findUniqueOrThrow({
+    where: { referenceCode },
+    select: { receiptEmailSendingAt: true },
+  })
+  res.json({
+    donation: {
+      status: updatedDonation.status,
+      receiptEmailSent: Boolean(updatedDonation.receiptEmailSentAt),
+      receiptEmailSending: Boolean(emailState.receiptEmailSendingAt),
+    },
+  })
 }))
 app.get('/api/donations/:reference', rateLimit({
   windowMs: 15 * 60 * 1000,
