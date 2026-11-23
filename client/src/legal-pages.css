@@ -1,0 +1,82 @@
+.legal-policy-page {
+  max-width: 920px;
+}
+
+.legal-policy-page > h1 {
+  margin-bottom: 12px;
+}
+
+.legal-policy-page > .page-lead {
+  max-width: 820px;
+}
+
+.legal-policy-content {
+  max-width: 820px;
+  margin-top: 30px;
+  padding: 28px;
+  border: 1px solid #eee7df;
+  border-radius: 8px;
+  background: #fffdfa;
+}
+
+.legal-policy-content h3 {
+  font-size: 15px;
+}
+
+.legal-policy-content p {
+  font-size: 13px;
+}
+
+.legal-policy-content a,
+.legal-policy-links a {
+  color: #704214;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.legal-policy-updated {
+  margin: 18px 0 0;
+  color: #82776e;
+  font-size: 11px;
+}
+
+.legal-policy-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 18px;
+  font-size: 12px;
+}
+
+.footer-bottom .footer-legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: inherit;
+}
+
+.footer-bottom .footer-legal-links a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.footer-bottom .footer-legal-links a:hover,
+.footer-bottom .footer-legal-links a:focus-visible {
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .legal-policy-content {
+    padding: 19px 16px;
+  }
+
+  .legal-policy-content p {
+    font-size: 12px;
+  }
+
+  .legal-policy-links {
+    gap: 12px;
+  }
+}
