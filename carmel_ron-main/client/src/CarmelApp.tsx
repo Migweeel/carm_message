@@ -2469,13 +2469,23 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     if (isStaff || !googleClientId) return
     const container = googleButtonRef.current
     if (!container) return
+    let resizeTimer = 0
+    const updateWidth = (width: number) => {
+      window.clearTimeout(resizeTimer)
+      resizeTimer = window.setTimeout(() => {
+        const nextWidth = Math.min(400, Math.max(1, Math.floor(width)))
+        setGoogleButtonWidth((currentWidth) => Math.abs(currentWidth - nextWidth) < 2 ? currentWidth : nextWidth)
+      }, 120)
+    }
     const observer = new ResizeObserver(([entry]) => {
-      if (!entry) return
-      const width = Math.min(400, Math.max(1, Math.floor(entry.contentRect.width)))
-      setGoogleButtonWidth((currentWidth) => currentWidth === width ? currentWidth : width)
+      if (entry) updateWidth(entry.contentRect.width)
     })
+    updateWidth(container.getBoundingClientRect().width)
     observer.observe(container)
-    return () => observer.disconnect()
+    return () => {
+      window.clearTimeout(resizeTimer)
+      observer.disconnect()
+    }
   }, [isStaff])
   useEffect(() => {
     if (isStaff || !facebookAppId) return
