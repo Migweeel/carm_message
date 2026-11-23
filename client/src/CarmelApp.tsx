@@ -1127,7 +1127,7 @@ function SiteSearchPage() {
           <span className="eyebrow">{item.detail}</span>
           <h2>{item.title}</h2>
           <p>{snippet.length > 220 ? `${snippet.slice(0, 217)}…` : snippet}</p>
-        </Link>
+        </button>
       })}</div> : <p className="site-search-empty">No results found. Try a different search term.</p>}
     </> : <p className="site-search-empty">Enter a search term to find pages and content across the site.</p>}
   </section>
