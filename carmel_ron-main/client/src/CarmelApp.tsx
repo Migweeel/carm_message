@@ -478,26 +478,17 @@ function CarmelifeReadingDialog({ reading, fullView, onToggleFullView, onClose, 
       <div className="story-modal-body">
         <span className="eyebrow">{reading.author}</span>
         <h2>{reading.title}</h2>
-        {!fullView && <button
-          className="button button-outline story-full-view-toggle"
+        <button
+          className={`button button-outline story-full-view-toggle${fullView ? ' story-full-view-toggle-minimized' : ''}`}
           type="button"
           onClick={onToggleFullView}
-          aria-label="Read story in full view"
-          aria-expanded={false}
+          aria-label={fullView ? 'Return to story preview' : 'Read story in full view'}
+          aria-expanded={fullView}
+          title={fullView ? 'Return to story preview' : undefined}
         >
-          Read in full view <Maximize2 size={15} />
-        </button>}
+          {fullView ? <ChevronDown size={18} /> : <>Read in full view <Maximize2 size={15} /></>}
+        </button>
         <div className="story-full-copy">{reading.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
-        {fullView && <button
-          className="button button-outline story-full-view-toggle story-full-view-toggle-minimized"
-          type="button"
-          onClick={onToggleFullView}
-          aria-label="Return to story preview"
-          aria-expanded={true}
-          title="Return to story preview"
-        >
-          <ChevronDown size={18} />
-        </button>}
       </div>
     </article>
   </div>
