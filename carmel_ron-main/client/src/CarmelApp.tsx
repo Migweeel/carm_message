@@ -477,17 +477,26 @@ function CarmelifeReadingDialog({ reading, fullView, onToggleFullView, onClose, 
       <div className="story-modal-body">
         <span className="eyebrow">{reading.author}</span>
         <h2>{reading.title}</h2>
-        <button
-          className={`button button-outline story-full-view-toggle${fullView ? ' story-full-view-toggle-minimized' : ''}`}
+        {!fullView && <button
+          className="button button-outline story-full-view-toggle"
           type="button"
           onClick={onToggleFullView}
-          aria-label={fullView ? 'Return to story preview' : 'Read story in full view'}
-          aria-expanded={fullView}
-          title={fullView ? 'Return to story preview' : undefined}
+          aria-label="Read story in full view"
+          aria-expanded={false}
         >
-          {fullView ? <ChevronDown size={18} /> : <>Read in full view <Maximize2 size={15} /></>}
-        </button>
+          Read in full view <Maximize2 size={15} />
+        </button>}
         <div className="story-full-copy">{reading.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+        {fullView && <button
+          className="button button-outline story-full-view-toggle story-full-view-toggle-minimized"
+          type="button"
+          onClick={onToggleFullView}
+          aria-label="Return to story preview"
+          aria-expanded={true}
+          title="Return to story preview"
+        >
+          <ChevronDown size={18} />
+        </button>}
       </div>
     </article>
   </div>
@@ -1573,7 +1582,6 @@ async function persistSiteUpdateRecord(id: string, update: SiteUpdate | null) {
 }
 function LegacyStoryPage({ kind }: { kind: 'updates' }) {
   const location = useLocation()
-  const [selectedArticle, setSelectedArticle] = useState<string | null>(null)
   const [query, setQuery] = useState(() => new URLSearchParams(location.search).get('search') || '')
   const [category, setCategory] = useState('All Updates')
   const [newsAge, setNewsAge] = useState<'recent' | 'old' | 'all'>('all')
@@ -1657,7 +1665,6 @@ function LegacyStoryPage({ kind }: { kind: 'updates' }) {
   }, [kind, featuredUpdates.length])
   if (kind === 'updates') {
     const updateFilters = ['All Updates', 'Anniversaries']
-    const selectedUpdate = updates.find((update) => update.id === selectedArticle)
     const featuredDate = featuredUpdate ? new Date(`${featuredUpdate.date}T12:00:00`) : null
     const featuredDisplayDate = featuredDate && !Number.isNaN(featuredDate.getTime())
       ? featuredDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -1693,7 +1700,7 @@ function LegacyStoryPage({ kind }: { kind: 'updates' }) {
           }
           highlightTouchStart.current = null
         }}>
-          <Link className="featured-update" to={`/updates/${encodeURIComponent(featuredUpdate.id)}`} aria-label={`Read featured update: ${featuredUpdate.title}`}>
+          <Link className="featured-update" to={`/updates/${encodeURIComponent(featuredUpdate.id)}`} target="_blank" rel="noopener noreferrer" aria-label={`Read featured update: ${featuredUpdate.title}`}>
             {featuredUpdate.video?.startsWith('data:video/') ? <video src={featuredUpdate.video} poster={featuredUpdate.image || undefined} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" /> : featuredUpdate.image ? <ImageWithLoader src={featuredUpdate.image} alt="" /> : <span className="featured-update-placeholder" aria-hidden="true">{featuredUpdate.video ? <Play size={38} /> : <HandHeart size={38} />}</span>}
             <span className="featured-update-shade" />
             <span className="featured-update-content">
@@ -1712,41 +1719,61 @@ function LegacyStoryPage({ kind }: { kind: 'updates' }) {
         const date = new Date(`${update.date}T12:00:00`)
         const dateTime = Number.isNaN(date.getTime()) ? update.date : date.toISOString().slice(0, 10)
         const displayDate = Number.isNaN(date.getTime()) ? update.date : date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-        return <article className="update-post" key={update.id}>{update.video ? <UpdateVideoPlayer className="update-post-video" source={update.video} title={update.title} poster={update.image || undefined} /> : update.image ? <ImageWithLoader src={update.image} alt="" /> : <div className="update-no-image"><HandHeart size={30} /><span>Carmels in<br />Communion</span></div>}<div className="update-post-body"><h2>{update.title}</h2><p>{update.body}</p><div className="update-post-footer"><Link className="update-read-link" to={`/updates/${encodeURIComponent(update.id)}`}>{update.id === 'papal-address' ? 'View more' : 'View update'} <ArrowRight size={15} /></Link><time dateTime={dateTime}><CalendarDays size={13} />{displayDate}</time></div></div></article>
+        const updateHref = `/updates/${encodeURIComponent(update.id)}`
+        return <article className="update-post" key={update.id}>{update.video
+          ? <UpdateVideoPlayer className="update-post-video" source={update.video} title={update.title} poster={update.image || undefined} />
+          : <Link className="update-post-media" to={updateHref} target="_blank" rel="noopener noreferrer" aria-label={`Read update: ${update.title}`}>{update.image ? <ImageWithLoader src={update.image} alt="" /> : <div className="update-no-image"><HandHeart size={30} /><span>Carmels in<br />Communion</span></div>}</Link>}
+          <Link className="update-post-body" to={updateHref} target="_blank" rel="noopener noreferrer"><h2>{update.title}</h2><p>{update.body}</p><div className="update-post-footer"><span className="update-read-link">{update.id === 'papal-address' ? 'View more' : 'View update'} <ArrowRight size={15} /></span><time dateTime={dateTime}><CalendarDays size={13} />{displayDate}</time></div></Link></article>
         })}</div>}
         {regularUpdates.length > 0 && visibleNews.length === 0 && <p className="updates-age-empty" role="status">No {newsAge === 'recent' ? 'recent' : 'older'} news to show. Choose All news to see every update.</p>}
       </> : <div className="updates-empty"><Search size={25} /><h2>No updates found</h2><p>Try a different search or category.</p></div>}
       {loadError && <p className="updates-load-status" role="status">Live updates could not be reached. Showing this device’s saved updates instead. <span>{loadError}</span></p>}
-      {selectedUpdate && <div className="story-modal-backdrop" role="presentation" onClick={() => setSelectedArticle(null)}><article className="story-modal" role="dialog" aria-modal="true" aria-labelledby="story-modal-title" onClick={(event) => event.stopPropagation()}><button className="story-modal-close" onClick={() => setSelectedArticle(null)} aria-label="Close update"><X size={20} /></button>{selectedUpdate.video ? <UpdateVideoPlayer className="story-modal-video" source={selectedUpdate.video} title={selectedUpdate.title} poster={selectedUpdate.image || undefined} /> : selectedUpdate.image ? <ImageWithLoader src={selectedUpdate.image} alt="Carmelite community life" /> : <div className="story-modal-no-image"><HandHeart size={34} /></div>}<div className="story-modal-body"><span className="eyebrow">{selectedUpdate.category.toUpperCase()} · {selectedUpdate.date}</span><h2 id="story-modal-title">{selectedUpdate.title}</h2><p>{selectedUpdate.body}</p><p>In the quiet rhythm of community life, every gathering becomes an invitation to listen, to give thanks, and to walk together in hope.</p><button className="button button-dark" onClick={() => setSelectedArticle(null)}>Close update</button></div></article></div>}
     </section>
   }
   return null
 }
 function UpdateDetailPage() {
   const { id = '' } = useParams()
-  const [update, setUpdate] = useState<SiteUpdate | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [result, setResult] = useState<{ id: string; update: SiteUpdate | null; error: string } | null>(null)
+  const [fullViewId, setFullViewId] = useState<string | null>(null)
+  const currentResult = result?.id === id ? result : null
+  const update = currentResult?.update ?? null
+  const error = currentResult?.error ?? ''
+  const loading = currentResult === null
+  const fullView = fullViewId === id
   useEffect(() => {
     let active = true
     void fetchSiteUpdates().then((updates) => {
-      if (active) setUpdate(updates?.find((item) => item.id === id) || null)
+      if (!active) return
+      const availableUpdates = updates ?? readSiteUpdates()
+      setResult({
+        id,
+        update: availableUpdates.find((item) => item.id === id) || null,
+        error: updates === null ? 'The live updates endpoint returned 404.' : '',
+      })
     }).catch((reason) => {
-      if (active) setError(reason instanceof Error ? reason.message : 'This update could not be loaded.')
-    }).finally(() => {
-      if (active) setLoading(false)
+      if (active) {
+        setResult({
+          id,
+          update: readSiteUpdates().find((item) => item.id === id) || null,
+          error: reason instanceof Error ? reason.message : 'This update could not be loaded.',
+        })
+      }
     })
     return () => { active = false }
   }, [id])
   if (loading) return <PublicLayout><section className="content-page section-wrap"><p role="status">Loading update…</p></section></PublicLayout>
   if (!update) return <PublicLayout><section className="content-page section-wrap"><span className="eyebrow">CARMELS IN COMMUNION</span><h1>Update not found</h1>{error && <p className="form-error" role="alert">{error}</p>}<Link className="button button-outline" to="/updates">Back to updates</Link></section></PublicLayout>
-  return <PublicLayout><article className="content-page section-wrap story-modal-body update-detail-page">
+  return <PublicLayout><article className={`content-page section-wrap story-modal-body update-detail-page${fullView ? ' update-detail-full-view' : ''}`}>
     <Link className="text-link" to="/updates"><ArrowLeft size={15} /> All updates</Link>
     <span className="eyebrow">{update.category.toUpperCase()} · {update.date}</span>
     <h1>{update.title}</h1>
     {update.image && <ImageWithLoader className="update-detail-image" src={update.image} alt={update.title} />}
     {update.video && <UpdateVideoPlayer className="update-post-video" source={update.video} title={update.title} poster={update.image || undefined} />}
-    <div className="story-full-copy">{update.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+    {error && <p className="updates-load-status" role="status">Live update could not be reached. Showing this device’s saved update instead. <span>{error}</span></p>}
+    {!fullView && <button className="button button-outline story-full-view-toggle" type="button" onClick={() => setFullViewId(id)} aria-label="Read update in full view" aria-expanded={false} aria-controls="update-full-copy">Read in full view <Maximize2 size={15} /></button>}
+    <div className="story-full-copy" id="update-full-copy">{update.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+    {fullView && <button className="button button-outline story-full-view-toggle story-full-view-toggle-minimized update-detail-minimize" type="button" onClick={() => setFullViewId(null)} aria-label="Return to update preview" aria-expanded={true} aria-controls="update-full-copy" title="Return to update preview"><ChevronDown size={18} /></button>}
     <Link className="button button-outline" to="/updates">More updates</Link>
   </article></PublicLayout>
 }
