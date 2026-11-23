@@ -797,7 +797,7 @@
     width: 100%;
     min-height: 84px;
     padding: 8px;
-    border-radius: 7px;
+    border-radius: 10px;
   }
 
   .carmelights-most-viewed .carmelights-popular-card > img {
@@ -806,7 +806,7 @@
   }
 
   .carmelights-most-viewed .carmelights-popular-copy b {
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .carmelights-toolbar {
