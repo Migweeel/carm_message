@@ -345,6 +345,7 @@ type ManagedAboutText = {
 }
 type ManagedAboutImageKey = keyof Omit<ManagedAboutImages, 'assemblyCaption'>
 type ManagedSiteContent = { homeHeroImage: string; monasteries: ManagedMonastery[]; monasteriesVersion?: number; carmelife: ManagedArticle[]; carmelights: ManagedArticle[]; contactDetails: ManagedContactDetails; aboutImages: ManagedAboutImages; aboutText: ManagedAboutText }
+type ManagedContentSubset = 'monasteries' | 'carmelife' | 'carmelights' | 'contactDetails' | 'about' | 'search'
 type SiteUpdate = { id: string; title: string; date: string; category: string; image: string; body: string; video?: string }
 const monasteryCities = ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo', 'Bacolod', 'Cebu', 'Iloilo', 'Cagayan de Oro', 'Davao', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Zamboanga', 'Kuching']
 const monasteryAssetByCity: Record<string, string> = {
@@ -701,7 +702,7 @@ async function saveManagedContentRecord(
     throw new Error(result.error || 'Website content could not be saved.')
   }
 }
-function useManagedContent() {
+function useManagedContent(subset?: ManagedContentSubset) {
   const [content, setContent] = useState<ManagedSiteContent>(readManagedContent)
   useEffect(() => {
     const refresh = (event?: Event) => {
@@ -712,7 +713,8 @@ function useManagedContent() {
     async function load() {
       if (isLocalDemoSession()) return
       try {
-        const response = await fetch('/api/content/SITE_MANAGED', { cache: 'no-store' })
+        const query = subset ? `?collection=${encodeURIComponent(subset)}` : ''
+        const response = await fetch(`/api/content/SITE_MANAGED${query}`, { cache: 'no-store' })
         if (response.status === 404) return
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Saved website content could not be loaded.')
@@ -733,7 +735,7 @@ function useManagedContent() {
     window.addEventListener('storage', refresh)
     window.addEventListener(managedContentEvent, refresh)
     return () => { active = false; window.removeEventListener('storage', refresh); window.removeEventListener(managedContentEvent, refresh) }
-  }, [])
+  }, [subset])
   return content
 }
 const money = (n: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(n)
@@ -896,7 +898,7 @@ function Navbar() {
   const [mobileSearchQuery, setMobileSearchQuery] = useState('')
   const [recentSearches, setRecentSearches] = useState(readSiteSearchHistory)
   const mobileSearchInputRef = useRef<HTMLInputElement>(null)
-  const content = useManagedContent()
+  const content = useManagedContent('search')
   const navigate = useNavigate()
   useEffect(() => {
     if (!mobileSearchOpen) return
@@ -1032,7 +1034,7 @@ function Navbar() {
   )
 }
 function SiteSearchPage() {
-  const content = useManagedContent()
+  const content = useManagedContent('search')
   const location = useLocation()
   const navigate = useNavigate()
   const submittedQuery = new URLSearchParams(location.search).get('q') || ''
@@ -1069,7 +1071,7 @@ function SiteSearchPage() {
   </section>
 }
 function Footer() {
-  const { contactDetails } = useManagedContent()
+  const { contactDetails } = useManagedContent('contactDetails')
   const phoneLink = contactDetails.phone.replace(/[^\d+]/g, '')
   return <footer className="site-footer"><div className="footer-main"><div className="footer-about"><Brand light /><p>A communion of Carmelite monasteries, living the Teresian charism in the heart of the Church.</p></div><div><h3>Explore</h3><Link to="/about">About us</Link><Link to="/monasteries">Our monasteries</Link><Link to="/updates">News & updates</Link></div><div><h3>Connect with us</h3><a href={`tel:${phoneLink}`}>{contactDetails.phone}</a><a href={`mailto:${contactDetails.email}`}>{contactDetails.email}</a><a href={contactDetails.facebookUrl}>{contactDetails.facebookLabel}</a></div><div><h3>Our location</h3><p>{contactDetails.location.split(/\r?\n/).map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p><Link to="/contact">Contact us <ArrowUpRight size={14} /></Link></div></div><div className="footer-bottom"><span>© 2026 Philippine Federation of Discalced Carmelite Nuns</span><nav className="footer-legal-links" aria-label="Legal"><Link to="/terms">Terms of Service</Link><span>·</span><Link to="/privacy">Privacy Policy</Link></nav></div></footer>
 }
@@ -1208,7 +1210,6 @@ function ContactNotifier() {
 }
 function PublicLayout({ children }: { children: ReactNode }) { return <><Navbar /><main>{children}</main><ContactNotifier /><Footer /></> }
 function HomePage() {
-  useManagedContent()
   const cards = [{ label: 'WHO WE ARE', title: 'The Federation', to: '/about', img: photo.chapel }, { label: 'OUR WAY OF LIFE', title: 'Vocation & Charism', to: '/carmelife', img: photo.garden }, { label: 'SAINTS’ TEACHINGS', title: 'Wisdom of the Saints', to: '/carmelights', img: photo.flower }, { label: 'FROM THE FEDERATION', title: 'News & Updates', to: '/updates', img: photo.cosmos }, { label: 'FIND YOUR CARMEL', title: 'Our Communities', to: '/monasteries', img: photo.hero }]
   return <><section className="home-hero" style={{ backgroundImage: `linear-gradient(90deg,rgba(37,28,21,.19),rgba(37,28,21,.03)),url(${photo.hero})` }}><div className="hero-content"><span className="eyebrow eyebrow-light">A HOME FOR THE SEEKING HEART</span><h1>Carmels in<br /><em>Communion</em></h1><p>Welcome to the Philippine Federation of Discalced Carmelite Nuns, a family of communities sharing one contemplative heart.</p><div className="hero-buttons"><Link className="button button-gold" to="/about">Explore our story <ArrowRight size={16} /></Link><Link className="button button-glass" to="/monasteries">Meet our monasteries</Link></div></div><div className="hero-caption"><span>“Let nothing disturb you, let nothing frighten you.”</span><small>ST. TERESA OF AVILA</small></div></section><section className="marquee-wrap"><div className="marquee-label">Philippine Federation<br />of Discalced Carmelite Nuns</div><div className="marquee-window"><div className="marquee-track">{[...cities, ...cities].map((city, i) => <span key={`${city}-${i}`}>{city}<i>·</i></span>)}</div></div><ArrowRight size={18} /></section><section className="vocation-section section-wrap"><div className="vocation-image"><img src={photo.flower} alt="White flowers in a monastery garden" /><span className="image-note">A life held in prayer</span></div><div className="vocation-copy"><span className="eyebrow">A QUIET INVITATION</span><h2>Is <em>God</em> calling you to a life of prayer?</h2><p>There is a place for the listening heart. Discover the contemplative vocation and the sisters who make their home in Carmel.</p><Link className="text-link" to="/monasteries">Meet our monasteries <ArrowRight size={16} /></Link><div className="handwritten">Come and see <span>↗</span></div></div></section><section className="explore-section"><div className="section-wrap"><div className="section-heading-row"><div><span className="eyebrow">WALK WITH US</span><h2>Explore <em>Carmel</em></h2></div><p>Are you discerning if God is calling you to Carmel? Let us assist you.</p></div><div className="explore-grid">{cards.map((card) => <Link className="explore-card" key={card.title} to={card.to} style={{ backgroundImage: `linear-gradient(180deg,transparent 10%,rgba(35,26,20,.8)),url(${card.img})` }}><span>{card.label}</span><div><h3>{card.title}</h3><b>Learn more <ArrowRight size={14} /></b></div></Link>)}</div></div></section><section className="quote-banner" style={{ backgroundImage: `linear-gradient(90deg,rgba(43,32,24,.15),rgba(43,32,24,.78)),url(${photo.cosmos})` }}><div className="quote-content"><span className="quote-mark">“</span><p>Carmel is not merely a geographical place, but a sacred space in the cloister of the heart where the Carmelite nun encounters God.</p><Link className="button button-light" to="/contact">We’d love to hear from you <ArrowRight size={15} /></Link></div></section></>
 }
@@ -1255,7 +1256,7 @@ const aboutTextFields: Array<{ key: keyof ManagedAboutText; label: string; rows?
   { key: 'quoteAlt', label: 'Quote image alternative text' },
 ]
 function AboutPage() {
-  const { aboutImages, aboutText } = useManagedContent()
+  const { aboutImages, aboutText } = useManagedContent('about')
   const purposeImages = [aboutImages.purposeOne, aboutImages.purposeTwo, aboutImages.purposeThree, aboutImages.purposeFour]
   const purposes = [aboutText.purposeOne, aboutText.purposeTwo, aboutText.purposeThree, aboutText.purposeFour]
   return <div className="about-reference">
@@ -1402,7 +1403,7 @@ function MonasteriesPage() {
   void LegacyMonasteriesPage
   const [query, setQuery] = useState('')
   const [selectedRegion, setSelectedRegion] = useState('all')
-  const content = useManagedContent()
+  const content = useManagedContent('monasteries')
   const monasteries = content.monasteries.filter((monastery) => `${monastery.name} ${monastery.city} ${monastery.description}`.toLowerCase().includes(query.toLowerCase()))
   const regions = [
     ['section-luzon', 'Luzon Monasteries', ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo']],
@@ -1724,7 +1725,7 @@ const discernmentSteps = [
   'Pray constantly for clarity, courage, and complete trust in God.',
 ]
 function CarmelifePage() {
-  const { carmelife: articles } = useManagedContent()
+  const { carmelife: articles } = useManagedContent('carmelife')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [fullView, setFullView] = useState(false)
   const [quoteIndex, setQuoteIndex] = useState(0)
@@ -1908,7 +1909,8 @@ function DiscernmentGuidePage() {
 }
 
 function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
-  const content = useManagedContent()
+  const isLife = kind === 'life'
+  const content = useManagedContent(kind === 'updates' ? 'contactDetails' : isLife ? 'carmelife' : 'carmelights')
   const location = useLocation()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [fullView, setFullView] = useState(false)
@@ -1924,7 +1926,6 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const [popularPage, setPopularPage] = useState(0)
   const [popularTeachingsLoading, setPopularTeachingsLoading] = useState(true)
   const [popularTeachingsError, setPopularTeachingsError] = useState('')
-  const isLife = kind === 'life'
   const articles = isLife ? content.carmelife : content.carmelights
   const selected = articles.find((article) => article.id === selectedId)
   const desc = isLife ? 'Vocation stories and glimpses of a contemplative life rooted in prayer and sisterhood.' : 'Discover words of wisdom from Carmelite saints—quotes that invite prayer, deepen trust, and draw the heart closer to God.'
@@ -2062,7 +2063,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   </section>
 }
 function ContactPage() {
-  const { contactDetails } = useManagedContent()
+  const { contactDetails } = useManagedContent('contactDetails')
   const [email, setEmail] = useState(() => readMemberSession()?.email || '')
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
@@ -3151,7 +3152,7 @@ function MemberMessagesView({ member }: { member: MemberAccount }) {
 }
 
 function MemberFavoritesView({ member }: { member: MemberAccount }) {
-  const content = useManagedContent()
+  const content = useManagedContent('carmelights')
   const { favorites, loading: favoritesLoading, error: favoriteError, setFavorite } = useMemberFavorites(member)
   const [pendingRemoval, setPendingRemoval] = useState<{ id: string; title: string } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)

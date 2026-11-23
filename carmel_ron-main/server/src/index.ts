@@ -1614,31 +1614,84 @@ app.get('/api/carmelights/most-viewed', asyncRoute(async (_req, res) => {
   teachings.sort((left, right) => right.views - left.views)
   res.json({ windowDays: 30, teachings: teachings.slice(0, 5) })
 }))
+const publicManagedContentSubsetSchema = z.enum(['monasteries', 'carmelife', 'carmelights', 'contactDetails', 'about', 'search'])
+type PublicManagedContentSubset = z.infer<typeof publicManagedContentSubsetSchema>
+function publicManagedContentProjection(subset: PublicManagedContentSubset): Prisma.Sql {
+  switch (subset) {
+    case 'monasteries':
+    case 'carmelife':
+    case 'carmelights':
+      return Prisma.sql`jsonb_build_object(${subset}, COALESCE("blocks"->${subset}, '[]'::jsonb))`
+    case 'contactDetails':
+      return Prisma.sql`jsonb_build_object('contactDetails', COALESCE("blocks"->'contactDetails', '{}'::jsonb))`
+    case 'about':
+      return Prisma.sql`jsonb_build_object(
+        'aboutImages', COALESCE("blocks"->'aboutImages', '{}'::jsonb),
+        'aboutText', COALESCE("blocks"->'aboutText', '{}'::jsonb)
+      )`
+    case 'search':
+      return Prisma.sql`jsonb_build_object(
+        'monasteries', COALESCE((
+          SELECT jsonb_agg(monastery.value - 'image')
+          FROM jsonb_array_elements(COALESCE("blocks"->'monasteries', '[]'::jsonb)) AS monastery(value)
+        ), '[]'::jsonb),
+        'carmelife', COALESCE((
+          SELECT jsonb_agg(article.value - 'image')
+          FROM jsonb_array_elements(COALESCE("blocks"->'carmelife', '[]'::jsonb)) AS article(value)
+        ), '[]'::jsonb),
+        'carmelights', COALESCE((
+          SELECT jsonb_agg(article.value - 'image')
+          FROM jsonb_array_elements(COALESCE("blocks"->'carmelights', '[]'::jsonb)) AS article(value)
+        ), '[]'::jsonb)
+      )`
+  }
+}
 app.get('/api/content/:pageKey', asyncRoute(async (req, res) => {
   const pageKey = routeParam(req, 'pageKey').toUpperCase()
   res.setHeader('Cache-Control', 'no-store')
-  const content = pageKey === 'SITE_MANAGED'
-    ? (await prisma.$queryRaw<Array<{ id: string; pageKey: string; blocks: Prisma.JsonValue; updatedAt: Date }>>(Prisma.sql`
-        SELECT
-          "id",
-          "pageKey",
-          CASE
-            WHEN jsonb_typeof("blocks"->'homeHeroImage') = 'string'
-              AND length("blocks"->>'homeHeroImage') > ${homepageInlineImageMaxChars}
-            THEN jsonb_set(
-              "blocks",
-              ARRAY['homeHeroImage']::text[],
-              to_jsonb(${homepageHeroImageFallback}::text),
-              true
-            )
-            ELSE "blocks"
-          END AS "blocks",
-          "updatedAt"
-        FROM "PageContent"
-        WHERE "pageKey" = ${pageKey}
-        LIMIT 1
-      `))[0] ?? null
-    : await prisma.pageContent.findUnique({ where: { pageKey } })
+  const requestedSubset = req.query.collection
+  const parsedSubset = requestedSubset === undefined ? undefined : publicManagedContentSubsetSchema.safeParse(requestedSubset)
+  if (requestedSubset !== undefined && (!parsedSubset || !parsedSubset.success || pageKey !== 'SITE_MANAGED')) {
+    return res.status(400).json({ error: 'Choose a valid public content collection.' })
+  }
+  const subset = parsedSubset?.success ? parsedSubset.data : undefined
+  let content: NonNullable<Awaited<ReturnType<typeof prisma.pageContent.findUnique>>> | null
+  if (pageKey === 'SITE_MANAGED' && subset) {
+    const rows = await prisma.$queryRaw<Array<{ id: string; pageKey: string; blocks: Prisma.JsonValue; updatedAt: Date }>>(Prisma.sql`
+      SELECT
+        "id",
+        "pageKey",
+        ${publicManagedContentProjection(subset)} AS "blocks",
+        "updatedAt"
+      FROM "PageContent"
+      WHERE "pageKey" = ${pageKey}
+      LIMIT 1
+    `)
+    content = rows[0] ?? null
+  } else if (pageKey === 'SITE_MANAGED') {
+    content = (await prisma.$queryRaw<Array<{ id: string; pageKey: string; blocks: Prisma.JsonValue; updatedAt: Date }>>(Prisma.sql`
+      SELECT
+        "id",
+        "pageKey",
+        CASE
+          WHEN jsonb_typeof("blocks"->'homeHeroImage') = 'string'
+            AND length("blocks"->>'homeHeroImage') > ${homepageInlineImageMaxChars}
+          THEN jsonb_set(
+            "blocks",
+            ARRAY['homeHeroImage']::text[],
+            to_jsonb(${homepageHeroImageFallback}::text),
+            true
+          )
+          ELSE "blocks"
+        END AS "blocks",
+        "updatedAt"
+      FROM "PageContent"
+      WHERE "pageKey" = ${pageKey}
+      LIMIT 1
+    `))[0] ?? null
+  } else {
+    content = await prisma.pageContent.findUnique({ where: { pageKey } })
+  }
   if (!content) return res.status(404).json({ error: 'Page content not found.' })
   res.json({ content: homepageContentForResponse(pageKey, content) })
 }))
