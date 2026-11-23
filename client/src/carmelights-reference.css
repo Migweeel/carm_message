@@ -13,18 +13,18 @@
 .carmelights-popular-list{display:flex;gap:13px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x mandatory;scrollbar-width:none;touch-action:pan-y;cursor:grab;user-select:none}
 .carmelights-popular-list::-webkit-scrollbar{display:none}
 .carmelights-popular-list.is-dragging{scroll-snap-type:none;cursor:grabbing}
-.carmelights-popular-card{position:relative;flex:0 0 300px;min-width:300px;height:575px;padding:12px;border:1px solid #eadfd2;border-radius:8px;display:flex;flex-direction:column;align-items:stretch;gap:10px;background:rgba(255,253,250,.92);color:#b98042;text-align:left;scroll-snap-align:start;transition:transform .2s,border-color .2s,box-shadow .2s}
+.carmelights-popular-card{position:relative;flex:0 0 300px;min-width:300px;height:335px;padding:12px;border:1px solid #eadfd2;border-radius:8px;display:flex;flex-direction:column;align-items:stretch;gap:8px;background:rgba(255,253,250,.92);color:#b98042;text-align:left;scroll-snap-align:start;transition:transform .2s,border-color .2s,box-shadow .2s}
 .carmelights-popular-card.featured{border-color:#d6b98f;background:linear-gradient(115deg,#fffaf0,#fffdfa 72%);box-shadow:0 5px 16px rgba(116,79,39,.08)}
 .carmelights-popular-card:hover{transform:translateY(-2px);border-color:#cba77b;box-shadow:0 9px 22px rgba(89,63,38,.12)}
 .carmelights-popular-rank{flex:none;width:29px;height:29px;border:1px solid #e7d6bc;border-radius:50%;display:grid;place-items:center;background:#f8f0e2;color:#987044;font:700 12px/1 var(--serif)}
 .carmelights-popular-card.featured .carmelights-popular-rank{border-color:#b78a54;background:#b78a54;color:white}
 .carmelights-popular-card>img{order:1;width:100%;height:145px;flex:none;border-radius:5px;object-fit:cover;pointer-events:none;user-select:none;-webkit-user-drag:none}
 .carmelights-popular-rank{position:absolute;z-index:2;top:20px;left:20px}
-.carmelights-popular-copy{order:2;min-width:0;flex:1;display:grid;gap:4px;padding:2px 4px}
+.carmelights-popular-copy{order:2;min-width:0;flex:1;display:grid;align-content:start;gap:4px;padding:2px 4px}
 .carmelights-popular-copy small{color:#54795d;font-size:8px;font-weight:700;letter-spacing:.7px;text-transform:uppercase}
 .carmelights-popular-copy b{overflow:hidden;color:#3b2a1e;font:600 16px/1.3 var(--serif);text-overflow:ellipsis}
 .carmelights-popular-copy em{overflow:hidden;color:#918579;font-size:9px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}
-.carmelights-popular-open{position:absolute;right:16px;bottom:14px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#f6eee2;color:#a67845}
+.carmelights-popular-open{position:absolute;right:16px;bottom:12px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#f6eee2;color:#a67845}
 .carmelights-popular-card:last-child:nth-child(odd){grid-column:auto}
 .carmelights-popular-pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:13px;color:#897b6e;font-size:10px;font-weight:600}
 .carmelights-popular-pagination button{width:30px;height:30px;border:1px solid #e8d8c3;border-radius:50%;display:grid;place-items:center;background:#fffdfa;color:#8f6941;transition:background .2s,border-color .2s}
@@ -38,15 +38,15 @@
 .carmelights-filters select{min-width:150px;height:38px;padding:0 30px 0 11px;appearance:none;border:1px solid #e8ded4;border-radius:5px;background:#fffdfa;color:#3b2a1e;font-size:11px}
 .carmelights-filter-chevron{position:absolute;top:50%;right:10px;pointer-events:none;color:#514235;transform:translateY(-50%);transition:transform .18s ease}
 .carmelights-filter-chevron.open{transform:translateY(-50%) rotate(180deg)}
-.carmelights-teaching-grid{display:grid;grid-template-columns:repeat(3,300px);gap:13px}
-.carmelights-teaching-card{position:relative;min-width:0;width:300px;height:575px;min-height:575px;padding:14px 16px 12px;border:1px solid #efdfc9;border-radius:6px;display:flex;flex-direction:column;background:linear-gradient(135deg,#fffdfa,#fbf8f2);transition:border-color .2s,transform .2s}
+.carmelights-teaching-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.carmelights-teaching-card{position:relative;min-width:0;width:100%;height:335px;min-height:335px;padding:14px 16px 12px;border:1px solid #efdfc9;border-radius:6px;display:flex;flex-direction:column;background:linear-gradient(135deg,#fffdfa,#fbf8f2);transition:border-color .2s,transform .2s}
 .carmelights-teaching-card:hover{transform:translateY(-2px);border-color:#d9bd9b}
 .carmelights-teaching-image{order:1;width:100%;height:155px;margin:0 0 12px;border-radius:4px;object-fit:cover}
 .carmelights-card-top{position:absolute;z-index:3;top:22px;left:24px;right:24px;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0}
 .carmelights-card-eyebrow{order:2}
 .carmelights-teaching-card h2{order:3}
 .carmelights-card-author{order:4}
-.carmelights-teaching-card p{order:5}
+.carmelights-teaching-card p{display:none}
 .carmelights-read-link{order:6}
 .carmelights-category-tag{padding:4px 7px;background:#edf1e9;color:#54795d;font-size:8px;font-weight:700;letter-spacing:.45px;text-transform:uppercase}
 .carmelights-teaching-card .favorite-teaching{position:static;width:32px;height:32px;border:1px solid #e9ded1;border-radius:50%;display:grid;place-items:center;background:#fffdfa;color:#8b6a4d}
