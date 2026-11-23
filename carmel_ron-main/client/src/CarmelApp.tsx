@@ -8,6 +8,7 @@ import attractedByTheVeilImage from './assets/attracted-by-the-veil.webp'
 import vocationHeroImage from '../../assets/image_carmelife/vocation-to-carmel.webp'
 import seekingFaceImage from '../../assets/image_carmelife/seeking-the-face.webp'
 import discerningImage from '../../assets/image_carmelife/Discerning-your-vocation.webp'
+import discerningVocationSectionImage from '../../assets/image_carmelife/Discerning-your-vocation.png'
 import practicalAidsImage from '../../assets/image_carmelife/practical-aids.webp'
 import aboutAssemblyImage from '../../assets/images/landingcarm.webp'
 import aboutOfficersImage from '../../assets/images/elected_officers.webp'
@@ -1865,19 +1866,14 @@ function CarmelifePage() {
     </section>
 
     <section className="life-section discernment-section-life" id="discernment">
+      <div className="wide-life-image"><ImageWithLoader src={discerningVocationSectionImage} alt="A person kneeling in prayer in a chapel" /></div>
+      <h2>Discerning your <em>vocation</em></h2>
       <div className="discernment-copy">
-        <span className="eyebrow">A COMPANION FOR YOUR JOURNEY</span>
-        <h2>Discerning your <em>vocation</em></h2>
         <h3>“Is God calling me to be a Carmelite nun?”</h3>
         <p>Do you find yourself asking this question? Does the thought of “What If?” keep recurring in your mind like a Last Song Syndrome (LSS)? Does the thought of becoming a Carmelite nun pursue you like a persistent lover?</p>
         <p>Vocation comes from the Latin word, “vocare”, meaning “To call”. The God who called the prophet Elijah to a sacred encounter with him on Mount Horeb; St. Teresa to walk the way of perfection; St. John of the Cross to ascend the heights of Mount Carmel, and St. Therese of the Child Jesus to be love in the heart of the church continues to call.</p>
         <p>Like a persistent lover, God continues to pursue. You only need to be still, silent and to listen to His voice in your heart to know if He is calling you. You need to discern if indeed, God is calling you to be a Carmelite nun.</p>
-        <div className="discernment-copy-actions">
-          <Link className="button button-dark" to="/account/discernment">View my discernment journey <ArrowRight size={16} /></Link>
-          <Link className="button button-outline" to="/monasteries">Explore our monasteries <ArrowRight size={16} /></Link>
-        </div>
       </div>
-      <div className="wide-life-image"><ImageWithLoader src="/assets/images/whiteflowers.webp" alt="White flowers in a garden" /></div>
     </section>
 
     <section className="life-slider-quote" aria-label="Vocation quotes" onTouchStart={startQuoteSwipe} onTouchEnd={endQuoteSwipe} onTouchCancel={() => { quoteTouchStart.current = null }}>
