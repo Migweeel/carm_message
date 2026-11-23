@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import ImageWithLoader from './ImageWithLoader'
 import { homeSectionCards, type HomeSectionKey } from './home-section-cards'
@@ -21,6 +21,11 @@ export default function HomepageReference() {
 
   function scrollCards(direction: number) {
     cards.current?.scrollBy({ left: direction * 280, behavior: 'smooth' })
+  }
+
+  function changeHeroImage(direction: -1 | 1) {
+    if (heroImages.length < 2) return
+    setActiveHeroIndex((current) => (current + direction + heroImages.length) % heroImages.length)
   }
 
   function scrollToCard(index: number) {
@@ -94,15 +99,9 @@ export default function HomepageReference() {
 
   useEffect(() => {
     if (heroImages.length < 2) return
-    const interval = window.setInterval(() => {
-      setActiveHeroIndex((current) => (current + 1) % heroImages.length)
-    }, 5000)
-    return () => window.clearInterval(interval)
-  }, [heroImages.length])
-
-  useEffect(() => {
-    if (heroImages.length < 2) return
+    const previousImage = new window.Image()
     const nextImage = new window.Image()
+    previousImage.src = heroImages[(activeHeroIndex - 1 + heroImages.length) % heroImages.length]
     nextImage.src = heroImages[(activeHeroIndex + 1) % heroImages.length]
   }, [activeHeroIndex, heroImages])
 
@@ -154,6 +153,11 @@ export default function HomepageReference() {
     <section className="reference-hero" id="home">
       <ImageWithLoader key={activeHeroImage || 'hero-pending'} className="reference-hero-image" src={activeHeroImage} pending={heroImageLoading} alt="" aria-hidden="true" loading={activeHeroIndex === 0 ? 'eager' : 'lazy'} fetchPriority={activeHeroIndex === 0 ? 'high' : 'auto'} decoding="async" />
       <div className="reference-hero-overlay" />
+      {heroImages.length > 1 && <div className="reference-hero-controls" role="group" aria-label="Featured images">
+        <button type="button" onClick={() => changeHeroImage(-1)} aria-label="Previous featured image"><ChevronLeft size={18} /></button>
+        <span aria-live="polite" aria-atomic="true">{activeHeroIndex + 1} / {heroImages.length}</span>
+        <button type="button" onClick={() => changeHeroImage(1)} aria-label="Next featured image"><ChevronRight size={18} /></button>
+      </div>}
       <div className="reference-hero-content">
         <p className="reference-kicker">A HOME FOR THE SEEKING HEART</p>
         <h1>Carmels in<br /><em>Communion</em></h1>

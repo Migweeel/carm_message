@@ -4,8 +4,13 @@
 .reference-hero>img{object-fit:cover}
 .reference-hero>img.reference-hero-image{animation:reference-hero-image-enter .8s ease both}
 @keyframes reference-hero-image-enter{from{opacity:.55}to{opacity:1}}
-.reference-hero-overlay{background:linear-gradient(90deg,rgba(32,17,8,.78),rgba(32,17,8,.27) 65%),linear-gradient(0deg,rgba(52,28,7,.9),transparent 55%)}
+.reference-hero-overlay{background:linear-gradient(90deg,rgba(32,17,8,.58),rgba(32,17,8,.18) 65%),linear-gradient(0deg,rgba(52,28,7,.68),transparent 55%)}
 .reference-hero-content{position:relative;z-index:1;max-width:760px;padding:160px 80px;color:#fff}
+.reference-hero-controls{position:absolute;z-index:2;top:16px;right:16px;display:flex;align-items:center;gap:6px;padding:5px;border:1px solid rgba(255,255,255,.35);border-radius:24px;background:rgba(38,28,21,.58);color:#fff;backdrop-filter:blur(8px)}
+.reference-hero-controls button{display:grid;width:32px;height:32px;place-items:center;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;cursor:pointer}
+.reference-hero-controls button:hover{background:rgba(255,255,255,.28)}
+.reference-hero-controls button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.reference-hero-controls span{min-width:36px;text-align:center;font-size:10px;font-weight:700;font-variant-numeric:tabular-nums}
 .reference-kicker{margin:0 0 14px;color:#c9a87c;font-size:12px;font-weight:700;letter-spacing:.15em;text-transform:uppercase}
 .reference-hero h1{margin:0 0 20px;color:#fff;font-size:80px;line-height:1.1}
 .reference-hero h1 em{color:#c9a87c;font-style:normal}
