@@ -1831,7 +1831,10 @@ function CarmelifePage() {
   }
   return <div className="carmelife-page">
     <section className="life-hero">
-      <h1>Vocation to Carmel</h1>
+      <div className="life-hero-image">
+        <ImageWithLoader src={vocationHeroImage} alt="The cloister of a Carmelite monastery" loading="eager" fetchPriority="high" />
+      </div>
+      <h1>Vocation to <em>Carmel</em></h1>
     </section>
 
     <blockquote className="life-quote-banner"><p>Our vocation as Discalced Carmelite Nuns is a <strong>gift of the Spirit.</strong> It is a life of <strong>“hidden radical gift of self”</strong> is directed towards the <strong>radical gift of self</strong> directed towards the Church and the salvation of souls.</p><cite>Rule and Constitutions 1:10</cite></blockquote>
