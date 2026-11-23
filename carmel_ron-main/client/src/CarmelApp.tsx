@@ -2364,6 +2364,7 @@ type AuthApiResponse = {
   code?: string
   email?: string
   message?: string
+  accountCreated?: boolean
   resendAfterSeconds?: number
   verificationRequired?: boolean
   verified?: boolean
@@ -2436,6 +2437,12 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const state = location.state
     return state && typeof state === 'object' && 'accountNotice' in state && typeof state.accountNotice === 'string'
       ? state.accountNotice
+      : ''
+  })
+  const [accountSuccess] = useState(() => {
+    const state = location.state
+    return state && typeof state === 'object' && 'accountSuccess' in state && typeof state.accountSuccess === 'string'
+      ? state.accountSuccess
       : ''
   })
   const [loginPassword, setLoginPassword] = useState('')
@@ -2592,16 +2599,17 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       })
       const result = await readAuthResponse(response)
       if (isSignup && result.code === 'ACCOUNT_ALREADY_REGISTERED') {
-        navigate('/account/login', {
-          replace: true,
-          state: {
-            existingEmail: result.email || '',
-            accountNotice: result.error || 'This Google account is already registered. Please sign in instead.',
-          },
-        })
+        setError(result.error || 'This Google account is already registered. Please sign in instead.')
         return
       }
       if (!response.ok) throw new Error(result.error || 'Unable to continue with Google.')
+      if (isSignup && result.accountCreated) {
+        navigate('/account/login', {
+          replace: true,
+          state: { accountSuccess: 'Your account has been created. Please sign in with Google.' },
+        })
+        return
+      }
       if (!result.user || result.user.role !== 'USER') throw new Error('Google sign-in did not return a member account.')
       saveServerSessionRole('USER')
       saveMemberSession({
@@ -2642,16 +2650,17 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       })
       const result = await readAuthResponse(response)
       if (isSignup && result.code === 'ACCOUNT_ALREADY_REGISTERED') {
-        navigate('/account/login', {
-          replace: true,
-          state: {
-            existingEmail: result.email || '',
-            accountNotice: result.error || 'This Facebook account is already registered. Please sign in instead.',
-          },
-        })
+        setError(result.error || 'This Facebook account is already registered. Please sign in instead.')
         return
       }
       if (!response.ok) throw new Error(result.error || 'Unable to continue with Facebook.')
+      if (isSignup && result.accountCreated) {
+        navigate('/account/login', {
+          replace: true,
+          state: { accountSuccess: 'Your account has been created. Please sign in with Facebook.' },
+        })
+        return
+      }
       if (!result.user || result.user.role !== 'USER') throw new Error('Facebook sign-in did not return a member account.')
       saveServerSessionRole('USER')
       saveMemberSession({
@@ -2760,6 +2769,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       <h1>{isSignup ? <>Create <em>Account</em></> : isStaff ? <>Staff <em>Sign in</em></> : <>Login <em>Account</em></>}</h1>
       <p>{isSignup ? 'Create a resident account by providing your information.' : isStaff ? 'Sign in to your Federation staff or administrator account.' : 'Please provide your account information.'}</p>
       {accountNotice && <p className="form-error" role="status">{accountNotice}</p>}
+      {accountSuccess && <p className="form-success" role="status">{accountSuccess}</p>}
       {!isStaff && <div className="auth-social-login">
         {googleClientId
           ? <div ref={googleButtonRef} className={`auth-google-button${pending || googlePending || facebookPending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>

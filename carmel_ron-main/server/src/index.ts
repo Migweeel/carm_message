@@ -570,15 +570,15 @@ app.post('/api/auth/register', registrationEmailRateLimit, asyncRoute(async (req
   if (parsed.error) return res.status(400).json({ error: 'Please check the form fields.', details: parsed.error })
   const input = parsed.data!
   if (retiredDemoAccountEmails.has(input.email)) return res.status(403).json({ error: 'This email address is not available for registration.' })
-  if (!resendApiKey || !resendFrom) return res.status(503).json({ error: 'Email verification is not configured yet. Please contact the Federation office for help.' })
   const now = new Date()
   const [existingUser, existingVerification] = await Promise.all([
     prisma.user.findUnique({ where: { email: input.email }, select: { id: true } }),
     prisma.registrationVerification.findUnique({ where: { email: input.email }, select: { lastSentAt: true } }),
   ])
   if (existingUser) {
-    return res.status(409).json({ error: 'An account with this email already exists.' })
+    return res.status(409).json({ error: 'An account with this email is already registered. Please sign in instead.' })
   }
+  if (!resendApiKey || !resendFrom) return res.status(503).json({ error: 'Email verification is not configured yet. Please contact the Federation office for help.' })
 
   if (existingVerification) {
     const waitSeconds = Math.ceil((existingVerification.lastSentAt.getTime() + registrationCodeResendDelayMs - now.getTime()) / 1000)
@@ -723,7 +723,7 @@ app.post('/api/auth/register/verify', registrationVerifyRateLimit, asyncRoute(as
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       await prisma.registrationVerification.deleteMany({ where: { email } })
-      return res.status(409).json({ error: 'An account with this email already exists. Please sign in instead.' })
+      return res.status(409).json({ error: 'An account with this email is already registered. Please sign in instead.' })
     }
     throw error
   }
@@ -912,6 +912,8 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
     return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
   }
 
+  if (input.intent === 'signup') return res.status(201).json({ accountCreated: true })
+
   const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
   const sessionUser = await prisma.user.update({
     where: { id: user.id },
@@ -1094,6 +1096,8 @@ app.post('/api/auth/facebook', asyncRoute(async (req, res) => {
   if (!user.isActive || user.role !== 'USER') {
     return res.status(403).json({ error: 'Facebook sign-in is only available for active member accounts.' })
   }
+
+  if (input.intent === 'signup') return res.status(201).json({ accountCreated: true })
 
   const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
   const sessionUser = await prisma.user.update({
