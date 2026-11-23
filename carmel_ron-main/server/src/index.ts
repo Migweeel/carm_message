@@ -1264,9 +1264,9 @@ const donationSchema = z.object({
   payment: z.enum(['GCASH', 'MAYA', 'BANK', 'CARD']),
   anonymous: z.boolean().default(true),
   name: z.string().trim().max(100).optional().default(''),
-  email: z.union([z.email(), z.literal('')]).optional().default(''),
+  email: z.email().trim().toLowerCase(),
   phone: z.string().trim().max(30).optional().default(''),
-  receipt: z.boolean().default(false),
+  receipt: z.boolean().default(true),
   reference: z.string().trim().max(100).optional().default(''),
 })
 app.post('/api/donations', rateLimit({
@@ -1282,7 +1282,6 @@ app.post('/api/donations', rateLimit({
   if (parsed.error) return res.status(400).json({ error: 'Please check the donation details.', details: parsed.error })
   const input = parsed.data!
   if (!input.anonymous && (!input.name || !input.email)) return res.status(400).json({ error: 'Name and email are required for a named donation.' })
-  if (input.receipt && !input.email) return res.status(400).json({ error: 'Enter an email address for the acknowledgment receipt.' })
   if (xenditSecretKey) {
     if (!xenditCallbackToken) return res.status(503).json({ error: 'Set XENDIT_CALLBACK_TOKEN in server/.env and configure the matching Xendit webhook before accepting test donations.' })
     const referenceCode = `CARMEL-${new Date().getFullYear()}-${randomBytes(16).toString('hex').toUpperCase()}`
@@ -1296,9 +1295,9 @@ app.post('/api/donations', rateLimit({
         isAnonymous: input.anonymous,
         ...(req.auth?.role === 'USER' ? { userId: req.auth.id } : {}),
         donorName: input.anonymous ? null : input.name || null,
-        donorEmail: input.anonymous && !input.receipt ? null : input.email || null,
-        donorPhone: input.anonymous && !input.receipt ? null : input.phone || null,
-        wantsReceipt: input.receipt || !input.anonymous,
+        donorEmail: input.email,
+        donorPhone: input.anonymous ? null : input.phone || null,
+        wantsReceipt: true,
         status: 'PENDING',
       } })
       await tx.auditLog.create({ data: {
@@ -1412,9 +1411,9 @@ app.post('/api/donations', rateLimit({
       isAnonymous: input.anonymous,
       ...(req.auth?.role === 'USER' ? { userId: req.auth.id } : {}),
       donorName: retainName ? input.name || null : null,
-      donorEmail: retainName || input.receipt ? input.email || null : null,
-      donorPhone: retainName || input.receipt ? input.phone || null : null,
-      wantsReceipt: input.receipt || !input.anonymous,
+      donorEmail: input.email,
+      donorPhone: input.anonymous ? null : input.phone || null,
+      wantsReceipt: true,
       paymentReference: input.reference || null,
       status: input.reference ? 'RECONCILING' : 'PENDING',
     }, select: { id: true, referenceCode: true, amount: true, paymentMethod: true, isAnonymous: true, status: true, createdAt: true } })
@@ -1439,7 +1438,7 @@ app.post('/api/donations', rateLimit({
       createdAt: created.createdAt,
     }
   })
-  const receiptEmailSent = donation.status === 'COMPLETED' && input.receipt
+  const receiptEmailSent = donation.status === 'COMPLETED'
     ? await sendDonationAcknowledgment(donation.referenceCode)
     : false
   res.status(201).json({ donation: { ...donation, receiptEmailSent } })

@@ -2333,7 +2333,7 @@ function ContactPage() {
 }
 
 type Donation = { amount: number; custom: string; payment: 'GCASH' | 'MAYA' | 'BANK' | 'CARD'; anonymous: boolean; name: string; email: string; phone: string; receipt: boolean; reference: string }
-const initialDonation: Donation = { amount: 1000, custom: '', payment: 'GCASH', anonymous: true, name: '', email: '', phone: '', receipt: false, reference: '' }
+const initialDonation: Donation = { amount: 1000, custom: '', payment: 'GCASH', anonymous: true, name: '', email: '', phone: '', receipt: true, reference: '' }
 function normalizePhilippinePhone(value: string) {
   let digits = value.replace(/\D/g, '')
   if (digits.startsWith('63')) digits = digits.slice(2)
@@ -2347,17 +2347,17 @@ function DonationsPage() {
     try {
       const saved = JSON.parse(sessionStorage.getItem('carmel-gift') || '{}') as Partial<Donation> & { frequency?: string }
       delete saved.frequency
-      return { ...initialDonation, ...saved, phone: normalizePhilippinePhone(saved.phone ?? ''), payment: saved.payment ?? initialDonation.payment }
+      return { ...initialDonation, ...saved, receipt: true, phone: normalizePhilippinePhone(saved.phone ?? ''), payment: saved.payment ?? initialDonation.payment }
     } catch { return initialDonation }
   })
   function setGift(next: Donation) {
-    setGiftState({ ...next, phone: normalizePhilippinePhone(next.phone) })
+    setGiftState({ ...next, receipt: true, phone: normalizePhilippinePhone(next.phone) })
   }
   const [step, setStep] = useState(0)
   const [receiptCode, setReceiptCode] = useState('')
-  const [verificationNoticeOpen, setVerificationNoticeOpen] = useState(false)
   const [donationStatus, setDonationStatus] = useState('')
   const [receiptEmailSent, setReceiptEmailSent] = useState(false)
+  const [receiptEmailSending, setReceiptEmailSending] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [showCustom, setShowCustom] = useState(false)
@@ -2388,24 +2388,40 @@ function DonationsPage() {
       return
     }
     if (checkoutResult !== 'success' || !reference) return
+    const donationReference = reference
     let active = true
-    fetch(`/api/donations/${encodeURIComponent(reference)}`).then(async (response) => {
-      const result = await response.json() as { donation?: { status?: string; receiptEmailSent?: boolean }; error?: string }
-      if (!response.ok) throw new Error(result.error || 'Could not load the donation status.')
-      return result
-    }).then((result) => {
-      if (!active || !result.donation?.status) return
-      setReceiptCode(reference)
-      setDonationStatus(result.donation.status)
-      setReceiptEmailSent(result.donation.receiptEmailSent === true)
-      setVerificationNoticeOpen(result.donation.status !== 'COMPLETED')
-      window.history.replaceState({}, '', window.location.pathname)
-    }).catch((reason) => {
+    setReceiptCode(donationReference)
+    setDonationStatus('PENDING')
+    setReceiptEmailSending(false)
+    async function refreshDonationStatus() {
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        const response = await fetch(`/api/donations/${encodeURIComponent(donationReference)}`)
+        const result = await response.json() as { donation?: { status?: string; receiptEmailSent?: boolean; receiptEmailSending?: boolean }; error?: string }
+        if (!response.ok) throw new Error(result.error || 'Could not load the donation status.')
+        const status = result.donation?.status
+        if (!status) throw new Error('The donation status was missing from the response.')
+        if (!active) return
+        setDonationStatus(status)
+        setReceiptEmailSent(result.donation?.receiptEmailSent === true)
+        const emailSending = result.donation?.receiptEmailSending === true
+        setReceiptEmailSending(emailSending)
+        if (status !== 'PENDING' && status !== 'RECONCILING') {
+          if (emailSending && attempt < 11) {
+            await new Promise((resolve) => window.setTimeout(resolve, 5000))
+            continue
+          }
+          window.history.replaceState({}, '', window.location.pathname)
+          return
+        }
+        if (attempt < 11) await new Promise((resolve) => window.setTimeout(resolve, 5000))
+      }
+    }
+    void refreshDonationStatus().catch((reason) => {
       if (active) setError(reason instanceof Error ? reason.message : 'Could not load the donation status.')
     })
     return () => { active = false }
   }, [])
-  function next() { setError(''); if (step === 0 && amount < 50) return setError('Please choose an amount of at least ₱50.'); if (step === 2 && !gift.anonymous && (!gift.name.trim() || !gift.email.includes('@'))) return setError('Please provide your name and a valid email address.'); if (step === 2 && gift.receipt && !gift.email.trim().includes('@')) return setError('Enter a valid email address for the thank-you email.'); setStep(Math.min(step + 1, 3)) }
+  function next() { setError(''); if (step === 0 && amount < 50) return setError('Please choose an amount of at least ₱50.'); if (step === 2 && !gift.email.trim().includes('@')) return setError('Please provide a valid email address for your donation confirmation.'); if (step === 2 && !gift.anonymous && !gift.name.trim()) return setError('Please provide your name.'); setStep(Math.min(step + 1, 3)) }
   async function complete() {
     setError('')
     if (xenditEnabled) {
@@ -2430,7 +2446,6 @@ function DonationsPage() {
       setReceiptCode(result.donation.referenceCode)
       setDonationStatus(result.donation.status)
       setReceiptEmailSent(result.donation.receiptEmailSent === true)
-      setVerificationNoticeOpen(result.donation.status !== 'COMPLETED')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The donation service is unavailable. Please try again.')
     }
@@ -2448,22 +2463,23 @@ function DonationsPage() {
             <button className={gift.anonymous ? 'selected' : ''} onClick={() => setGift({ ...gift, anonymous: true })}><ShieldCheck /><b>Give anonymously</b><small>No name stored</small></button>
             <button className={!gift.anonymous ? 'selected' : ''} onClick={() => setGift({ ...gift, anonymous: false })}><User /><b>Include my name</b><small>For monastery records</small></button>
           </div>
-          {!gift.anonymous && <div className="donor-fields">
-            <label>Your name<input value={gift.name} onChange={(e) => setGift({ ...gift, name: e.target.value })} placeholder="Full name" /></label>
-            <label>Email address<input type="email" value={gift.email} onChange={(e) => setGift({ ...gift, email: e.target.value })} placeholder="you@example.com" /></label>
-            <label>Phone number<input type="tel" value={gift.phone} onChange={(e) => setGift({ ...gift, phone: e.target.value })} placeholder="+63" /></label>
-          </div>}
-          {gift.anonymous ? (
-            <>
-              <label className="check-row"><input type="checkbox" checked={gift.receipt} onChange={(e) => setGift({ ...gift, receipt: e.target.checked })} /><span>Send a thank-you email after payment confirmation <small>(Optional for anonymous gifts)</small></span></label>
-              {gift.receipt && <div className="donor-fields receipt-email-fields"><label>Email address for thank-you email<input type="email" value={gift.email} onChange={(e) => setGift({ ...gift, email: e.target.value })} placeholder="you@example.com" autoComplete="email" /></label></div>}
-            </>
-          ) : <p className="form-note">We’ll email you a thank-you after your payment is confirmed.</p>}
+          <div className="donor-fields">
+            {!gift.anonymous && <label>Your name<input value={gift.name} onChange={(e) => setGift({ ...gift, name: e.target.value })} placeholder="Full name" /></label>}
+            <label>Email address for donation confirmation<input type="email" value={gift.email} onChange={(e) => setGift({ ...gift, email: e.target.value })} placeholder="you@example.com" autoComplete="email" /></label>
+            {!gift.anonymous && <label>Phone number<input type="tel" value={gift.phone} onChange={(e) => setGift({ ...gift, phone: e.target.value })} placeholder="+63" /></label>}
+          </div>
+          <p className="form-note">{gift.anonymous ? 'Your name stays private. We’ll use your email only for payment confirmation and your donation history.' : 'We’ll email you a confirmation after your payment is confirmed.'}</p>
         </>
       )}
-      {step === 3 && <><span className="eyebrow">STEP FOUR</span><h2>Review & complete</h2><p>Please check the details below and send your offering.</p><div className="review-box"><div><small>OFFERING AMOUNT</small><strong>{money(amount)}</strong></div><div><small>PAYMENT CHANNEL</small><b>{gift.payment}</b></div><div><small>DONOR</small><b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></div></div>{xenditEnabled ? <div className="payment-instructions xendit-checkout"><p>You’ll continue to Xendit’s secure checkout to complete your test payment.</p><button className="button button-gold full-button" disabled={checkoutStarting} onClick={complete}>{checkoutStarting ? 'Opening secure checkout…' : 'Continue to secure checkout'} <ArrowRight size={16} /></button></div> : gift.payment === 'CARD' ? <div className="notice">Card checkout is coming soon. Select another payment method to continue.</div> : <div className="payment-instructions"><div className="qr-placeholder"><span>SCAN<br />TO GIVE</span><i>GCASH · MAYA</i></div><div><small>ACCOUNT</small><b>FEDERATION OF DISCALCED CARMELITE NUNS</b><div className="account-number">0921-419-2267 <button onClick={() => { navigator.clipboard?.writeText('0921-419-2267'); setCopied(true); setTimeout(() => setCopied(false), 1600) }} aria-label="Copy account number">{copied ? <Check size={15} /> : <Clipboard size={15} />}{copied ? 'Copied!' : 'Copy'}</button></div></div><label>Payment reference number <small>(optional)</small><input value={gift.reference} onChange={(e) => setGift({ ...gift, reference: e.target.value })} placeholder="From your GCash / bank SMS" /></label><button className="button button-gold full-button" onClick={complete}>I have sent {money(amount)} <ArrowRight size={16} /></button></div>}</>}{error && <p className="form-error">{error}</p>}</div><div className="donation-card-foot"><button className="button button-outline" disabled={step === 0} onClick={() => { setError(''); setStep(Math.max(0, step - 1)) }}><ArrowLeft size={15} /> Back</button><span>{steps[step]}</span>{step < 3 && <button className="button button-dark" onClick={next}>Continue <ArrowRight size={15} /></button>}</div></section> : <section className="confirmation-card"><span className="confirm-icon"><Check /></span><span className="eyebrow">{donationStatus === 'COMPLETED' ? 'DONATION CONFIRMED' : 'PAYMENT CONFIRMATION PENDING'}</span><h2>{donationStatus === 'COMPLETED' ? 'Thank you for your generosity.' : 'Your payment is being confirmed.'}</h2><p>{donationStatus === 'COMPLETED' ? 'Your donation has been confirmed by the payment provider.' : 'Thank you. The payment provider is confirming your donation; the status will update once Xendit notifies the Federation.'}</p><div className="receipt"><b>DONATION ACKNOWLEDGMENT</b><strong>{receiptCode}</strong><span>Beneficiary <b>Discalced Carmelite Nuns</b></span><span>Offering amount <b>{money(amount)}</b></span><span>Payment method <b>{gift.payment}</b></span><span>Donor <b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></span><span>Status <b>{donationStatus === 'COMPLETED' ? 'Completed' : 'Payment confirmation pending'}</b></span><span>Date <b>{new Date().toLocaleDateString('en-PH')}</b></span></div><div className="confirmation-actions"><button className="button button-outline" onClick={() => window.print()}><FileText size={16} /> Print acknowledgment</button><button className="button button-dark" onClick={() => { setReceiptCode(''); setDonationStatus(''); setVerificationNoticeOpen(false); setStep(0); setGift(initialDonation); sessionStorage.removeItem('carmel-gift') }}>Make another offering <ArrowRight size={15} /></button></div></section>}
-    {receiptCode && gift.email && <p className={`donation-email-status ${donationConfirmed ? receiptEmailSent ? 'sent' : 'failed' : 'pending'}`} role="status">{!donationConfirmed ? 'Your thank-you email will be sent automatically once your payment is confirmed.' : receiptEmailSent ? `Your payment was confirmed, and a thank-you email was sent to ${gift.email}.` : 'Your payment was confirmed, but we could not send the thank-you email. Please contact ocdnuns.vocpromph@gmail.com for help.'}</p>}
-    {verificationNoticeOpen && <div className="donation-verification-backdrop" role="presentation"><section className="donation-verification-dialog" role="alertdialog" aria-modal="true" aria-labelledby="donation-verification-title" aria-describedby="donation-verification-description"><span className="confirm-icon"><Check /></span><span className="eyebrow">PAYMENT PENDING</span><h2 id="donation-verification-title">Your payment is being confirmed.</h2><p id="donation-verification-description">{xenditEnabled ? 'Xendit is confirming your payment. Your donation will appear in Transactions automatically when payment is complete, and we will send a thank-you email to the address you provided.' : `Thank you for your generosity. The Federation will review your payment and update its status once it has been confirmed. ${gift.email || gift.phone ? 'The Federation can use the contact details you provided to update you after confirmation.' : 'No contact details were provided, so please keep your acknowledgment reference for follow-up.'}`}</p><button className="button button-dark" onClick={() => setVerificationNoticeOpen(false)}>Continue</button></section></div>}
+      {step === 3 && <><span className="eyebrow">STEP FOUR</span><h2>Review & complete</h2><p>Please check the details below and send your offering.</p><div className="review-box"><div><small>OFFERING AMOUNT</small><strong>{money(amount)}</strong></div><div><small>PAYMENT CHANNEL</small><b>{gift.payment}</b></div><div><small>DONOR</small><b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></div></div>{xenditEnabled ? <div className="payment-instructions xendit-checkout"><p>You’ll continue to Xendit’s secure checkout to complete your test payment.</p><button className="button button-gold full-button" disabled={checkoutStarting} onClick={complete}>{checkoutStarting ? 'Opening secure checkout…' : 'Continue to secure checkout'} <ArrowRight size={16} /></button></div> : gift.payment === 'CARD' ? <div className="notice">Card checkout is coming soon. Select another payment method to continue.</div> : <div className="payment-instructions"><div className="qr-placeholder"><span>SCAN<br />TO GIVE</span><i>GCASH · MAYA</i></div><div><small>ACCOUNT</small><b>FEDERATION OF DISCALCED CARMELITE NUNS</b><div className="account-number">0921-419-2267 <button onClick={() => { navigator.clipboard?.writeText('0921-419-2267'); setCopied(true); setTimeout(() => setCopied(false), 1600) }} aria-label="Copy account number">{copied ? <Check size={15} /> : <Clipboard size={15} />}{copied ? 'Copied!' : 'Copy'}</button></div></div><label>Payment reference number <small>(optional)</small><input value={gift.reference} onChange={(e) => setGift({ ...gift, reference: e.target.value })} placeholder="From your GCash / bank SMS" /></label><button className="button button-gold full-button" onClick={complete}>I have sent {money(amount)} <ArrowRight size={16} /></button></div>}</>}{error && <p className="form-error">{error}</p>}</div><div className="donation-card-foot"><button className="button button-outline" disabled={step === 0} onClick={() => { setError(''); setStep(Math.max(0, step - 1)) }}><ArrowLeft size={15} /> Back</button><span>{steps[step]}</span>{step < 3 && <button className="button button-dark" onClick={next}>Continue <ArrowRight size={15} /></button>}</div></section> : <section className="confirmation-card">
+      <span className="confirm-icon"><Check /></span>
+      <span className="eyebrow">{donationConfirmed ? 'DONATION SUCCESSFUL' : donationStatus === 'FAILED' ? 'PAYMENT NOT COMPLETED' : 'PAYMENT PENDING'}</span>
+      <h2>{donationConfirmed ? 'Your donation was successfully received.' : donationStatus === 'FAILED' ? 'Your payment was not completed.' : 'Your payment is being confirmed.'}</h2>
+      <p>{donationConfirmed ? 'Your payment has been confirmed by the payment provider.' : donationStatus === 'FAILED' ? 'The payment provider did not complete this transaction.' : 'Your donation will be marked successful automatically when the payment provider confirms it.'}</p>
+      <div className="receipt"><b>DONATION ACKNOWLEDGMENT</b><strong>{receiptCode}</strong><span>Beneficiary <b>Discalced Carmelite Nuns</b></span><span>Offering amount <b>{money(amount)}</b></span><span>Payment method <b>{gift.payment}</b></span><span>Donor <b>{gift.anonymous ? 'Anonymous Benefactor' : gift.name}</b></span><span>Status <b>{donationConfirmed ? 'Success' : donationStatus === 'FAILED' ? 'Failed' : 'Pending'}</b></span><span>Date <b>{new Date().toLocaleDateString('en-PH')}</b></span></div>
+      <div className="confirmation-actions"><button className="button button-outline" onClick={() => window.print()}><FileText size={16} /> Print acknowledgment</button><button className="button button-dark" onClick={() => { setReceiptCode(''); setDonationStatus(''); setReceiptEmailSent(false); setReceiptEmailSending(false); setStep(0); setGift(initialDonation); sessionStorage.removeItem('carmel-gift') }}>Make another offering <ArrowRight size={15} /></button></div>
+    </section>}
+    {receiptCode && gift.email && <p className={`donation-email-status ${donationStatus === 'FAILED' ? 'failed' : !donationConfirmed || receiptEmailSending ? 'pending' : receiptEmailSent ? 'sent' : 'failed'}`} role="status">{donationStatus === 'FAILED' ? 'No confirmation email was sent because the payment was not completed.' : !donationConfirmed ? 'A confirmation email will be sent automatically once your payment is confirmed.' : receiptEmailSending ? `Your confirmation email is being sent to ${gift.email}.` : receiptEmailSent ? `Your donation was successful, and a confirmation email was sent to ${gift.email}.` : 'Your donation was successful, but we could not send the confirmation email. Please contact ocdnuns.vocpromph@gmail.com for help.'}</p>}
     {!receiptCode && <div className="trust-row"><span><ShieldCheck />100% Direct to Monasteries</span><span><User />Anonymous Giving Supported</span><span><Smartphone />Helpline: (0921) 419-2267</span></div>}</div>
 }
 type StaffRole = 'ADMIN' | 'FORMATOR'
@@ -3298,7 +3314,7 @@ function MemberDonationsView({ member }: { member: MemberAccount }) {
   return <section className="member-account-section">
     <div className="member-section-heading"><span className="eyebrow">YOUR GIVING</span><h2>Donation history</h2><p>{member.demo ? 'Demo accounts cannot make real donations.' : 'Offerings associated with your account are loaded from the Federation database.'}</p></div>
     {error && <p className="form-error" role="alert">{error}</p>}
-    {loading ? <p className="staff-empty">Loading donation history…</p> : donations.length ? <div className="member-donation-list">{donations.toReversed().map((donation) => <article className="member-donation-row" key={donation.referenceCode}><div><b>{donation.paymentMethod}</b><small>{new Date(donation.createdAt).toLocaleDateString()} · {donation.referenceCode}</small></div><strong>{money(donation.amount)}</strong><span className={`member-donation-status ${donation.status.toLowerCase()}`}>{donation.status.replace('_', ' ')}</span></article>)}</div> : <div className="member-empty"><HandHeart size={22} /><h3>No donations linked yet</h3><p>{member.demo ? 'Demo accounts cannot make real donations.' : 'Donations associated with your account will appear here. Older gifts may need to be linked by the Federation.'}</p>{!member.demo && <Link className="button button-outline" to="/donations">Make a donation <ArrowRight size={14} /></Link>}</div>}
+    {loading ? <p className="staff-empty">Loading donation history…</p> : donations.length ? <div className="member-donation-list">{donations.toReversed().map((donation) => <article className="member-donation-row" key={donation.referenceCode}><div><b>{donation.paymentMethod}</b><small>{new Date(donation.createdAt).toLocaleDateString()} · {donation.referenceCode}</small></div><strong>{money(donation.amount)}</strong><span className={`member-donation-status ${donation.status.toLowerCase()}`}>{['COMPLETED', 'VERIFIED'].includes(donation.status) ? 'Success' : donation.status.replace('_', ' ')}</span></article>)}</div> : <div className="member-empty"><HandHeart size={22} /><h3>No donations linked yet</h3><p>{member.demo ? 'Demo accounts cannot make real donations.' : 'Donations associated with your account will appear here. Older gifts may need to be linked by the Federation.'}</p>{!member.demo && <Link className="button button-outline" to="/donations">Make a donation <ArrowRight size={14} /></Link>}</div>}
   </section>
 }
 
