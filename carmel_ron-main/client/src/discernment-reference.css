@@ -15,26 +15,58 @@
 }
 
 .discernment-guide-hero {
-  padding: clamp(64px, 9vw, 110px) 0 72px;
+  display: grid;
+  grid-template-areas: "copy image";
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 0.95fr);
+  align-items: center;
+  gap: clamp(48px, 5vw, 92px);
+  width: min(1400px, calc(100% - 80px));
+  padding: clamp(64px, 5vw, 88px) 0 72px;
+}
+
+.discernment-guide-hero-copy {
+  grid-area: copy;
 }
 
 .discernment-guide-hero h1 {
-  max-width: 810px;
+  max-width: 860px;
   margin: 15px 0 20px;
-  font-size: clamp(42px, 6vw, 72px);
-  line-height: 1.08;
+  font-size: clamp(38px, 2.5vw, 46px);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.035em;
 }
 
 .discernment-guide-hero h1 em {
   color: var(--guide-gold);
+  font-family: Lora, Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.04em;
 }
 
-.discernment-guide-hero > p {
-  max-width: 700px;
+.discernment-guide-hero-copy > p {
+  max-width: 730px;
   margin: 0;
   color: var(--guide-muted);
   font-size: 18px;
-  line-height: 1.75;
+  line-height: 1.8;
+}
+
+.discernment-guide-hero-image {
+  grid-area: image;
+  width: 100%;
+  aspect-ratio: 0.97 / 1;
+  overflow: hidden;
+  border-radius: 14px 120px 14px 14px;
+  box-shadow: 0 10px 24px #3d2e241a;
+}
+
+.discernment-guide-hero-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 
 .discernment-guide-actions {
@@ -45,8 +77,9 @@
 }
 
 .discernment-guide-actions .button {
-  min-height: 48px;
-  font-size: 14px;
+  min-height: 60px;
+  padding-inline: 36px;
+  font-size: 16px;
 }
 
 .discernment-guide-content {
@@ -410,6 +443,24 @@
   }
 }
 
+@media (max-width: 900px) {
+  .discernment-guide-hero {
+    grid-template-areas:
+      "image"
+      "copy";
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+    width: min(720px, calc(100% - 40px));
+    padding-block: 54px;
+  }
+
+  .discernment-guide-hero-image {
+    width: min(100%, 520px);
+    aspect-ratio: 1.2 / 1;
+    justify-self: center;
+  }
+}
+
 @media (max-width: 760px) {
   .discernment-guide-hero,
   .discernment-guide-content,
@@ -422,7 +473,7 @@
     padding: 54px 0 50px;
   }
 
-  .discernment-guide-hero > p {
+  .discernment-guide-hero-copy > p {
     font-size: 16px;
   }
 
@@ -515,7 +566,7 @@
     background: linear-gradient(145deg, #f8f2e9 0%, #fffdfa 78%);
   }
 
-  .discernment-guide-hero > .eyebrow {
+  .discernment-guide-hero-copy > .eyebrow {
     font-size: 10px;
     letter-spacing: 0.12em;
   }
@@ -527,10 +578,16 @@
     letter-spacing: -0.035em;
   }
 
-  .discernment-guide-hero > p {
+  .discernment-guide-hero-copy > p {
     max-width: 36rem;
     font-size: 15px;
     line-height: 1.65;
+  }
+
+  .discernment-guide-hero-image {
+    width: 100%;
+    aspect-ratio: 1.08 / 1;
+    border-radius: 12px 82px 12px 12px;
   }
 
   .discernment-guide-actions {

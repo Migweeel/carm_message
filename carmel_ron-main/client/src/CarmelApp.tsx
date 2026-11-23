@@ -1958,12 +1958,17 @@ function DiscernmentGuidePage() {
 
   return <main className="discernment-guide-page">
     <section className="discernment-guide-hero">
-      <span className="eyebrow">A COMPANION FOR YOUR JOURNEY</span>
-      <h1>Discernment is a process to <em>test where the Spirit is leading you.</em></h1>
-      <p>Explore the Carmelite vocation prayerfully and at your own pace. These guides offer gentle next steps, whether you are just beginning or already speaking with a community.</p>
-      <div className="discernment-guide-actions">
-        <Link className="button button-dark" to="/account/discernment">View my discernment journey <ArrowRight size={16} /></Link>
-        <Link className="button button-outline" to="/monasteries">Explore our monasteries <ArrowRight size={16} /></Link>
+      <div className="discernment-guide-hero-copy">
+        <span className="eyebrow">A COMPANION FOR YOUR JOURNEY</span>
+        <h1>Discernment is a process to <em>test where the Spirit is leading you.</em></h1>
+        <p>Explore the Carmelite vocation prayerfully and at your own pace. These guides offer gentle next steps, whether you are just beginning or already speaking with a community.</p>
+        <div className="discernment-guide-actions">
+          <Link className="button button-dark" to="/account/discernment">View my discernment journey <ArrowRight size={16} /></Link>
+          <Link className="button button-outline" to="/monasteries">Explore our monasteries <ArrowRight size={16} /></Link>
+        </div>
+      </div>
+      <div className="discernment-guide-hero-image">
+        <ImageWithLoader src={aboutFlowerImage} alt="Delicate white flowers blooming on a green stem" />
       </div>
     </section>
 
