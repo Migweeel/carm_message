@@ -2420,6 +2420,8 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const [googlePending, setGooglePending] = useState(false)
   const [facebookPending, setFacebookPending] = useState(false)
   const [facebookSdkLoaded, setFacebookSdkLoaded] = useState(false)
+  const [googleButtonWidth, setGoogleButtonWidth] = useState(400)
+  const googleButtonRef = useRef<HTMLDivElement>(null)
   const googleRequestInFlight = useRef(false)
   const facebookRequestInFlight = useRef(false)
   const [resendingCode, setResendingCode] = useState(false)
@@ -2456,6 +2458,18 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const timer = window.setInterval(updateRemaining, 1000)
     return () => window.clearInterval(timer)
   }, [verificationOpen, verificationSuccess, resendAvailableAt])
+  useEffect(() => {
+    if (isStaff || !googleClientId) return
+    const container = googleButtonRef.current
+    if (!container) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return
+      const width = Math.min(400, Math.max(1, Math.floor(entry.contentRect.width)))
+      setGoogleButtonWidth((currentWidth) => currentWidth === width ? currentWidth : width)
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [isStaff])
   useEffect(() => {
     if (isStaff || !facebookAppId) return
     const initializeFacebook = () => {
@@ -2748,7 +2762,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       {accountNotice && <p className="form-error" role="status">{accountNotice}</p>}
       {!isStaff && <div className="auth-social-login">
         {googleClientId
-          ? <div className={`auth-google-button${pending || googlePending || facebookPending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>
+          ? <div ref={googleButtonRef} className={`auth-google-button${pending || googlePending || facebookPending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>
             <GoogleLogin
                 onSuccess={(response) => {
                   if (!response.credential) {
@@ -2763,7 +2777,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
                 shape="rectangular"
                 logo_alignment="center"
                 size="medium"
-                width="400"
+                width={String(googleButtonWidth)}
                 auto_select={false}
                 use_fedcm_for_button={false}
               />
