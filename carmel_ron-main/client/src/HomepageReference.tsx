@@ -66,7 +66,6 @@ export default function HomepageReference() {
       startScrollLeft: event.currentTarget.scrollLeft,
       moved: false,
     }
-    event.currentTarget.setPointerCapture(event.pointerId)
   }
 
   function moveCardDrag(event: React.PointerEvent<HTMLDivElement>) {
@@ -77,6 +76,7 @@ export default function HomepageReference() {
     if (!drag.moved && Math.abs(distance) < 5) return
     if (!drag.moved) {
       drag.moved = true
+      event.currentTarget.setPointerCapture(event.pointerId)
       event.currentTarget.classList.add('is-dragging')
     }
 
@@ -103,6 +103,10 @@ export default function HomepageReference() {
     event.preventDefault()
     event.stopPropagation()
     suppressCardClick.current = false
+  }
+
+  function preventCardDrag(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault()
   }
 
   const activeHeroImage = heroImages[activeHeroIndex]
@@ -214,9 +218,9 @@ export default function HomepageReference() {
         <div className="reference-actions"><a className="reference-primary" href="#home-explore">Explore</a><Link className="reference-secondary" to="/monasteries">Meet our Monasteries</Link></div>
       </div>
     </section>
-    <section className="reference-ticker"><strong>Philippine Federation of Discalced Carmelite Nuns</strong><div className="reference-ticker-window"><div className="reference-ticker-track">{cities.map((city) => <span key={city}>{city}<i>·</i></span>)}{cities.map((city) => <span key={`duplicate-${city}`} aria-hidden="true">{city}<i>·</i></span>)}</div></div></section>
+    <section className="reference-ticker"><strong>Philippine Federation of Discalced Carmelite Nuns</strong><div className="reference-ticker-window"><div className="reference-ticker-track">{cities.map((city) => <Link key={city} to={`/monasteries#monastery-${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>{city}<i>·</i></Link>)}{cities.map((city) => <Link key={`duplicate-${city}`} to={`/monasteries#monastery-${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} aria-hidden="true" tabIndex={-1}>{city}<i>·</i></Link>)}</div></div></section>
     <section className="reference-discernment"><ImageWithLoader src="/assets/images/whiteflowers.webp" alt="White flowers in a garden" /><div><h2>Is <b>GOD</b> calling you to be a<br /> Discalced Carmelite Nun?</h2><p>Are you discerning if God is calling you to Carmel? Let us assist you in your discernment as you explore the pages of this site.</p><Link className="reference-primary" to="/monasteries">Meet Our Monasteries</Link></div></section>
-    <section className="reference-explore" id="home-explore"><div className="reference-explore-heading"><div><p className="reference-kicker">FIND YOUR WAY IN</p><h2>Explore</h2></div><p>Learn about our charism, communities, and the women who have found a home in Carmel.</p></div><div className="reference-carousel"><button type="button" onClick={() => scrollCards(-1)} aria-label="Scroll left"><ArrowLeft size={18} /></button><div className="reference-cards" ref={cards} onScroll={updateActiveCard} onPointerDown={startCardDrag} onPointerMove={moveCardDrag} onPointerUp={endCardDrag} onPointerCancel={endCardDrag} onClickCapture={handleCardClick}>{homeSectionCards.map(({ key, label, title, to, image }) => <Link className="reference-card" key={key} to={to}><ImageWithLoader src={sectionImagesReady ? sectionImages[key] || image : undefined} pending={sectionImagesLoading} alt="" loading="lazy" decoding="async" draggable={false} /><span>{label}</span><div><h3>{title}</h3><b>Learn More <ArrowRight size={14} /></b></div></Link>)}</div><button type="button" onClick={() => scrollCards(1)} aria-label="Scroll right"><ArrowRight size={18} /></button></div><div className="reference-carousel-dots" role="group" aria-label="Explore categories">{homeSectionCards.map(({ key, label }, index) => <button key={key} type="button" className={index === activeCardIndex ? 'reference-carousel-dot is-active' : 'reference-carousel-dot'} aria-label={`Go to ${label.toLowerCase()} slide`} aria-current={index === activeCardIndex ? 'true' : undefined} onClick={() => scrollToCard(index)} />)}</div></section>
-    <section className="reference-quote"><ImageWithLoader src="/assets/images/pinkflower.webp" alt="Pink flower" /><div><p>Carmel symbolizes prayer. More than a geographical place, it is a sacred space in the cloister of the heart where the Carmelite nun encounters God.</p><Link className="reference-secondary" to="/contact">Contact us</Link></div></section>
+    <section className="reference-explore" id="home-explore"><div className="reference-explore-heading"><div><p className="reference-kicker">FIND YOUR WAY IN</p><h2>Explore</h2></div><p>Learn about our charism, communities, and the women who have found a home in Carmel.</p></div><div className="reference-carousel"><button type="button" onClick={() => scrollCards(-1)} aria-label="Scroll left"><ArrowLeft size={18} /></button><div className="reference-cards" ref={cards} onDragStart={preventCardDrag} onScroll={updateActiveCard} onPointerDown={startCardDrag} onPointerMove={moveCardDrag} onPointerUp={endCardDrag} onPointerCancel={endCardDrag} onClickCapture={handleCardClick}>{homeSectionCards.map(({ key, label, title, to, image }) => <Link className="reference-card" key={key} to={to}><ImageWithLoader src={sectionImagesReady ? sectionImages[key] || image : undefined} pending={sectionImagesLoading} alt="" loading="lazy" decoding="async" draggable={false} /><span>{label}</span><div><h3>{title}</h3><b>Learn More <ArrowRight size={14} /></b></div></Link>)}</div><button type="button" onClick={() => scrollCards(1)} aria-label="Scroll right"><ArrowRight size={18} /></button></div><div className="reference-carousel-dots" role="group" aria-label="Explore categories">{homeSectionCards.map(({ key, label }, index) => <button key={key} type="button" className={index === activeCardIndex ? 'reference-carousel-dot is-active' : 'reference-carousel-dot'} aria-label={`Go to ${label.toLowerCase()} slide`} aria-current={index === activeCardIndex ? 'true' : undefined} onClick={() => scrollToCard(index)} />)}</div></section>
+    <section className="reference-quote"><ImageWithLoader src="/assets/images/pinkflower.webp" alt="Pink flower" /><div><span className="reference-quote-mark" aria-hidden="true">"</span><p>Carmel is not merely a geographical place, but a sacred space in the cloister of the heart where the Carmelite nun encounters God.</p><Link className="reference-secondary" to="/contact">We'd love to hear from you <ArrowRight size={15} /></Link></div></section>
   </div>
 }

@@ -1,5 +1,4 @@
 {
-{
   "private": true,
   "scripts": {
     "build": "cd carmel_ron-main/server && npm install --include=dev && cd ../client && npm install --include=dev && cd .. && npm run build",
