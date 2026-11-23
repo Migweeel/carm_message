@@ -130,7 +130,7 @@ app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   contentSecurityPolicy: {
     directives: {
-      connectSrc: ["'self'", 'https://accounts.google.com/gsi/', 'https://connect.facebook.net', 'https://graph.facebook.com', 'https://www.facebook.com'],
+      connectSrc: ["'self'", 'https://accounts.google.com/gsi/', 'https://connect.facebook.net', 'https://graph.facebook.com', 'https://www.facebook.com', 'https://web.facebook.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https://images.unsplash.com', 'https://www.facebook.com', 'https://static.xx.fbcdn.net'],
       mediaSrc: ["'self'", 'data:'],
       frameSrc: ["'self'", 'https://www.youtube-nocookie.com', 'https://player.vimeo.com', 'https://accounts.google.com/gsi/', 'https://www.facebook.com', 'https://staticxx.facebook.com'],
