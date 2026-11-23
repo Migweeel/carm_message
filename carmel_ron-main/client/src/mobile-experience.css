@@ -614,27 +614,12 @@
   }
 
   .carmelife-page .life-hero {
-    height: min(420px, 58svh);
-    min-height: 290px;
-    padding: 12px 12px 0;
-  }
-
-  .carmelife-page .life-hero > img {
-    border-radius: 12px;
-    object-position: center;
-  }
-
-  .carmelife-page .life-hero-overlay {
-    inset: 12px 12px 0;
-    border-radius: 12px;
-    background: linear-gradient(0deg, rgba(28, 19, 13, .72), transparent 78%);
+    padding: 2rem 20px 0;
   }
 
   .carmelife-page .life-hero h1 {
-    bottom: 20px;
-    left: 28px;
-    right: 20px;
-    font-size: clamp(31px, 9vw, 42px);
+    color: var(--life-dark);
+    font-size: clamp(2rem, 8vw, 2.8rem);
     line-height: 1.1;
   }
 

@@ -29,33 +29,16 @@
 }
 
 .carmelife-page .life-hero {
-  position: relative;
-  height: 460px;
-  padding-top: 1.5rem;
-}
-
-.carmelife-page .life-hero > img {
-  width: 100%;
-  height: 100%;
-  border-radius: 1rem;
-  object-fit: cover;
-}
-
-.carmelife-page .life-hero-overlay {
-  position: absolute;
-  inset: 1.5rem 1.5rem 0;
-  border-radius: 1rem;
-  background: linear-gradient(to top, #2e231cb3, transparent 65%);
+  padding-top: 3.5rem;
+  padding-bottom: 0;
 }
 
 .carmelife-page .life-hero h1 {
-  position: absolute;
-  bottom: 2rem;
-  left: 4rem;
   margin: 0;
-  color: #fff;
-  font-size: clamp(2rem, 5vw, 4rem);
+  color: var(--life-dark);
+  font-size: clamp(2.8rem, 5vw, 3.5rem);
   font-weight: 400;
+  line-height: 1.08;
 }
 
 .carmelife-page .life-quote-banner {
@@ -331,11 +314,7 @@
   }
 
   .carmelife-page .life-hero {
-    height: 340px;
-  }
-
-  .carmelife-page .life-hero h1 {
-    left: 2.5rem;
+    padding-top: 3rem;
   }
 
   .carmelife-page .wide-life-image {
@@ -350,17 +329,11 @@
 
 @media (max-width: 560px) {
   .carmelife-page .life-hero {
-    height: 280px;
-    padding-right: 1rem;
-    padding-left: 1rem;
-  }
-
-  .carmelife-page .life-hero-overlay {
-    inset: 1.5rem 1rem 0;
+    padding: 2rem 1rem 0;
   }
 
   .carmelife-page .life-hero h1 {
-    left: 2rem;
+    font-size: clamp(2rem, 8vw, 2.8rem);
   }
 
   .carmelife-page .life-section {

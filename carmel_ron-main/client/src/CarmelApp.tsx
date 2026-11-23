@@ -1831,8 +1831,6 @@ function CarmelifePage() {
   }
   return <div className="carmelife-page">
     <section className="life-hero">
-      <ImageWithLoader src={vocationHeroImage} alt="Archway in a Carmelite monastery cloister" loading="eager" fetchPriority="high" />
-      <div className="life-hero-overlay" />
       <h1>Vocation to Carmel</h1>
     </section>
 
