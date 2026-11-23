@@ -2048,6 +2048,14 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       suppressPopularClick.current = false
     }, 400)
   }
+  function openPopularReading(teaching: PopularTeaching) {
+    setSelectedReading(teaching)
+    setSelectedId(teaching.id)
+    setFullView(false)
+    const url = new URL(window.location.href)
+    url.searchParams.set('reading', teaching.id)
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+  }
   useEffect(() => {
     if (kind === 'updates' || !content.isReady) return
     const readingId = new URLSearchParams(location.search).get('reading')
@@ -2102,7 +2110,16 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
     if (!member) { navigate('/account/login'); return }
     void setFavorite(id, !favorites.includes(id)).catch(() => undefined)
   }
-  function closeStory() { setSelectedId(null); setFullView(false) }
+  function closeStory() {
+    setSelectedId(null)
+    setSelectedReading(null)
+    setFullView(false)
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('reading')) {
+      url.searchParams.delete('reading')
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    }
+  }
   if (!isLife) {
     const categories = [...new Set([...carmelightsCategories, ...articles.map((article) => article.category?.trim()).filter((category): category is string => Boolean(category))])].sort((a, b) => a.localeCompare(b))
     const saints = [...new Set(articles.map((article) => article.author.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
@@ -2128,7 +2145,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
             }
           }}>{popularTeachings.map((teaching, index) => {
             const rank = index + 1
-            return <button type="button" className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedReading(teaching); setSelectedId(teaching.id); setFullView(false) }}>
+            return <button type="button" className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openPopularReading(teaching) }}>
               <span className="carmelights-popular-rank">{rank}</span><ImageWithLoader src={articleImageFor(teaching.image, photo.chapel)} alt="" /><span className="carmelights-popular-copy"><small>{teaching.category || 'Prayer'} · {teaching.views.toLocaleString()} {teaching.views === 1 ? 'view' : 'views'}</small><b>{teaching.title}</b><em>{teaching.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
             </button>
           })}</div>
