@@ -91,7 +91,7 @@ function PasswordInput(props: PasswordInputProps) {
   </span>
 }
 
-function ImageCropInput({ onImage, currentImage, accept = 'image/*', ariaLabel = 'Choose an image', maxBytes = 2_000_000 }: { onImage: (file: File) => void; currentImage?: string; accept?: string; ariaLabel?: string; maxBytes?: number }) {
+function ImageCropInput({ onImage, currentImage, accept = 'image/*', ariaLabel = 'Choose an image', maxBytes = 2_000_000, maxWidth = 1600 }: { onImage: (file: File) => void; currentImage?: string; accept?: string; ariaLabel?: string; maxBytes?: number; maxWidth?: number }) {
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
@@ -246,10 +246,10 @@ function ImageCropInput({ onImage, currentImage, accept = 'image/*', ariaLabel =
       const sourceHeight = frame.height / (coverScale * zoom)
       const sourceX = rotatedWidth / 2 - sourceWidth / 2 - offset.x / (coverScale * zoom)
       const sourceY = rotatedHeight / 2 - sourceHeight / 2 - offset.y / (coverScale * zoom)
-      const scale = Math.min(1, 1600 / frame.width, 1600 / frame.height)
+      const scale = Math.min(maxWidth / frame.width, maxWidth / frame.height)
       let outputWidth = Math.max(1, Math.round(frame.width * scale))
       let outputHeight = Math.max(1, Math.round(frame.height * scale))
-      let quality = 0.9
+      let quality = 0.86
       const rotatedCanvas = document.createElement('canvas')
       rotatedCanvas.width = rotatedWidth
       rotatedCanvas.height = rotatedHeight
@@ -267,21 +267,22 @@ function ImageCropInput({ onImage, currentImage, accept = 'image/*', ariaLabel =
         canvas.height = outputHeight
         context.drawImage(rotatedCanvas, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height)
         blob = await new Promise<Blob>((resolve, reject) => {
-          canvas.toBlob((result) => result ? resolve(result) : reject(new Error('The cropped image could not be created.')), 'image/jpeg', quality)
+          canvas.toBlob((result) => result ? resolve(result) : reject(new Error('The cropped image could not be created.')), 'image/webp', quality)
         })
+        if (blob.type !== 'image/webp') throw new Error('WebP image conversion is not supported in this browser.')
         if (blob.size <= maxBytes) break
         if (quality > 0.5) {
           quality = Math.max(0.5, quality - 0.1)
         } else if (Math.max(outputWidth, outputHeight) > 480) {
           outputWidth = Math.max(1, Math.round(outputWidth * 0.85))
           outputHeight = Math.max(1, Math.round(outputHeight * 0.85))
-          quality = 0.9
+          quality = 0.86
         } else {
           throw new Error(`The adjusted image is still larger than ${(maxBytes / 1_000_000).toFixed(0)} MB. Choose a different image.`)
         }
       }
       const name = file.name.replace(/\.[^.]+$/, '') || 'image'
-      onImage(new File([blob], `${name}-cropped.jpg`, { type: 'image/jpeg', lastModified: Date.now() }))
+      onImage(new File([blob], `${name}-cropped.webp`, { type: 'image/webp', lastModified: Date.now() }))
       closeCrop()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The image could not be cropped.')
@@ -690,6 +691,7 @@ async function saveManagedContent(content: ManagedSiteContent) {
   cacheManagedContent(result.content.blocks)
 }
 function cacheManagedContent(content: ManagedSiteContent) {
+  managedContentResponseCache.clear()
   if (isLocalDemoSession()) {
     try {
       localStorage.setItem(managedContentKey, JSON.stringify(content))
@@ -717,7 +719,9 @@ async function saveManagedContentRecord(
     const result = await response.json()
     throw new Error(result.error || 'Website content could not be saved.')
   }
+  managedContentResponseCache.clear()
 }
+const managedContentResponseCache = new Map<string, { expiresAt: number; blocks: Partial<ManagedSiteContent> }>()
 function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentState {
   const [content, setContent] = useState<ManagedSiteContent>(readManagedContent)
   const [loadState, setLoadState] = useState(() => ({
@@ -733,6 +737,7 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
     let requestGeneration = 0
     const refresh = (event?: Event) => {
       if (event?.type === 'storage' && event instanceof StorageEvent && event.key !== managedContentKey && event.key !== null) return
+      managedContentResponseCache.delete(subset || 'all')
       const eventContent = event instanceof CustomEvent ? event.detail as ManagedSiteContent | undefined : undefined
       requestGeneration += 1
       setContent(eventContent || readManagedContent())
@@ -746,23 +751,28 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
       let ready = false
       try {
         const query = subset ? `?collection=${encodeURIComponent(subset)}` : ''
-        const response = await fetch(`/api/content/SITE_MANAGED${query}`, { cache: 'no-store' })
-        if (response.status === 404) {
-          ready = true
-          return
-        }
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || 'Saved website content could not be loaded.')
-        if (active && currentRequest === requestGeneration) {
-          if (result.content?.blocks) {
-            setContent({
-              ...defaultManagedContent,
-              ...result.content.blocks,
-              aboutImages: { ...defaultManagedContent.aboutImages, ...result.content.blocks.aboutImages },
-              aboutText: { ...defaultManagedContent.aboutText, ...result.content.blocks.aboutText },
-              contactDetails: { ...defaultManagedContent.contactDetails, ...result.content.blocks.contactDetails },
-            })
+        const cacheKey = subset || 'all'
+        const cached = managedContentResponseCache.get(cacheKey)
+        let blocks = cached && cached.expiresAt > Date.now() ? cached.blocks : undefined
+        if (!blocks) {
+          const response = await fetch(`/api/content/SITE_MANAGED${query}`, { cache: 'no-store' })
+          if (response.status === 404) {
+            blocks = {}
+          } else {
+            const result: { error?: string; content?: { blocks?: Partial<ManagedSiteContent> } } = await response.json()
+            if (!response.ok) throw new Error(result.error || 'Saved website content could not be loaded.')
+            blocks = result.content?.blocks || {}
           }
+          managedContentResponseCache.set(cacheKey, { expiresAt: Date.now() + 60_000, blocks })
+        }
+        if (active && currentRequest === requestGeneration) {
+          setContent({
+            ...defaultManagedContent,
+            ...blocks,
+            aboutImages: { ...defaultManagedContent.aboutImages, ...blocks.aboutImages },
+            aboutText: { ...defaultManagedContent.aboutText, ...blocks.aboutText },
+            contactDetails: { ...defaultManagedContent.contactDetails, ...blocks.contactDetails },
+          })
           ready = true
         }
       } catch (error) {
@@ -3005,7 +3015,7 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
     setError('')
     reader.onload = () => {
       const image = typeof reader.result === 'string' ? reader.result : ''
-      if (!image.startsWith('data:image/jpeg;base64,')) {
+      if (!/^data:image\/(?:jpeg|webp);base64,/.test(image)) {
         setError('The selected profile photo could not be read.')
       } else {
         setAvatarImageOverride(image)
@@ -3062,7 +3072,7 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
         <h3 id="member-profile-avatar-title">Profile photo</h3>
         <p>Upload a photo, then crop, resize, or adjust it before saving your profile.</p>
         <div className="member-profile-avatar-controls">
-          <ImageCropInput onImage={chooseAvatar} currentImage={avatarImage || undefined} ariaLabel="Upload profile photo" maxBytes={1_000_000} />
+          <ImageCropInput onImage={chooseAvatar} currentImage={avatarImage || undefined} ariaLabel="Upload profile photo" maxBytes={1_000_000} maxWidth={800} />
           {avatarImage && <button className="member-profile-avatar-remove" type="button" onClick={() => { setAvatarImageOverride(''); setSaved(false) }}>Remove photo</button>}
         </div>
       </div>
@@ -4949,7 +4959,7 @@ function ContentAdminPage() {
           return <form className="home-thumbnail-card" key={card.key} onSubmit={(event) => { void saveHomeSectionImage(event, card.key) }}>
             <div className="home-thumbnail-heading"><h3>{card.sectionLabel}</h3><p>Card: {card.label}</p></div>
             <label>Image URL<input value={sectionImage.startsWith('data:') ? '' : sectionImage} onChange={(event) => { setHomeSectionImages((current) => ({ ...current, [card.key]: event.target.value })); setSuccess(''); setError('') }} placeholder="https://..." /></label>
-            <label className="content-image-picker">Or upload an image<ImageCropInput onImage={(file) => chooseHomeSectionImage(file, card.key)} currentImage={sectionImage || card.image} ariaLabel={`Choose ${card.sectionLabel} thumbnail`} /><ImageWithLoader src={sectionImage || card.image} pending={!homeSectionImagesReady} alt={`${card.sectionLabel} thumbnail preview`} /></label>
+            <label className="content-image-picker">Or upload an image<ImageCropInput onImage={(file) => chooseHomeSectionImage(file, card.key)} currentImage={sectionImage || card.image} ariaLabel={`Choose ${card.sectionLabel} thumbnail`} maxWidth={800} /><ImageWithLoader src={sectionImage || card.image} pending={!homeSectionImagesReady} alt={`${card.sectionLabel} thumbnail preview`} /></label>
             <button className="button button-dark" type="submit" disabled={!homeSectionImagesReady || savingSectionImage !== null}>{savingSectionImage === card.key ? 'Saving…' : `Save ${card.sectionLabel} thumbnail`}</button>
           </form>
         })}
@@ -4958,7 +4968,7 @@ function ContentAdminPage() {
     {pendingRemoval && <AccountActionConfirmation title={`Remove this ${pendingRemoval.kind === 'monastery' ? 'monastery' : 'entry'}?`} description={`“${pendingRemoval.label}” will be removed from the public website. This action cannot be undone.`} confirmLabel="Remove" onCancel={() => setPendingRemoval(null)} onConfirm={() => { const removal = pendingRemoval; setPendingRemoval(null); if (removal.kind === 'monastery') void removeMonastery(removal.id); else void removeArticle(removal.id) }} />}
   </>
 }
-type AdminDonationFile = { id: string; fileUrl: string; type: string; fileName: string | null; createdAt: string }
+type AdminDonationFile = { id: string; fileUrl?: string; type: string; fileName: string | null; createdAt: string }
 type AdminDonationRecord = {
   id: string
   referenceCode: string
@@ -4990,6 +5000,10 @@ function DonationAdminPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [selectedDonation, setSelectedDonation] = useState<AdminDonationRecord | null>(null)
+  const [selectedProofs, setSelectedProofs] = useState<AdminDonationFile[]>([])
+  const [loadingProofs, setLoadingProofs] = useState(false)
+  const [proofError, setProofError] = useState('')
+  const proofRequest = useRef<AbortController | null>(null)
   const [amount, setAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<AdminDonationRecord['paymentMethod']>('GCASH')
   const [type, setType] = useState<AdminDonationRecord['type']>('ONE_TIME')
@@ -5017,6 +5031,33 @@ function DonationAdminPage() {
     void loadDonations()
     return () => { active = false }
   }, [])
+
+  useEffect(() => () => proofRequest.current?.abort(), [])
+
+  async function openDonation(donation: AdminDonationRecord) {
+    proofRequest.current?.abort()
+    proofRequest.current = null
+    setSelectedDonation(donation)
+    setSelectedProofs([])
+    setProofError('')
+    if (!donation.files.length) {
+      setLoadingProofs(false)
+      return
+    }
+
+    const controller = new AbortController()
+    proofRequest.current = controller
+    setLoadingProofs(true)
+    try {
+      const response = await fetch(`/api/admin/donations/${encodeURIComponent(donation.id)}/files`, { credentials: 'include', signal: controller.signal })
+      const result = await readApiResponse<{ files: AdminDonationFile[] }>(response, 'Loading donation proof')
+      if (!controller.signal.aborted) setSelectedProofs(result.files)
+    } catch (reason) {
+      if (!controller.signal.aborted) setProofError(reason instanceof Error ? reason.message : 'Donation proof could not be loaded.')
+    } finally {
+      if (!controller.signal.aborted) setLoadingProofs(false)
+    }
+  }
 
   async function selectProof(file: File) {
     setError('')
@@ -5104,7 +5145,12 @@ function DonationAdminPage() {
     }
   }
 
-  function closeDetails() { setSelectedDonation(null) }
+  function closeDetails() {
+    proofRequest.current?.abort()
+    proofRequest.current = null
+    setSelectedDonation(null)
+    setLoadingProofs(false)
+  }
   const formattedAmount = (value: number | string) => `₱${Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const visibleDonations = donations
   return <>
@@ -5134,7 +5180,7 @@ function DonationAdminPage() {
       <footer className="donation-entry-actions"><button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Saving donation…' : 'Record donation'} <ArrowRight size={15} /></button></footer>
     </form> : <section className="admin-panel donation-transactions-panel">
       <div className="panel-heading"><div><h2>Recorded donations</h2><p>{donations.length} {donations.length === 1 ? 'transaction' : 'transactions'} · select one for details</p></div></div>
-      {loading ? <div className="staff-empty">Loading donation transactions…</div> : visibleDonations.length ? <div className="donation-transactions-list">{visibleDonations.map((donation) => <button className="donation-transaction-row" type="button" key={donation.id} onClick={() => setSelectedDonation(donation)}>
+      {loading ? <div className="staff-empty">Loading donation transactions…</div> : visibleDonations.length ? <div className="donation-transactions-list">{visibleDonations.map((donation) => <button className="donation-transaction-row" type="button" key={donation.id} onClick={() => void openDonation(donation)}>
         <span className="donation-transaction-icon"><HandHeart size={17} /></span><span className="donation-transaction-main"><b>{donation.isAnonymous ? 'Anonymous donor' : donation.donorName || 'Donor'}</b><small>{donation.isManual ? 'Manual entry' : 'Online donation'} · {donation.referenceCode}</small></span><span className="donation-transaction-payment"><b>{donationPaymentLabels[donation.paymentMethod]}</b><small>{donation.files?.length ? 'Proof attached' : donation.isManual ? 'No proof attached' : 'Proof not required'}</small></span><span className="donation-transaction-amount">{formattedAmount(donation.amount)}</span><ChevronRight size={16} />
       </button>)}</div> : <div className="staff-empty"><HandHeart size={24} /><p>No donation transactions have been recorded yet.</p>{view === 'files' && <Link className="button button-outline" to="/admin/donations?view=logs">Record the first donation <ArrowRight size={14} /></Link>}</div>}
     </section>}
@@ -5142,7 +5188,7 @@ function DonationAdminPage() {
       <section className="donation-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="donation-detail-title">
         <header><div><span className="eyebrow">DONATION TRANSACTION</span><h2 id="donation-detail-title">{selectedDonation.referenceCode}</h2></div><button type="button" aria-label="Close transaction details" onClick={closeDetails}><X size={18} /></button></header>
         <dl className="donation-detail-grid"><div><dt>Source</dt><dd>{selectedDonation.isManual ? 'Manual entry' : 'Submitted through donation form'}</dd></div><div><dt>Amount</dt><dd>{formattedAmount(selectedDonation.amount)}</dd></div><div><dt>Payment method</dt><dd>{donationPaymentLabels[selectedDonation.paymentMethod]}</dd></div><div><dt>Donor</dt><dd>{selectedDonation.isAnonymous ? 'Anonymous' : selectedDonation.donorName || 'Not provided'}</dd></div><div><dt>Email</dt><dd>{selectedDonation.isAnonymous ? 'Not recorded' : selectedDonation.donorEmail || 'Not provided'}</dd></div><div><dt>Phone</dt><dd>{selectedDonation.isAnonymous ? 'Not recorded' : selectedDonation.donorPhone || 'Not provided'}</dd></div><div><dt>Frequency</dt><dd>{selectedDonation.type === 'MONTHLY' ? 'Monthly' : 'One-time'}</dd></div><div className="donation-payment-reference"><dt>Payment reference</dt><dd>{selectedDonation.paymentReference || 'Not provided'}</dd></div><div><dt>Status</dt><dd>{selectedDonation.status}</dd></div><div><dt>Date recorded</dt><dd>{new Date(selectedDonation.createdAt).toLocaleString()}</dd></div></dl>
-        <div className="donation-detail-proof"><h3>Payment proof</h3>{selectedDonation.files?.length ? selectedDonation.files.map((file) => <div key={file.id}>{file.type === 'application/pdf' ? <a href={file.fileUrl} target="_blank" rel="noreferrer">{file.fileName || 'Open proof document'} <ArrowUpRight size={14} /></a> : <a href={file.fileUrl} target="_blank" rel="noreferrer"><ImageWithLoader src={file.fileUrl} alt={file.fileName || 'Donation payment proof'} /><span>{file.fileName || 'View proof image'} <ArrowUpRight size={14} /></span></a>}</div>) : <p>{selectedDonation.isManual ? 'No proof was attached to this manual entry.' : 'Proof is not required for donations submitted through the donation form.'}</p>}</div>
+        <div className="donation-detail-proof"><h3>Payment proof</h3>{loadingProofs ? <p>Loading payment proof…</p> : proofError ? <p className="form-error" role="alert">{proofError}</p> : selectedProofs.length ? selectedProofs.map((file) => <div key={file.id}>{file.type === 'application/pdf' ? <a href={file.fileUrl} target="_blank" rel="noreferrer">{file.fileName || 'Open proof document'} <ArrowUpRight size={14} /></a> : <a href={file.fileUrl} target="_blank" rel="noreferrer"><ImageWithLoader src={file.fileUrl} alt={file.fileName || 'Donation payment proof'} /><span>{file.fileName || 'View proof image'} <ArrowUpRight size={14} /></span></a>}</div>) : <p>{selectedDonation.isManual ? 'No proof was attached to this manual entry.' : 'Proof is not required for donations submitted through the donation form.'}</p>}</div>
       </section>
     </div>}
   </>
@@ -6124,7 +6170,7 @@ function SessionMonitor() {
         checking = false
       }
     }
-    const timer = window.setInterval(() => void checkSession(), 3000)
+    const timer = window.setInterval(() => void checkSession(), 60_000)
     const checkWhenVisible = () => { if (!document.hidden) void checkSession() }
     document.addEventListener('visibilitychange', checkWhenVisible)
     void checkSession()

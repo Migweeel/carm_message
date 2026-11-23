@@ -94,6 +94,8 @@ model User {
   sentMessages Message[] @relation("UserMessages")
   contentInteractions ContentInteraction[]
   passwordResetToken PasswordResetToken?
+
+  @@index([role, createdAt])
 }
 
 model OAuthIdentity {
@@ -257,6 +259,8 @@ model Update {
   publishedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([publishedAt])
 }
 
 model PageContent {
@@ -287,6 +291,8 @@ model FAQ {
   sortOrder  Int      @default(0)
   isPublished Boolean @default(true)
   updatedAt  DateTime @updatedAt
+
+  @@index([isPublished, sortOrder])
 }
 
 model AuditLog {
@@ -299,6 +305,7 @@ model AuditLog {
   meta      Json?
   createdAt DateTime @default(now())
 
+  @@index([createdAt])
   @@index([entity, createdAt])
   @@index([userId, createdAt])
 }

@@ -27,7 +27,7 @@ async function main() {
     throw new Error('ADMIN_PASSWORD must contain at least 16 characters.')
   }
   if (email && password) {
-    const passwordHash = await bcrypt.hash(password, 12)
+    const passwordHash = await bcrypt.hash(password, 10)
     await prisma.user.upsert({ where: { email }, update: { name: process.env.ADMIN_NAME || 'Federation Administrator', passwordHash, role: 'ADMIN', isActive: true }, create: { name: process.env.ADMIN_NAME || 'Federation Administrator', email, passwordHash, role: 'ADMIN' } })
   } else {
     console.warn('Admin seed credentials are unset; skipping admin account seed.')

@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import bcrypt from 'bcryptjs'
 import cookieParser from 'cookie-parser'
+import compression from 'compression'
 import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import rateLimit from 'express-rate-limit'
@@ -11,7 +12,7 @@ import { OAuth2Client } from 'google-auth-library'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { TextReader, TextWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader, ZipWriter } from '@zip.js/zip.js'
 import { z } from 'zod'
@@ -125,6 +126,7 @@ const backupEnumColumns: Record<string, Record<string, string>> = {
 
 app.disable('x-powered-by')
 app.set('trust proxy', 1)
+app.use(compression())
 app.use(helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
@@ -588,7 +590,7 @@ app.post('/api/auth/register', registrationEmailRateLimit, asyncRoute(async (req
     }
   }
 
-  const passwordHash = await bcrypt.hash(input.password, 12)
+  const passwordHash = await bcrypt.hash(input.password, 10)
   const code = String(randomInt(100_000, 1_000_000))
   const codeSalt = randomBytes(16).toString('hex')
   const codeHash = registrationCodeHash(input.email, codeSalt, code)
@@ -871,7 +873,7 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
 
     if (!existingAccount) {
       const name = (payload.name?.trim() || email.split('@')[0]).slice(0, 100)
-      const passwordHash = await bcrypt.hash(randomBytes(32).toString('base64url'), 12)
+      const passwordHash = await bcrypt.hash(randomBytes(32).toString('base64url'), 10)
       try {
         user = await prisma.user.create({
           data: {
@@ -1056,7 +1058,7 @@ app.post('/api/auth/facebook', asyncRoute(async (req, res) => {
 
     if (!existingAccount) {
       const name = (facebookProfile.name?.trim() || email.split('@')[0]).slice(0, 100)
-      const passwordHash = await bcrypt.hash(randomBytes(32).toString('base64url'), 12)
+      const passwordHash = await bcrypt.hash(randomBytes(32).toString('base64url'), 10)
       try {
         user = await prisma.user.create({
           data: {
@@ -1168,7 +1170,7 @@ app.post('/api/auth/password-reset/confirm', passwordResetRateLimit, asyncRoute(
     return res.status(400).json({ error: 'This password reset link is invalid or expired. Request a new one to continue.' })
   }
 
-  const passwordHash = await bcrypt.hash(parsed.data!.password, 12)
+  const passwordHash = await bcrypt.hash(parsed.data!.password, 10)
   const completed = await prisma.$transaction(async (transaction) => {
     const consumed = await transaction.passwordResetToken.deleteMany({
       where: { id: reset.id, expiresAt: { gt: new Date() } },
@@ -1213,7 +1215,7 @@ const profileUpdateSchema = z.object({
   gender: z.enum(['MALE', 'FEMALE', 'ANONYMOUS']).optional(),
   phone: z.string().trim().min(7).max(30).optional(),
   address: z.string().trim().min(5).max(300).optional(),
-  avatarImage: z.string().max(1_400_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/).nullable().optional(),
+  avatarImage: z.string().max(1_400_000).regex(/^data:image\/(?:jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/).nullable().optional(),
   currentPassword: z.string().optional(),
   newPassword: z.string().min(10).max(128).optional(),
 }).refine((input) => !input.newPassword || Boolean(input.currentPassword), { message: 'Enter your current password to set a new password.', path: ['currentPassword'] })
@@ -1230,7 +1232,7 @@ app.patch('/api/auth/me', authenticate, allowRoles('ADMIN', 'FORMATOR', 'USER'),
   if (input.address !== undefined) data.address = input.address
   if (input.avatarImage !== undefined) data.avatarImage = input.avatarImage
   if (input.newPassword) {
-    data.passwordHash = await bcrypt.hash(input.newPassword, 12)
+    data.passwordHash = await bcrypt.hash(input.newPassword, 10)
     data.sessionVersion = { increment: 1 }
     data.sessionExpiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
   }
@@ -2694,10 +2696,18 @@ app.get('/api/admin/donations', authenticate, allowRoles('ADMIN', 'FORMATOR'), a
       status: true,
       createdAt: true,
       beneficiaryMonastery: { select: { name: true } },
-      files: { select: { id: true, fileUrl: true, type: true, fileName: true, createdAt: true } },
+      files: { select: { id: true, type: true, fileName: true, createdAt: true } },
     },
   })
   res.json({ donations })
+}))
+app.get('/api/admin/donations/:id/files', authenticate, allowRoles('ADMIN', 'FORMATOR'), asyncRoute(async (req, res) => {
+  const donation = await prisma.donation.findUnique({
+    where: { id: routeParam(req, 'id') },
+    select: { files: { select: { id: true, fileUrl: true, type: true, fileName: true, createdAt: true } } },
+  })
+  if (!donation) return res.status(404).json({ error: 'Donation not found.' })
+  res.json({ files: donation.files })
 }))
 const manualDonationSchema = z.object({
   amount: z.coerce.number().finite().min(50).max(10000000),
@@ -2736,7 +2746,10 @@ app.post('/api/admin/donations', authenticate, allowRoles('ADMIN'), asyncRoute(a
       status: 'COMPLETED',
       ...(input.proof ? { files: { create: { fileUrl: input.proof.fileUrl, fileName: input.proof.fileName, type: input.proof.type } } } : {}),
     },
-    include: { files: true, beneficiaryMonastery: { select: { name: true } } },
+    include: {
+      files: { select: { id: true, type: true, fileName: true, createdAt: true } },
+      beneficiaryMonastery: { select: { name: true } },
+    },
   })
   await audit(req.auth!.id, 'RECORD_DONATION', 'Donation', donation.id, { referenceCode: donation.referenceCode, amount: input.amount })
   const receiptEmailSent = donation.wantsReceipt ? await sendDonationAcknowledgment(donation.referenceCode) : false
@@ -2801,7 +2814,7 @@ app.post('/api/admin/users/formators', authenticate, allowRoles('ADMIN'), asyncR
   if (parsed.error) return res.status(400).json({ error: 'Please check the Formator account details.', details: parsed.error })
   const input = parsed.data!
   try {
-    const passwordHash = await bcrypt.hash(input.password, 12)
+    const passwordHash = await bcrypt.hash(input.password, 10)
     const user = await prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
         data: {
@@ -2862,7 +2875,7 @@ app.post('/api/admin/users/:id/password', authenticate, asyncRoute(async (req, r
   const id = routeParam(req, 'id')
   const current = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true } })
   if (!current || (actor.role === 'FORMATOR' ? current.role !== 'USER' : current.role === 'ADMIN')) return res.status(404).json({ error: 'Managed account not found.' })
-  const passwordHash = await bcrypt.hash(parsed.data!.password, 12)
+  const passwordHash = await bcrypt.hash(parsed.data!.password, 10)
   await prisma.user.update({ where: { id }, data: { passwordHash, sessionVersion: { increment: 1 }, sessionExpiresAt: null } })
   await audit(actor.id, 'RESET_PASSWORD', 'User', id, { role: current.role })
   res.json({ message: 'Account password updated successfully.' })
@@ -3167,7 +3180,13 @@ app.get('/updates/:id', asyncRoute(async (req, res) => {
   }
   res.type('html').send(html)
 }))
-app.use(express.static(clientBuildDirectory))
+app.use(express.static(clientBuildDirectory, {
+  setHeaders(res, filePath) {
+    if (/-[A-Za-z0-9_-]{8,}\.[^.]+$/.test(basename(filePath))) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    }
+  },
+}))
 app.get('*', (req, res, next) => {
   if (req.path === '/api' || req.path.startsWith('/api/')) return next()
   res.sendFile(resolve(clientBuildDirectory, 'index.html'), (error) => {
