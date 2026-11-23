@@ -5004,16 +5004,37 @@ function ContentAdminPage() {
           {trainingResult.evaluation.available === false && <span> · Evaluation unavailable: {String(trainingResult.evaluation.reason || 'insufficient test data')}</span>}
         </div>}
         <div className="carmelights-analytics-stats">
-          <div><span>Teaching views</span><strong>{carmelightsAnalytics.totalViews.toLocaleString()}</strong></div>
-          <div><span>Consented member readers</span><strong>{carmelightsAnalytics.loggedInReaders.toLocaleString()}</strong></div>
-          <div><span>Current member bookmarks</span><strong>{carmelightsAnalytics.totalBookmarks.toLocaleString()}</strong></div>
+            <div className="carmelights-stat-views">
+              <span>Teaching views</span>
+              <strong>{carmelightsAnalytics.totalViews.toLocaleString()}</strong>
+              <small>30-day engagement</small>
+            </div>
+            <div className="carmelights-stat-readers">
+              <span>Consented member readers</span>
+              <strong>{carmelightsAnalytics.loggedInReaders.toLocaleString()}</strong>
+              <small>Privacy-consented members</small>
+            </div>
+            <div className="carmelights-stat-bookmarks">
+              <span>Current member bookmarks</span>
+              <strong>{carmelightsAnalytics.totalBookmarks.toLocaleString()}</strong>
+              <small>Saved teachings</small>
+            </div>
         </div>
         <div className="carmelights-popular">
           <h3>Most viewed teachings</h3>
-          {carmelightsAnalytics.teachings.length ? <ol>{carmelightsAnalytics.teachings.map((teaching) => <li key={teaching.id}>
-            <span><b>{teaching.title}</b><small>{teaching.author}</small></span>
-            <strong>{teaching.views.toLocaleString()} views <small>· {teaching.bookmarks.toLocaleString()} saved</small></strong>
-          </li>)}</ol> : <p>No teaching views have been recorded during this period.</p>}
+            {carmelightsAnalytics.teachings.length ? <ol>{carmelightsAnalytics.teachings.map((teaching, index) => {
+              const maxViews = Math.max(...carmelightsAnalytics.teachings.map((item) => item.views), 1)
+              const viewPercent = Math.max(8, Math.round(teaching.views / maxViews * 100))
+              return <li key={teaching.id}>
+                <span className="carmelights-popular-rank" aria-label={`Rank ${index + 1}`}>{index + 1}</span>
+                <span className="carmelights-popular-copy">
+                  <b>{teaching.title}</b>
+                  <small>{teaching.author}</small>
+                  <span className="carmelights-popular-bar" aria-hidden="true"><span style={{ width: `${viewPercent}%` }} /></span>
+                </span>
+                <strong>{teaching.views.toLocaleString()} views <small>· {teaching.bookmarks.toLocaleString()} saved</small></strong>
+              </li>
+            })}</ol> : <p>No teaching views have been recorded during this period.</p>}
         </div>
         <p className="carmelights-analytics-note">Views are counted when a teaching is opened and deduplicated by visitor or consented member per day. Individual reading histories are not shown here.</p>
       </>}
