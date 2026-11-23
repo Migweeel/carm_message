@@ -4,19 +4,19 @@ import { BrowserRouter, Link, Navigate, NavLink, Outlet, Route, Routes, useLocat
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, RotateCw, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
 import ImageWithLoader from './ImageWithLoader'
-import attractedByTheVeilImage from './assets/attracted-by-the-veil.jpg'
-import vocationHeroImage from '../../assets/image_carmelife/vocation-to-carmel.png'
-import seekingFaceImage from '../../assets/image_carmelife/seeking-the-face.png'
-import discerningImage from '../../assets/image_carmelife/Discerning-your-vocation.png'
-import practicalAidsImage from '../../assets/image_carmelife/practical-aids.png'
-import aboutAssemblyImage from '../../assets/images/landingcarm.png'
-import aboutOfficersImage from '../../assets/images/elected_officers.jpg'
-import aboutFlowerImage from '../../assets/images/aboutus_flower.png'
-import purposeOneImage from '../../assets/images/purpose1.png'
-import purposeTwoImage from '../../assets/images/purpose2.png'
-import purposeThreeImage from '../../assets/images/purpose3.png'
-import purposeFourImage from '../../assets/images/purpose4.png'
-import loginFloralImage from '../../assets/login/auth-floral.png'
+import attractedByTheVeilImage from './assets/attracted-by-the-veil.webp'
+import vocationHeroImage from '../../assets/image_carmelife/vocation-to-carmel.webp'
+import seekingFaceImage from '../../assets/image_carmelife/seeking-the-face.webp'
+import discerningImage from '../../assets/image_carmelife/Discerning-your-vocation.webp'
+import practicalAidsImage from '../../assets/image_carmelife/practical-aids.webp'
+import aboutAssemblyImage from '../../assets/images/landingcarm.webp'
+import aboutOfficersImage from '../../assets/images/elected_officers.webp'
+import aboutFlowerImage from '../../assets/images/aboutus_flower.webp'
+import purposeOneImage from '../../assets/images/purpose1.webp'
+import purposeTwoImage from '../../assets/images/purpose2.webp'
+import purposeThreeImage from '../../assets/images/purpose3.webp'
+import purposeFourImage from '../../assets/images/purpose4.webp'
+import loginFloralImage from '../../assets/login/auth-floral.webp'
 import './Carmel.css'
 import './header-overrides.css'
 import './monasteries-reference.css'
@@ -351,35 +351,36 @@ type ManagedContentSubset = 'monasteries' | 'carmelife' | 'carmelights' | 'conta
 type SiteUpdate = { id: string; title: string; date: string; category: string; image: string; body: string; video?: string }
 const monasteryCities = ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo', 'Bacolod', 'Cebu', 'Iloilo', 'Cagayan de Oro', 'Davao', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Zamboanga', 'Kuching']
 const monasteryAssetByCity: Record<string, string> = {
-  Angeles: '/assets/image_monasteries/Angeles_Carmel.jpg',
-  Bacolod: '/assets/image_monasteries/BACOLOD_CARMEL.jpg',
-  Baguio: '/assets/image_monasteries/Baguio_Carmel.jpg',
-  'Cagayan de Oro': '/assets/image_monasteries/CAGAYAN_DE_ORO_CARMEL.jpg',
-  Castillejos: '/assets/image_monasteries/CASTILLEJOS_CARMEL.jpg',
-  Cebu: '/assets/image_monasteries/CEBU_CARMEL.jpg',
-  Davao: '/assets/image_monasteries/DAVAO_CARMEL.jpg',
-  Gumaca: '/assets/image_monasteries/GUMACA_CARMEL.jpg',
-  Infanta: '/assets/image_monasteries/INFANTA_CARMEL.jpg',
-  Iloilo: '/assets/image_monasteries/JARO_CARMEL.jpg',
-  Jolo: '/assets/image_monasteries/JOLO_CARMEL.jpg',
-  Kuching: '/assets/image_monasteries/KUCHING_CARMEL.jpg',
-  Laoag: '/assets/image_monasteries/LAOAG_CARMEL.jpg',
-  Lipa: '/assets/image_monasteries/LIPA_CARMEL.jpg',
-  Lucena: '/assets/image_monasteries/LUCENA_CARMEL.jpg',
-  Malaybalay: '/assets/image_monasteries/MALAYBALAY_CARMEL.jpg',
-  Mati: '/assets/image_monasteries/MATI_CARMEL.jpg',
-  Naga: '/assets/image_monasteries/NAGA_ARMEL.jpg',
-  Ozamis: '/assets/image_monasteries/OZAMIZ_CARMEL.jpg',
-  'Quezon City': '/assets/image_monasteries/QUEZON_CITY_CARMEL.jpg',
-  'San Fernando': '/assets/image_monasteries/SAN_FERNANDO_LA_UNION_CARMEL.jpg',
-  'San Pablo': '/assets/image_monasteries/SAN_PABLO_CARMEL.jpg',
-  Zamboanga: '/assets/image_monasteries/ZAMBOANGA_CARMEL.jpg',
+  Angeles: '/assets/image_monasteries/Angeles_Carmel.webp',
+  Bacolod: '/assets/image_monasteries/BACOLOD_CARMEL.webp',
+  Baguio: '/assets/image_monasteries/Baguio_Carmel.webp',
+  'Cagayan de Oro': '/assets/image_monasteries/CAGAYAN_DE_ORO_CARMEL.webp',
+  Castillejos: '/assets/image_monasteries/CASTILLEJOS_CARMEL.webp',
+  Cebu: '/assets/image_monasteries/CEBU_CARMEL.webp',
+  Davao: '/assets/image_monasteries/DAVAO_CARMEL.webp',
+  Gumaca: '/assets/image_monasteries/GUMACA_CARMEL.webp',
+  Infanta: '/assets/image_monasteries/INFANTA_CARMEL.webp',
+  Iloilo: '/assets/image_monasteries/JARO_CARMEL.webp',
+  Jolo: '/assets/image_monasteries/JOLO_CARMEL.webp',
+  Kuching: '/assets/image_monasteries/KUCHING_CARMEL.webp',
+  Laoag: '/assets/image_monasteries/LAOAG_CARMEL.webp',
+  Lipa: '/assets/image_monasteries/LIPA_CARMEL.webp',
+  Lucena: '/assets/image_monasteries/LUCENA_CARMEL.webp',
+  Malaybalay: '/assets/image_monasteries/MALAYBALAY_CARMEL.webp',
+  Mati: '/assets/image_monasteries/MATI_CARMEL.webp',
+  Naga: '/assets/image_monasteries/NAGA_ARMEL.webp',
+  Ozamis: '/assets/image_monasteries/OZAMIZ_CARMEL.webp',
+  'Quezon City': '/assets/image_monasteries/QUEZON_CITY_CARMEL.webp',
+  'San Fernando': '/assets/image_monasteries/SAN_FERNANDO_LA_UNION_CARMEL.webp',
+  'San Pablo': '/assets/image_monasteries/SAN_PABLO_CARMEL.webp',
+  Zamboanga: '/assets/image_monasteries/ZAMBOANGA_CARMEL.webp',
 }
 function monasteryImageFor(monastery: Pick<ManagedMonastery, 'city' | 'image'>) {
   const optimizedImage = monasteryAssetByCity[monastery.city]
   if (!optimizedImage) return monastery.image || photo.chapel
-  const legacyImage = optimizedImage.replace(/\.jpg$/i, '.png')
-  return !monastery.image || monastery.image.includes('unsplash.com') || monastery.image.endsWith(legacyImage)
+  const legacyPng = optimizedImage.replace(/\.webp$/i, '.png')
+  const legacyJpeg = optimizedImage.replace(/\.webp$/i, '.jpg')
+  return !monastery.image || monastery.image.includes('unsplash.com') || monastery.image.endsWith(legacyPng) || monastery.image.endsWith(legacyJpeg)
     ? optimizedImage
     : monastery.image
 }
@@ -514,14 +515,14 @@ const monasteryFacebookByCity: Record<string, string> = {
 }
 const photo = {
   get hero() { return readManagedContent().homeHeroImage },
-  flower: 'https://images.unsplash.com/photo-1490750967868-88aa4486c946?auto=format&fit=crop&w=1200&q=85',
-  chapel: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=85',
-  garden: 'https://images.unsplash.com/photo-1497250681960-ef046c08a56e?auto=format&fit=crop&w=1200&q=85',
-  cosmos: 'https://images.unsplash.com/photo-1494972308805-463bc619d34e?auto=format&fit=crop&w=1800&q=85',
+  flower: 'https://images.unsplash.com/photo-1490750967868-88aa4486c946?auto=format&fit=crop&w=1000&q=78',
+  chapel: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1000&q=78',
+  garden: 'https://images.unsplash.com/photo-1497250681960-ef046c08a56e?auto=format&fit=crop&w=1000&q=78',
+  cosmos: 'https://images.unsplash.com/photo-1494972308805-463bc619d34e?auto=format&fit=crop&w=1400&q=78',
 }
 const legacyCarmelifeDemoIds = new Set(['life-listening', 'life-home', 'life-ordinary'])
 const defaultManagedContent: ManagedSiteContent = {
-  homeHeroImage: 'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=2000&q=85',
+  homeHeroImage: 'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=1600&q=78',
   aboutImages: {
     spirituality: photo.flower,
     assembly: aboutAssemblyImage,
@@ -570,7 +571,7 @@ const defaultManagedContent: ManagedSiteContent = {
     facebookLabel: 'Carmels in Communion on Facebook',
     facebookUrl: 'https://facebook.com',
     location: 'Brgy. Tongohin, Purok Nagsusumikap\nKarmelo, Infanta, Quezon',
-    heroImage: '/assets/images/contact-hero.jpg',
+    heroImage: '/assets/images/contact-hero.webp',
   },
   monasteries: monasteryCities.map((city, index) => ({ id: `monastery-${index}`, name: city === 'Iloilo' ? 'Jaro Carmel' : `${city} Carmel`, city, description: `A Carmelite community in ${city}${city === 'Kuching' ? ', Malaysia' : ', Philippines'}.`, image: monasteryAssetByCity[city] || [photo.chapel, photo.garden, photo.flower][index % 3] })),
   monasteriesVersion: 2,
@@ -861,7 +862,7 @@ function moveMemberData(oldEmail: string, newEmail: string) {
 function readMemberFavorites(email: string): string[] { try { return JSON.parse(localStorage.getItem(memberFavoriteKey(email)) || '[]') as string[] } catch { return [] } }
 
 function Brand({ light = false }: { light?: boolean }) {
-  return <Link to="/" className={`brand ${light ? 'brand-light' : ''}`}><span className="brand-mark" aria-hidden="true"><ImageWithLoader className="brand-image" src="/assets/logo.png" alt="" /></span><span className="brand-name">Carmels in Communion</span></Link>
+  return <Link to="/" className={`brand ${light ? 'brand-light' : ''}`}><span className="brand-mark" aria-hidden="true"><ImageWithLoader className="brand-image" src="/assets/logo.png" alt="" loading="eager" /></span><span className="brand-name">Carmels in Communion</span></Link>
 }
 const staffSessionUpdatedEvent = 'carmel-staff-session-updated'
 const siteSearchHistoryKey = 'carmel-site-search-history'
@@ -1345,7 +1346,7 @@ function SpiritualityPage() {
       lead: 'Jesus is our Divine Spouse and Intimate friend.',
       description: 'We live a life of allegiance to Him as we strive to imitate His life and serve Him with a pure heart and a good conscience.',
       citation: 'Rule and Constitutions 1:3',
-      image: '/assets/spirituality/christocentric.png',
+      image: '/assets/spirituality/christocentric.webp',
       imageAlt: 'Christ the Good Shepherd holding a lamb',
     },
     {
@@ -1355,7 +1356,7 @@ function SpiritualityPage() {
       lead: 'We belong to the Order of the Blessed Virgin Mary.',
       description: 'She is our mother, teacher and model in living our vows in the context of our contemplative vocation.',
       citation: 'Rule and Constitutions 3',
-      image: '/assets/spirituality/marian.png',
+      image: '/assets/spirituality/marian.webp',
       imageAlt: 'The Virgin Mary with the child Jesus',
     },
     {
@@ -1365,7 +1366,7 @@ function SpiritualityPage() {
       lead: 'We belong to the race of the Holy prophets of Mount Carmel.',
       description: 'We look up to St. Elijah as our spiritual father and regard him as inspiration in our contemplative and prophetic vocation.',
       citation: 'Rule and Constitutions 1:1-2',
-      image: '/assets/spirituality/biblical.png',
+      image: '/assets/spirituality/biblical.webp',
       imageAlt: 'An icon of the prophet Elijah',
     },
     {
@@ -1375,7 +1376,7 @@ function SpiritualityPage() {
       lead: 'Our prayer, retirement, and the entire life are directed toward the service of the Church.',
       description: 'We reside in the heart of the Church, aligned with the mind and inspiration of St. Teresa of Avila.',
       citation: 'Rule and Constitutions 1:5',
-      image: '/assets/spirituality/ecclesial.png',
+      image: '/assets/spirituality/ecclesial.webp',
       imageAlt: 'An icon of Pentecost, with Mary and the apostles',
     },
   ]
@@ -1443,12 +1444,12 @@ function updateDateInputValue(value: string) {
   return `${parsed.getFullYear()}-${month}-${day}`
 }
 const defaultSiteUpdates: SiteUpdate[] = [
-  { id: 'jaro-centenary', title: 'Jaro Carmel Celebrates 100 Years of Carmelite Presence in the Philippines', date: '2026-10-01', category: 'Anniversaries', image: '/assets/updates-reference/jaro-centenary.jpg', body: 'Jaro Carmel celebrated her 100 years of Foundation Anniversary.' },
-  { id: 'papal-address', title: 'Address of Pope Francis to the Superiors and Delegates of the Carmelite Nuns', date: '2026-09-15', category: 'Meeting', image: '/assets/updates-reference/papal-address.jpg', body: 'Pope Francis delivered his address to the Superiors and Delegates of the Discalced Carmelite Nuns.' },
-  { id: 'cebu-anniversary', title: 'Address of Pope Francis to the Superiors and Delegates of the Carmelite Nuns', date: '2026-09-01', category: 'Anniversaries', image: '/assets/updates-reference/cebu-anniversary.jpg', body: 'Cebu Carmel celebrates its 75th Foundation Anniversary.' },
-  { id: 'assumpta-bacay', title: 'Mo. Assumpta Bacay, OCD of Angeles Carmel dies at 91', date: '2026-08-18', category: 'Anniversaries', image: '/assets/updates-reference/assumpta-bacay.jpg', body: 'Mo. Assumpta of the Holy Rosary, OCD (Bacay), the lone surviving foundress of Angeles Carmel, Pampanga died at the age of 91.' },
-  { id: 'cecile-pabilona', title: 'Sr. Cecile Pabilona OCD of Jaro Carmel dies at the age of 84', date: '2026-08-03', category: 'Anniversaries', image: '/assets/updates-reference/cecile-pabilona.jpg', body: 'Sr. Mary Cecile of the Holy Trinity, OCD (Pabilona), of Jaro Carmel, died at the age of 87.' },
-  { id: 'khristel-jubilee', title: 'Sr. Khristel of Baguio Carmel celebrates 25 years of consecrated life', date: '2026-07-16', category: 'Anniversaries', image: '/assets/updates-reference/khristel-jubilee.jpg', body: 'Sr. Marie Therese Eleanor of Our Father in heaven celebrated her Silver Jubilee of Religious Life.' },
+  { id: 'jaro-centenary', title: 'Jaro Carmel Celebrates 100 Years of Carmelite Presence in the Philippines', date: '2026-10-01', category: 'Anniversaries', image: '/assets/updates-reference/jaro-centenary.webp', body: 'Jaro Carmel celebrated her 100 years of Foundation Anniversary.' },
+  { id: 'papal-address', title: 'Address of Pope Francis to the Superiors and Delegates of the Carmelite Nuns', date: '2026-09-15', category: 'Meeting', image: '/assets/updates-reference/papal-address.webp', body: 'Pope Francis delivered his address to the Superiors and Delegates of the Discalced Carmelite Nuns.' },
+  { id: 'cebu-anniversary', title: 'Address of Pope Francis to the Superiors and Delegates of the Carmelite Nuns', date: '2026-09-01', category: 'Anniversaries', image: '/assets/updates-reference/cebu-anniversary.webp', body: 'Cebu Carmel celebrates its 75th Foundation Anniversary.' },
+  { id: 'assumpta-bacay', title: 'Mo. Assumpta Bacay, OCD of Angeles Carmel dies at 91', date: '2026-08-18', category: 'Anniversaries', image: '/assets/updates-reference/assumpta-bacay.webp', body: 'Mo. Assumpta of the Holy Rosary, OCD (Bacay), the lone surviving foundress of Angeles Carmel, Pampanga died at the age of 91.' },
+  { id: 'cecile-pabilona', title: 'Sr. Cecile Pabilona OCD of Jaro Carmel dies at the age of 84', date: '2026-08-03', category: 'Anniversaries', image: '/assets/updates-reference/cecile-pabilona.webp', body: 'Sr. Mary Cecile of the Holy Trinity, OCD (Pabilona), of Jaro Carmel, died at the age of 87.' },
+  { id: 'khristel-jubilee', title: 'Sr. Khristel of Baguio Carmel celebrates 25 years of consecrated life', date: '2026-07-16', category: 'Anniversaries', image: '/assets/updates-reference/khristel-jubilee.webp', body: 'Sr. Marie Therese Eleanor of Our Father in heaven celebrated her Silver Jubilee of Religious Life.' },
 ]
 const prototypeUpdatesKey = 'carmel-prototype-updates'
 const legacySiteUpdates: SiteUpdate[] = [
@@ -1749,7 +1750,7 @@ function CarmelifePage() {
   }
   return <div className="carmelife-page">
     <section className="life-hero">
-      <ImageWithLoader src={vocationHeroImage} alt="Archway in a Carmelite monastery cloister" />
+      <ImageWithLoader src={vocationHeroImage} alt="Archway in a Carmelite monastery cloister" loading="eager" fetchPriority="high" />
       <div className="life-hero-overlay" />
       <h1>Vocation to Carmel</h1>
     </section>
@@ -3457,16 +3458,18 @@ async function optimizeUploadedImage(file: File, maxBytes?: number) {
     const canvas = document.createElement('canvas')
     const context = canvas.getContext('2d')
     if (!context) throw new Error('The image could not be optimized in this browser.')
+    const createBlob = (type: string) => new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((result) => {
+        if (result) resolve(result)
+        else reject(new Error('The optimized image could not be created.'))
+      }, type, quality)
+    })
     while (true) {
       canvas.width = width
       canvas.height = height
       context.drawImage(image, 0, 0, width, height)
-      blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((result) => {
-          if (result) resolve(result)
-          else reject(new Error('The optimized image could not be created.'))
-        }, 'image/jpeg', quality)
-      })
+      const webpBlob = await createBlob('image/webp')
+      blob = webpBlob.type === 'image/webp' ? webpBlob : await createBlob('image/jpeg')
       if (!maxBytes || blob.size <= maxBytes) break
       if (quality > 0.52) {
         quality = Math.max(0.5, quality - 0.1)

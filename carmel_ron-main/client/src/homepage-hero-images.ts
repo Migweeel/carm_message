@@ -1,6 +1,6 @@
 export const homepageHeroImagesCacheKey = 'carmel-home-hero-images-v3'
 export const legacyHomepageHeroImageCacheKey = 'carmel-home-hero-image-v2'
-export const homepageHeroImageFallback = '/assets/images/home-hero.jpg'
+export const homepageHeroImageFallback = '/assets/images/home-hero.webp'
 const maxHomepageHeroImagesCacheLength = 2_000_000
 
 export function getHomepageHeroImages(blocks: unknown): string[] {
