@@ -1867,21 +1867,21 @@ function CarmelifePage() {
       </div>
     </section>
 
+    <section className="life-section life-stories-section">
+      <div className="centered-life-heading"><h2>Stories from <em>Carmel</em></h2><p>Read reflections and vocation stories shared by our sisters.</p></div>
+      {isLoading ? <p role="status">Loading stories…</p> : !isReady ? <p className="form-error" role="alert">Stories could not be loaded. Please refresh.</p> : featuredArticles.length ? <div className="life-card-grid">{featuredArticles.map((article) => <article className="life-card" key={article.id}><ImageWithLoader src={articleImageFor(article.image, seekingFaceImage)} alt={article.title} /><div><small>{article.author || 'CARMELITE LIFE'}</small><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button type="button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story &rarr;</button></div></article>)}</div> : <p className="content-empty">New entries will appear here when published.</p>}
+      <Link className="button button-outline life-stories-more" to="/carmelife/stories">View more stories <ArrowRight size={15} /></Link>
+    </section>
+
     <section className="life-section discernment-section-life" id="discernment">
-      <h2>Discerning your <em>vocation</em></h2>
       <div className="wide-life-image"><ImageWithLoader src={discerningImage} alt="A person kneeling in prayer in a chapel" /></div>
+      <h2>Discerning your <em>vocation</em></h2>
       <div className="discernment-copy">
         <h3>“Is God calling me to be a Carmelite nun?”</h3>
         <p>Do you find yourself asking this question? Does the thought of “What If?” keep recurring in your mind like a Last Song Syndrome (LSS)? Does the thought of becoming a Carmelite nun pursue you like a persistent lover?</p>
         <p>Vocation comes from the Latin word, “vocare”, meaning “To call”. The God who called the prophet Elijah to a sacred encounter with him on Mount Horeb; St. Teresa to walk the way of perfection; St. John of the Cross to ascend the heights of Mount Carmel, and St. Therese of the Child Jesus to be love in the heart of the church continues to call.</p>
         <p>Like a persistent lover, God continues to pursue. You only need to be still, silent and to listen to His voice in your heart to know if He is calling you. You need to discern if indeed, God is calling you to be a Carmelite nun.</p>
       </div>
-    </section>
-
-    <section className="life-section life-stories-section">
-      <div className="centered-life-heading"><h2>Stories from <em>Carmel</em></h2><p>Read reflections and vocation stories shared by our sisters.</p></div>
-      {isLoading ? <p role="status">Loading stories…</p> : !isReady ? <p className="form-error" role="alert">Stories could not be loaded. Please refresh.</p> : featuredArticles.length ? <div className="life-card-grid">{featuredArticles.map((article) => <article className="life-card" key={article.id}><ImageWithLoader src={articleImageFor(article.image, seekingFaceImage)} alt={article.title} /><div><small>{article.author || 'CARMELITE LIFE'}</small><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button type="button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story &rarr;</button></div></article>)}</div> : <p className="content-empty">New entries will appear here when published.</p>}
-      <Link className="button button-outline life-stories-more" to="/carmelife/stories">View more stories <ArrowRight size={15} /></Link>
     </section>
 
     <section className="life-slider-quote" aria-label="Vocation quotes" onTouchStart={startQuoteSwipe} onTouchEnd={endQuoteSwipe} onTouchCancel={() => { quoteTouchStart.current = null }}>

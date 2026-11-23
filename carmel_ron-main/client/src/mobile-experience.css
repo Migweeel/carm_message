@@ -693,6 +693,10 @@
     text-align: left;
   }
 
+  .carmelife-page .discernment-section-life > h2 {
+    text-align: center;
+  }
+
   .carmelife-page .life-prose {
     margin-top: 14px;
   }
@@ -734,6 +738,10 @@
     height: auto;
     aspect-ratio: 4 / 3;
     border-radius: 12px;
+  }
+
+  .carmelife-page .discernment-section-life > h2 {
+    margin: 20px 0;
   }
 
   .carmelife-page .discernment-copy {
