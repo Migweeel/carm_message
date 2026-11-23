@@ -1,27 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import ImageWithLoader from './ImageWithLoader'
 import { homeSectionCards, type HomeSectionKey } from './home-section-cards'
-import { cacheHomepageHeroImages, getHomepageHeroImages, homepageHeroImageFallback, readCachedHomepageHeroImages } from './homepage-hero-images'
+import { cacheHomepageHeroImages, getHomepageHeroImages, homepageHeroImageFallback } from './homepage-hero-images'
 import './homepage-reference.css'
 
 const cities = ['Angeles', 'Bacolod', 'Baguio', 'Cagayan de Oro', 'Castillejos', 'Cebu', 'Davao', 'Gumaca', 'Infanta']
 const maxInlineHeroImageLength = 350_000
 
-export default function HomepageReference({ useLocalImageCache = false }: { useLocalImageCache?: boolean }) {
+export default function HomepageReference() {
   const cards = useRef<HTMLDivElement>(null)
-  const [heroImages, setHeroImages] = useState(() => useLocalImageCache ? readCachedHomepageHeroImages() : [homepageHeroImageFallback])
+  const [heroImages, setHeroImages] = useState<string[]>([])
+  const [heroImageLoading, setHeroImageLoading] = useState(true)
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
   const [activeCardIndex, setActiveCardIndex] = useState(0)
-  const [sectionImages, setSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>(() => {
-    if (!useLocalImageCache) return {}
-    try {
-      return JSON.parse(localStorage.getItem('carmel-home-section-images-v2') || '{}') as Partial<Record<HomeSectionKey, string>>
-    } catch (error) {
-      console.error('Unable to read local homepage thumbnails.', error)
-      return {}
-    }
-  })
+  const [sectionImages, setSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>({})
+  const [sectionImagesReady, setSectionImagesReady] = useState(false)
+  const [sectionImagesLoading, setSectionImagesLoading] = useState(true)
 
   function scrollCards(direction: number) {
     cards.current?.scrollBy({ left: direction * 280, behavior: 'smooth' })
@@ -55,27 +51,35 @@ export default function HomepageReference({ useLocalImageCache = false }: { useL
     setActiveCardIndex((current) => current === closestIndex ? current : closestIndex)
   }
 
-  const activeHeroImage = heroImages[activeHeroIndex] || homepageHeroImageFallback
+  const activeHeroImage = heroImages[activeHeroIndex]
 
   useEffect(() => {
     let active = true
     let requestGeneration = 0
     async function loadHeroImage() {
       const currentRequest = ++requestGeneration
+      setHeroImages([])
+      setHeroImageLoading(true)
+      setActiveHeroIndex(0)
       try {
         const response = await fetch('/api/content/HOME_HERO_IMAGE', { cache: 'no-store' })
-        if (response.status === 404) return
+        if (response.status === 404) {
+          if (active && currentRequest === requestGeneration) setHeroImages([homepageHeroImageFallback])
+          return
+        }
         if (!response.ok) throw new Error('The saved homepage image could not be loaded.')
         const result: { content?: { blocks?: unknown } } = await response.json()
         const savedImages = getHomepageHeroImages(result.content?.blocks)
         const displayImages = savedImages.filter((image) => !image.startsWith('data:image/') || image.length <= maxInlineHeroImageLength)
         if (active && currentRequest === requestGeneration) {
-          setHeroImages(displayImages)
+          setHeroImages(displayImages.length ? displayImages : [homepageHeroImageFallback])
           setActiveHeroIndex(0)
-          cacheHomepageHeroImages(displayImages)
+          cacheHomepageHeroImages(displayImages.length ? displayImages : [homepageHeroImageFallback])
         }
       } catch (error) {
         if (active && currentRequest === requestGeneration) console.error('Unable to load the saved homepage image.', error)
+      } finally {
+        if (active && currentRequest === requestGeneration) setHeroImageLoading(false)
       }
     }
     void loadHeroImage()
@@ -107,10 +111,13 @@ export default function HomepageReference({ useLocalImageCache = false }: { useL
     let requestGeneration = 0
     async function loadSectionImages() {
       const currentRequest = ++requestGeneration
+      setSectionImages({})
+      setSectionImagesReady(false)
+      setSectionImagesLoading(true)
       try {
         const response = await fetch('/api/content/HOME_SECTION_IMAGES', { cache: 'no-store' })
         if (response.status === 404) {
-          if (!useLocalImageCache && active && currentRequest === requestGeneration) setSectionImages({})
+          if (active && currentRequest === requestGeneration) setSectionImagesReady(true)
           return
         }
         if (!response.ok) throw new Error('The saved homepage thumbnails could not be loaded.')
@@ -123,9 +130,14 @@ export default function HomepageReference({ useLocalImageCache = false }: { useL
           if (typeof savedImage === 'string' && savedImage.trim()) saved[card.key] = savedImage
           return saved
         }, {})
-        if (active && currentRequest === requestGeneration) setSectionImages(images)
+        if (active && currentRequest === requestGeneration) {
+          setSectionImages(images)
+          setSectionImagesReady(true)
+        }
       } catch (error) {
         if (active && currentRequest === requestGeneration) console.error('Unable to load saved homepage thumbnails.', error)
+      } finally {
+        if (active && currentRequest === requestGeneration) setSectionImagesLoading(false)
       }
     }
     void loadSectionImages()
@@ -136,11 +148,11 @@ export default function HomepageReference({ useLocalImageCache = false }: { useL
       window.removeEventListener('carmel-home-section-images-updated', loadSectionImages)
       window.removeEventListener('focus', loadSectionImages)
     }
-  }, [useLocalImageCache])
+  }, [])
 
   return <div className="reference-home">
     <section className="reference-hero" id="home">
-      <img key={activeHeroImage} className="reference-hero-image" src={activeHeroImage} alt="" aria-hidden="true" loading={activeHeroIndex === 0 ? 'eager' : 'lazy'} fetchPriority={activeHeroIndex === 0 ? 'high' : 'auto'} decoding="async" />
+      <ImageWithLoader key={activeHeroImage || 'hero-pending'} className="reference-hero-image" src={activeHeroImage} pending={heroImageLoading} alt="" aria-hidden="true" loading={activeHeroIndex === 0 ? 'eager' : 'lazy'} fetchPriority={activeHeroIndex === 0 ? 'high' : 'auto'} decoding="async" />
       <div className="reference-hero-overlay" />
       <div className="reference-hero-content">
         <p className="reference-kicker">A HOME FOR THE SEEKING HEART</p>
@@ -150,8 +162,8 @@ export default function HomepageReference({ useLocalImageCache = false }: { useL
       </div>
     </section>
     <section className="reference-ticker"><strong>Philippine Federation of Discalced Carmelite Nuns</strong><div className="reference-ticker-window"><div className="reference-ticker-track">{cities.map((city) => <span key={city}>{city}<i>·</i></span>)}{cities.map((city) => <span key={`duplicate-${city}`} aria-hidden="true">{city}<i>·</i></span>)}</div></div></section>
-    <section className="reference-discernment"><img src="/assets/images/whiteflowers.jpg" alt="White flowers in a garden" loading="lazy" decoding="async" /><div><h2>Is <b>GOD</b> calling you to be a<br /> Discalced Carmelite Nun?</h2><p>Are you discerning if God is calling you to Carmel? Let us assist you in your discernment as you explore the pages of this site.</p><Link className="reference-primary" to="/monasteries">Meet Our Monasteries</Link></div></section>
-    <section className="reference-explore" id="home-explore"><div className="reference-explore-heading"><div><p className="reference-kicker">FIND YOUR WAY IN</p><h2>Explore</h2></div><p>Learn about our charism, communities, and the women who have found a home in Carmel.</p></div><div className="reference-carousel"><button type="button" onClick={() => scrollCards(-1)} aria-label="Scroll left"><ArrowLeft size={18} /></button><div className="reference-cards" ref={cards} onScroll={updateActiveCard}>{homeSectionCards.map(({ key, label, title, to, image }) => <Link className="reference-card" key={key} to={to}><img src={sectionImages[key] || image} alt="" loading="lazy" decoding="async" /><span>{label}</span><div><h3>{title}</h3><b>Learn More <ArrowRight size={14} /></b></div></Link>)}</div><button type="button" onClick={() => scrollCards(1)} aria-label="Scroll right"><ArrowRight size={18} /></button></div><div className="reference-carousel-dots" role="group" aria-label="Explore categories">{homeSectionCards.map(({ key, label }, index) => <button key={key} type="button" className={index === activeCardIndex ? 'reference-carousel-dot is-active' : 'reference-carousel-dot'} aria-label={`Go to ${label.toLowerCase()} slide`} aria-current={index === activeCardIndex ? 'true' : undefined} onClick={() => scrollToCard(index)} />)}</div></section>
-    <section className="reference-quote"><img src="/assets/images/pinkflower.jpg" alt="Pink flower" loading="lazy" decoding="async" /><div><p>Carmel symbolizes prayer. More than a geographical place, it is a sacred space in the cloister of the heart where the Carmelite nun encounters God.</p><Link className="reference-secondary" to="/contact">Contact us</Link></div></section>
+    <section className="reference-discernment"><ImageWithLoader src="/assets/images/whiteflowers.jpg" alt="White flowers in a garden" loading="lazy" decoding="async" /><div><h2>Is <b>GOD</b> calling you to be a<br /> Discalced Carmelite Nun?</h2><p>Are you discerning if God is calling you to Carmel? Let us assist you in your discernment as you explore the pages of this site.</p><Link className="reference-primary" to="/monasteries">Meet Our Monasteries</Link></div></section>
+    <section className="reference-explore" id="home-explore"><div className="reference-explore-heading"><div><p className="reference-kicker">FIND YOUR WAY IN</p><h2>Explore</h2></div><p>Learn about our charism, communities, and the women who have found a home in Carmel.</p></div><div className="reference-carousel"><button type="button" onClick={() => scrollCards(-1)} aria-label="Scroll left"><ArrowLeft size={18} /></button><div className="reference-cards" ref={cards} onScroll={updateActiveCard}>{homeSectionCards.map(({ key, label, title, to, image }) => <Link className="reference-card" key={key} to={to}><ImageWithLoader src={sectionImagesReady ? sectionImages[key] || image : undefined} pending={sectionImagesLoading} alt="" loading="lazy" decoding="async" /><span>{label}</span><div><h3>{title}</h3><b>Learn More <ArrowRight size={14} /></b></div></Link>)}</div><button type="button" onClick={() => scrollCards(1)} aria-label="Scroll right"><ArrowRight size={18} /></button></div><div className="reference-carousel-dots" role="group" aria-label="Explore categories">{homeSectionCards.map(({ key, label }, index) => <button key={key} type="button" className={index === activeCardIndex ? 'reference-carousel-dot is-active' : 'reference-carousel-dot'} aria-label={`Go to ${label.toLowerCase()} slide`} aria-current={index === activeCardIndex ? 'true' : undefined} onClick={() => scrollToCard(index)} />)}</div></section>
+    <section className="reference-quote"><ImageWithLoader src="/assets/images/pinkflower.jpg" alt="Pink flower" loading="lazy" decoding="async" /><div><p>Carmel symbolizes prayer. More than a geographical place, it is a sacred space in the cloister of the heart where the Carmelite nun encounters God.</p><Link className="reference-secondary" to="/contact">Contact us</Link></div></section>
   </div>
 }

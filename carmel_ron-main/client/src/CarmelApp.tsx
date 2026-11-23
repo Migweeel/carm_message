@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { BrowserRouter, Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, RotateCw, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
+import ImageWithLoader from './ImageWithLoader'
 import attractedByTheVeilImage from './assets/attracted-by-the-veil.jpg'
 import vocationHeroImage from '../../assets/image_carmelife/vocation-to-carmel.png'
 import seekingFaceImage from '../../assets/image_carmelife/seeking-the-face.png'
@@ -281,7 +282,7 @@ function ImageCropInput({ onImage, currentImage, accept = 'image/*', ariaLabel =
         <header><button type="button" className="image-crop-back" aria-label="Cancel image adjustment" onClick={closeCrop}><ArrowLeft size={22} /></button><h2 id="image-crop-title">Crop &amp; rotate</h2><button type="button" className="image-crop-close" aria-label="Close image adjustment" onClick={closeCrop}><X size={20} /></button></header>
         <div className="image-crop-workspace">
           <div className="image-crop-stage" style={stage ? { width: stage.width, height: stage.height } : undefined} onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
-            <img ref={imagePreviewRef} src={previewUrl} alt="Image crop preview" draggable={false} onLoad={(event) => setDimensions({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setError('This image could not be opened for adjustment.')} style={frame && imageSize ? {
+            <ImageWithLoader ref={imagePreviewRef} src={previewUrl} alt="Image crop preview" draggable={false} onLoad={(event) => setDimensions({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setError('This image could not be opened for adjustment.')} style={frame && imageSize ? {
               width: rotation % 180 ? imageSize.height : imageSize.width,
               height: rotation % 180 ? imageSize.width : imageSize.height,
               transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) rotate(${rotation}deg) scale(${zoom})`,
@@ -345,6 +346,7 @@ type ManagedAboutText = {
 }
 type ManagedAboutImageKey = keyof Omit<ManagedAboutImages, 'assemblyCaption'>
 type ManagedSiteContent = { homeHeroImage: string; monasteries: ManagedMonastery[]; monasteriesVersion?: number; carmelife: ManagedArticle[]; carmelights: ManagedArticle[]; contactDetails: ManagedContactDetails; aboutImages: ManagedAboutImages; aboutText: ManagedAboutText }
+type ManagedSiteContentState = ManagedSiteContent & { isLoading: boolean; isReady: boolean }
 type ManagedContentSubset = 'monasteries' | 'carmelife' | 'carmelights' | 'contactDetails' | 'about' | 'search'
 type SiteUpdate = { id: string; title: string; date: string; category: string; image: string; body: string; video?: string }
 const monasteryCities = ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo', 'Bacolod', 'Cebu', 'Iloilo', 'Cagayan de Oro', 'Davao', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Zamboanga', 'Kuching']
@@ -386,17 +388,18 @@ function articleImageFor(image: string, fallback: string) {
   if (legacyPath === '/src/assets/attracted-by-the-veil.jpg') return attractedByTheVeilImage
   return image || fallback
 }
-function CarmelightsReadingDialog({ reading, fullView, onToggleFullView, onClose }: {
+function CarmelightsReadingDialog({ reading, fullView, onToggleFullView, onClose, imagePending = false }: {
   reading: ManagedArticle
   fullView: boolean
   onToggleFullView: () => void
   onClose: () => void
+  imagePending?: boolean
 }) {
   return <div className={`carmelights-reading-backdrop ${fullView ? 'carmelights-reading-backdrop-full-view' : ''}`} role="presentation" onClick={onClose}>
     <article className={`carmelights-reading-dialog ${fullView ? 'carmelights-reading-dialog-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={reading.title} onClick={(event) => event.stopPropagation()}>
       <button className="carmelights-reading-close" type="button" onClick={onClose} aria-label="Close quote"><X size={20} /></button>
       <div className="carmelights-reading-hero">
-        <img className="carmelights-reading-image" src={articleImageFor(reading.image, photo.chapel)} alt={reading.title} />
+        <ImageWithLoader className="carmelights-reading-image" src={imagePending ? undefined : articleImageFor(reading.image, photo.chapel)} pending={imagePending} alt={reading.title} />
       </div>
       <span className="carmelights-category-tag">{reading.category || 'Prayer'}</span>
       <span className="carmelights-reading-eyebrow">SAINTS’ QUOTE</span>
@@ -416,17 +419,18 @@ function CarmelightsReadingDialog({ reading, fullView, onToggleFullView, onClose
     </article>
   </div>
 }
-function CarmelifeReadingDialog({ reading, fullView, onToggleFullView, onClose, fallbackImage }: {
+function CarmelifeReadingDialog({ reading, fullView, onToggleFullView, onClose, fallbackImage, imagePending = false }: {
   reading: ManagedArticle
   fullView: boolean
   onToggleFullView: () => void
   onClose: () => void
   fallbackImage: string
+  imagePending?: boolean
 }) {
   return <div className={`story-modal-backdrop ${fullView ? 'story-modal-backdrop-full-view' : ''}`} role="presentation" onClick={onClose}>
     <article className={`story-modal ${fullView ? 'story-modal-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={reading.title} onClick={(event) => event.stopPropagation()}>
       <button className="story-modal-close" onClick={onClose} aria-label="Close story"><X size={18} /></button>
-      <img src={articleImageFor(reading.image, fallbackImage)} alt={reading.title} />
+      <ImageWithLoader src={imagePending ? undefined : articleImageFor(reading.image, fallbackImage)} pending={imagePending} alt={reading.title} />
       <div className="story-modal-body">
         <span className="eyebrow">{reading.author}</span>
         <h2>{reading.title}</h2>
@@ -702,33 +706,53 @@ async function saveManagedContentRecord(
     throw new Error(result.error || 'Website content could not be saved.')
   }
 }
-function useManagedContent(subset?: ManagedContentSubset) {
+function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentState {
   const [content, setContent] = useState<ManagedSiteContent>(readManagedContent)
+  const [loadState, setLoadState] = useState(() => ({
+    subset,
+    isLoading: !isLocalDemoSession(),
+    isReady: isLocalDemoSession(),
+  }))
+  const isLocalDemo = isLocalDemoSession()
+  const isLoading = !isLocalDemo && (loadState.subset !== subset || loadState.isLoading)
+  const isReady = isLocalDemo || (loadState.subset === subset && loadState.isReady)
   useEffect(() => {
     const refresh = (event?: Event) => {
       const eventContent = event instanceof CustomEvent ? event.detail as ManagedSiteContent | undefined : undefined
       setContent(eventContent || readManagedContent())
+      setLoadState({ subset, isLoading: false, isReady: true })
     }
     let active = true
     async function load() {
-      if (isLocalDemoSession()) return
+      if (isLocalDemoSession()) {
+        return
+      }
+      let ready = false
       try {
         const query = subset ? `?collection=${encodeURIComponent(subset)}` : ''
         const response = await fetch(`/api/content/SITE_MANAGED${query}`, { cache: 'no-store' })
-        if (response.status === 404) return
+        if (response.status === 404) {
+          ready = true
+          return
+        }
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Saved website content could not be loaded.')
-        if (active && result.content?.blocks) {
-          setContent({
-            ...defaultManagedContent,
-            ...result.content.blocks,
-            aboutImages: { ...defaultManagedContent.aboutImages, ...result.content.blocks.aboutImages },
-            aboutText: { ...defaultManagedContent.aboutText, ...result.content.blocks.aboutText },
-            contactDetails: { ...defaultManagedContent.contactDetails, ...result.content.blocks.contactDetails },
-          })
+        if (active) {
+          if (result.content?.blocks) {
+            setContent({
+              ...defaultManagedContent,
+              ...result.content.blocks,
+              aboutImages: { ...defaultManagedContent.aboutImages, ...result.content.blocks.aboutImages },
+              aboutText: { ...defaultManagedContent.aboutText, ...result.content.blocks.aboutText },
+              contactDetails: { ...defaultManagedContent.contactDetails, ...result.content.blocks.contactDetails },
+            })
+          }
+          ready = true
         }
       } catch (error) {
-        console.error('Unable to load saved website content.', error)
+        if (active) console.error('Unable to load saved website content.', error)
+      } finally {
+        if (active) setLoadState({ subset, isLoading: false, isReady: ready })
       }
     }
     void load()
@@ -736,7 +760,7 @@ function useManagedContent(subset?: ManagedContentSubset) {
     window.addEventListener(managedContentEvent, refresh)
     return () => { active = false; window.removeEventListener('storage', refresh); window.removeEventListener(managedContentEvent, refresh) }
   }, [subset])
-  return content
+  return { ...content, isLoading, isReady }
 }
 const money = (n: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(n)
 const memberSessionKey = 'carmel-member-session'
@@ -861,7 +885,7 @@ function moveMemberData(oldEmail: string, newEmail: string) {
 function readMemberFavorites(email: string): string[] { try { return JSON.parse(localStorage.getItem(memberFavoriteKey(email)) || '[]') as string[] } catch { return [] } }
 
 function Brand({ light = false }: { light?: boolean }) {
-  return <Link to="/" className={`brand ${light ? 'brand-light' : ''}`}><span className="brand-mark" aria-hidden="true"><img className="brand-image" src="/assets/logo.png" alt="" /></span><span className="brand-name">Carmels in Communion</span></Link>
+  return <Link to="/" className={`brand ${light ? 'brand-light' : ''}`}><span className="brand-mark" aria-hidden="true"><ImageWithLoader className="brand-image" src="/assets/logo.png" alt="" /></span><span className="brand-name">Carmels in Communion</span></Link>
 }
 const staffSessionUpdatedEvent = 'carmel-staff-session-updated'
 const siteSearchHistoryKey = 'carmel-site-search-history'
@@ -986,7 +1010,7 @@ function Navbar() {
           <button className="mobile-nav-close" type="button" aria-label="Close navigation" onClick={closeNavigation}><X size={19} /></button>
           {profile && <div className="mobile-nav-account">
             <button className="mobile-nav-account-toggle" type="button" aria-expanded={profileOpen} aria-controls="mobile-nav-account-links" onClick={() => setProfileOpen((value) => !value)}>
-              <i>{profile.avatarImage ? <img src={profile.avatarImage} alt="" /> : profile.name[0]?.toUpperCase()}</i>
+              <i>{profile.avatarImage ? <ImageWithLoader src={profile.avatarImage} alt="" /> : profile.name[0]?.toUpperCase()}</i>
               <span>{profile.name}<small>{profile.role === 'USER' ? 'My profile' : profile.role === 'ADMIN' ? 'Administrator' : 'Staff'}</small></span>
               <ChevronDown size={16} />
             </button>
@@ -1002,7 +1026,7 @@ function Navbar() {
           <button className="mobile-search-trigger icon-button" type="button" aria-label="Search this site" onClick={() => { setMobileSearchQuery(''); setMobileSearchOpen(true) }}><Search size={19} /></button>
           {profile ? <div className="member-profile-control">
             <button className="member-profile-trigger" type="button" aria-haspopup="menu" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)}>
-              <i>{profile.avatarImage ? <img src={profile.avatarImage} alt="" /> : profile.name[0]?.toUpperCase()}</i><span>{profile.name}<small>{profile.role === 'USER' ? 'My profile' : profile.role === 'ADMIN' ? 'Administrator' : 'Staff'}</small></span><ChevronDown size={14} />
+              <i>{profile.avatarImage ? <ImageWithLoader src={profile.avatarImage} alt="" /> : profile.name[0]?.toUpperCase()}</i><span>{profile.name}<small>{profile.role === 'USER' ? 'My profile' : profile.role === 'ADMIN' ? 'Administrator' : 'Staff'}</small></span><ChevronDown size={14} />
             </button>
             {profileOpen && <div className="member-profile-dropdown" role="menu">
               {accountMenuItems}
@@ -1211,7 +1235,7 @@ function ContactNotifier() {
 function PublicLayout({ children }: { children: ReactNode }) { return <><Navbar /><main>{children}</main><ContactNotifier /><Footer /></> }
 function HomePage() {
   const cards = [{ label: 'WHO WE ARE', title: 'The Federation', to: '/about', img: photo.chapel }, { label: 'OUR WAY OF LIFE', title: 'Vocation & Charism', to: '/carmelife', img: photo.garden }, { label: 'SAINTS’ TEACHINGS', title: 'Wisdom of the Saints', to: '/carmelights', img: photo.flower }, { label: 'FROM THE FEDERATION', title: 'News & Updates', to: '/updates', img: photo.cosmos }, { label: 'FIND YOUR CARMEL', title: 'Our Communities', to: '/monasteries', img: photo.hero }]
-  return <><section className="home-hero" style={{ backgroundImage: `linear-gradient(90deg,rgba(37,28,21,.19),rgba(37,28,21,.03)),url(${photo.hero})` }}><div className="hero-content"><span className="eyebrow eyebrow-light">A HOME FOR THE SEEKING HEART</span><h1>Carmels in<br /><em>Communion</em></h1><p>Welcome to the Philippine Federation of Discalced Carmelite Nuns, a family of communities sharing one contemplative heart.</p><div className="hero-buttons"><Link className="button button-gold" to="/about">Explore our story <ArrowRight size={16} /></Link><Link className="button button-glass" to="/monasteries">Meet our monasteries</Link></div></div><div className="hero-caption"><span>“Let nothing disturb you, let nothing frighten you.”</span><small>ST. TERESA OF AVILA</small></div></section><section className="marquee-wrap"><div className="marquee-label">Philippine Federation<br />of Discalced Carmelite Nuns</div><div className="marquee-window"><div className="marquee-track">{[...cities, ...cities].map((city, i) => <span key={`${city}-${i}`}>{city}<i>·</i></span>)}</div></div><ArrowRight size={18} /></section><section className="vocation-section section-wrap"><div className="vocation-image"><img src={photo.flower} alt="White flowers in a monastery garden" /><span className="image-note">A life held in prayer</span></div><div className="vocation-copy"><span className="eyebrow">A QUIET INVITATION</span><h2>Is <em>God</em> calling you to a life of prayer?</h2><p>There is a place for the listening heart. Discover the contemplative vocation and the sisters who make their home in Carmel.</p><Link className="text-link" to="/monasteries">Meet our monasteries <ArrowRight size={16} /></Link><div className="handwritten">Come and see <span>↗</span></div></div></section><section className="explore-section"><div className="section-wrap"><div className="section-heading-row"><div><span className="eyebrow">WALK WITH US</span><h2>Explore <em>Carmel</em></h2></div><p>Are you discerning if God is calling you to Carmel? Let us assist you.</p></div><div className="explore-grid">{cards.map((card) => <Link className="explore-card" key={card.title} to={card.to} style={{ backgroundImage: `linear-gradient(180deg,transparent 10%,rgba(35,26,20,.8)),url(${card.img})` }}><span>{card.label}</span><div><h3>{card.title}</h3><b>Learn more <ArrowRight size={14} /></b></div></Link>)}</div></div></section><section className="quote-banner" style={{ backgroundImage: `linear-gradient(90deg,rgba(43,32,24,.15),rgba(43,32,24,.78)),url(${photo.cosmos})` }}><div className="quote-content"><span className="quote-mark">“</span><p>Carmel is not merely a geographical place, but a sacred space in the cloister of the heart where the Carmelite nun encounters God.</p><Link className="button button-light" to="/contact">We’d love to hear from you <ArrowRight size={15} /></Link></div></section></>
+  return <><section className="home-hero" style={{ backgroundImage: `linear-gradient(90deg,rgba(37,28,21,.19),rgba(37,28,21,.03)),url(${photo.hero})` }}><div className="hero-content"><span className="eyebrow eyebrow-light">A HOME FOR THE SEEKING HEART</span><h1>Carmels in<br /><em>Communion</em></h1><p>Welcome to the Philippine Federation of Discalced Carmelite Nuns, a family of communities sharing one contemplative heart.</p><div className="hero-buttons"><Link className="button button-gold" to="/about">Explore our story <ArrowRight size={16} /></Link><Link className="button button-glass" to="/monasteries">Meet our monasteries</Link></div></div><div className="hero-caption"><span>“Let nothing disturb you, let nothing frighten you.”</span><small>ST. TERESA OF AVILA</small></div></section><section className="marquee-wrap"><div className="marquee-label">Philippine Federation<br />of Discalced Carmelite Nuns</div><div className="marquee-window"><div className="marquee-track">{[...cities, ...cities].map((city, i) => <span key={`${city}-${i}`}>{city}<i>·</i></span>)}</div></div><ArrowRight size={18} /></section><section className="vocation-section section-wrap"><div className="vocation-image"><ImageWithLoader src={photo.flower} alt="White flowers in a monastery garden" /><span className="image-note">A life held in prayer</span></div><div className="vocation-copy"><span className="eyebrow">A QUIET INVITATION</span><h2>Is <em>God</em> calling you to a life of prayer?</h2><p>There is a place for the listening heart. Discover the contemplative vocation and the sisters who make their home in Carmel.</p><Link className="text-link" to="/monasteries">Meet our monasteries <ArrowRight size={16} /></Link><div className="handwritten">Come and see <span>↗</span></div></div></section><section className="explore-section"><div className="section-wrap"><div className="section-heading-row"><div><span className="eyebrow">WALK WITH US</span><h2>Explore <em>Carmel</em></h2></div><p>Are you discerning if God is calling you to Carmel? Let us assist you.</p></div><div className="explore-grid">{cards.map((card) => <Link className="explore-card" key={card.title} to={card.to} style={{ backgroundImage: `linear-gradient(180deg,transparent 10%,rgba(35,26,20,.8)),url(${card.img})` }}><span>{card.label}</span><div><h3>{card.title}</h3><b>Learn more <ArrowRight size={14} /></b></div></Link>)}</div></div></section><section className="quote-banner" style={{ backgroundImage: `linear-gradient(90deg,rgba(43,32,24,.15),rgba(43,32,24,.78)),url(${photo.cosmos})` }}><div className="quote-content"><span className="quote-mark">“</span><p>Carmel is not merely a geographical place, but a sacred space in the cloister of the heart where the Carmelite nun encounters God.</p><Link className="button button-light" to="/contact">We’d love to hear from you <ArrowRight size={15} /></Link></div></section></>
 }
 void HomePage
 const aboutImageFields: Array<{ key: ManagedAboutImageKey; label: string }> = [
@@ -1256,7 +1280,7 @@ const aboutTextFields: Array<{ key: keyof ManagedAboutText; label: string; rows?
   { key: 'quoteAlt', label: 'Quote image alternative text' },
 ]
 function AboutPage() {
-  const { aboutImages, aboutText } = useManagedContent('about')
+  const { aboutImages, aboutText, isLoading, isReady } = useManagedContent('about')
   const purposeImages = [aboutImages.purposeOne, aboutImages.purposeTwo, aboutImages.purposeThree, aboutImages.purposeFour]
   const purposes = [aboutText.purposeOne, aboutText.purposeTwo, aboutText.purposeThree, aboutText.purposeFour]
   return <div className="about-reference">
@@ -1287,7 +1311,7 @@ function AboutPage() {
         <span>{aboutText.spiritualitySignoff}</span>
       </div>
       <Link to="/spirituality" className="about-reference-spirituality-card">
-        <img src={aboutImages.spirituality} alt={aboutText.spiritualityAlt} />
+        <ImageWithLoader src={isReady ? aboutImages.spirituality : undefined} pending={isLoading} alt={aboutText.spiritualityAlt} />
         <span className="about-reference-spirituality-overlay" />
         <span className="about-reference-spirituality-title">{aboutText.spiritualityCardTitle}</span>
         <span className="about-reference-spirituality-link">{aboutText.spiritualityCardLink} <ArrowRight size={13} /></span>
@@ -1296,14 +1320,14 @@ function AboutPage() {
 
     <section className="about-reference-photo-section">
       <div className="about-reference-container">
-        <img src={aboutImages.assembly} alt={aboutText.assemblyAlt} />
+        <ImageWithLoader src={isReady ? aboutImages.assembly : undefined} pending={isLoading} alt={aboutText.assemblyAlt} />
         <p>{aboutText.assemblyCaption.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
       </div>
     </section>
 
     <section className="about-reference-photo-section about-reference-officers">
       <div className="about-reference-container">
-        <img src={aboutImages.officers} alt={aboutText.officersAlt} />
+        <ImageWithLoader src={isReady ? aboutImages.officers : undefined} pending={isLoading} alt={aboutText.officersAlt} />
         <p>{aboutText.officersCaption.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
       </div>
     </section>
@@ -1317,14 +1341,14 @@ function AboutPage() {
         </header>
         <div className="about-reference-purpose-grid">
           {purposes.map((purpose, index) => <article className="about-reference-purpose-card" key={index}>
-            <div className="about-reference-purpose-image"><img src={purposeImages[index]} alt={[aboutText.purposeOneAlt, aboutText.purposeTwoAlt, aboutText.purposeThreeAlt, aboutText.purposeFourAlt][index]} /></div>
+            <div className="about-reference-purpose-image"><ImageWithLoader src={isReady ? purposeImages[index] : undefined} pending={isLoading} alt={[aboutText.purposeOneAlt, aboutText.purposeTwoAlt, aboutText.purposeThreeAlt, aboutText.purposeFourAlt][index]} /></div>
             <span className={`about-reference-purpose-accent accent-${index + 1}`} />
             <div className="about-reference-purpose-content"><b>{String(index + 1).padStart(2, '0')}</b><p>{purpose}</p></div>
           </article>)}
         </div>
       </div>
       <div className="about-reference-quote">
-        <div className="about-reference-quote-image"><img src={aboutImages.quote} alt={aboutText.quoteAlt} /></div>
+        <div className="about-reference-quote-image"><ImageWithLoader src={isReady ? aboutImages.quote : undefined} pending={isLoading} alt={aboutText.quoteAlt} /></div>
         <div className="about-reference-quote-content">
           <span className="about-reference-quote-mark">&quot;</span>
           <blockquote>{aboutText.quoteText.split('\n').map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</blockquote>
@@ -1390,14 +1414,14 @@ function SpiritualityPage() {
         <p>{principle.description}</p>
         <small>{principle.citation}</small>
       </div>
-      <img src={principle.image} alt={principle.imageAlt} />
+      <ImageWithLoader src={principle.image} alt={principle.imageAlt} />
     </article>)}
   </section>
 }
 function LegacyMonasteriesPage() {
   const [query, setQuery] = useState('')
   const places = [...cities, 'Iloilo', 'Lipa', 'Manila', 'Lucena', 'Ozamis', 'Tuguegarao', 'Zamboanga', 'Tagaytay', 'Quezon City', 'Cebu City', 'Cotabato', 'Antipolo', 'San Jose']
-  return <section className="content-page section-wrap"><span className="eyebrow">FIND A COMMUNITY</span><h1>Our <em>Monasteries</em></h1><p className="page-lead">Twenty-three communities, one contemplative family. Find a Carmel near you.</p><label className="field-search"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by city" /></label><div className="monastery-grid">{places.filter((place) => place.toLowerCase().includes(query.toLowerCase())).map((place, i) => <article className="monastery-card" key={place}><img src={[photo.chapel, photo.garden, photo.hero][i % 3]} alt={`Monastery near ${place}`} /><div><span className="eyebrow">CARMEL IN THE PHILIPPINES</span><h3>Our Lady of {['Mount Carmel', 'the Rosary', 'Grace'][i % 3]}</h3><p>{place}, Philippines</p><a href="mailto:ocdnuns.vocpromph@gmail.com" className="text-link">Contact community <ArrowRight size={15} /></a></div></article>)}</div></section>
+  return <section className="content-page section-wrap"><span className="eyebrow">FIND A COMMUNITY</span><h1>Our <em>Monasteries</em></h1><p className="page-lead">Twenty-three communities, one contemplative family. Find a Carmel near you.</p><label className="field-search"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by city" /></label><div className="monastery-grid">{places.filter((place) => place.toLowerCase().includes(query.toLowerCase())).map((place, i) => <article className="monastery-card" key={place}><ImageWithLoader src={[photo.chapel, photo.garden, photo.hero][i % 3]} alt={`Monastery near ${place}`} /><div><span className="eyebrow">CARMEL IN THE PHILIPPINES</span><h3>Our Lady of {['Mount Carmel', 'the Rosary', 'Grace'][i % 3]}</h3><p>{place}, Philippines</p><a href="mailto:ocdnuns.vocpromph@gmail.com" className="text-link">Contact community <ArrowRight size={15} /></a></div></article>)}</div></section>
 }
 function MonasteriesPage() {
   void LegacyMonasteriesPage
@@ -1423,7 +1447,7 @@ function MonasteriesPage() {
     {visibleRegions.map((region, regionIndex) => <section className="region-section" id={region.id} key={region.id}>
       <div className="region-header"><h2>{region.title}</h2><hr /></div>
       <div className="monasteries-reference-grid">{region.items.map((monastery, index) => <article className="monastery-reference-card" key={monastery.city}>
-        <img src={monasteryImageFor(monastery)} alt={`Carmelite community in ${monastery.city}`} loading={regionIndex === 0 && index < 3 ? 'eager' : 'lazy'} fetchPriority={regionIndex === 0 && index === 0 ? 'high' : 'auto'} decoding="async" />
+        <ImageWithLoader src={content.isReady ? monasteryImageFor(monastery) : undefined} pending={content.isLoading} alt={`Carmelite community in ${monastery.city}`} loading={regionIndex === 0 && index < 3 ? 'eager' : 'lazy'} fetchPriority={regionIndex === 0 && index === 0 ? 'high' : 'auto'} decoding="async" />
         <div className="monastery-card-content">
           <div className="card-title-block"><h3>{monastery.name}</h3><p>{monastery.description}</p></div>
           <dl><div><dt><MapPin size={13} /></dt><dd>{monastery.city}, {monastery.city === 'Kuching' ? 'Malaysia' : 'Philippines'}</dd></div><div><dt><Mail size={13} /></dt><dd><a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a></dd></div></dl>
@@ -1650,7 +1674,7 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
           highlightTouchStart.current = null
         }}>
           <Link className="featured-update" to={`/updates/${encodeURIComponent(featuredUpdate.id)}`} aria-label={`Read featured update: ${featuredUpdate.title}`}>
-            {featuredUpdate.video?.startsWith('data:video/') ? <video src={featuredUpdate.video} poster={featuredUpdate.image || undefined} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" /> : featuredUpdate.image ? <img src={featuredUpdate.image} alt="" /> : <span className="featured-update-placeholder" aria-hidden="true">{featuredUpdate.video ? <Play size={38} /> : <HandHeart size={38} />}</span>}
+            {featuredUpdate.video?.startsWith('data:video/') ? <video src={featuredUpdate.video} poster={featuredUpdate.image || undefined} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" /> : featuredUpdate.image ? <ImageWithLoader src={featuredUpdate.image} alt="" /> : <span className="featured-update-placeholder" aria-hidden="true">{featuredUpdate.video ? <Play size={38} /> : <HandHeart size={38} />}</span>}
             <span className="featured-update-shade" />
             <span className="featured-update-content">
               <span className="featured-update-meta">Featured update <i>·</i> {featuredUpdate.category} <i>·</i> {featuredDisplayDate}</span>
@@ -1668,15 +1692,15 @@ function LegacyStoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
         const date = new Date(`${update.date}T12:00:00`)
         const dateTime = Number.isNaN(date.getTime()) ? update.date : date.toISOString().slice(0, 10)
         const displayDate = Number.isNaN(date.getTime()) ? update.date : date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-        return <article className="update-post" key={update.id}>{update.video ? <UpdateVideoPlayer className="update-post-video" source={update.video} title={update.title} poster={update.image || undefined} /> : update.image ? <img src={update.image} alt="" /> : <div className="update-no-image"><HandHeart size={30} /><span>Carmels in<br />Communion</span></div>}<div className="update-post-body"><h2>{update.title}</h2><p>{update.body}</p><div className="update-post-footer"><Link className="update-read-link" to={`/updates/${encodeURIComponent(update.id)}`}>{update.id === 'papal-address' ? 'View more' : 'View update'} <ArrowRight size={15} /></Link><time dateTime={dateTime}><CalendarDays size={13} />{displayDate}</time></div></div></article>
+        return <article className="update-post" key={update.id}>{update.video ? <UpdateVideoPlayer className="update-post-video" source={update.video} title={update.title} poster={update.image || undefined} /> : update.image ? <ImageWithLoader src={update.image} alt="" /> : <div className="update-no-image"><HandHeart size={30} /><span>Carmels in<br />Communion</span></div>}<div className="update-post-body"><h2>{update.title}</h2><p>{update.body}</p><div className="update-post-footer"><Link className="update-read-link" to={`/updates/${encodeURIComponent(update.id)}`}>{update.id === 'papal-address' ? 'View more' : 'View update'} <ArrowRight size={15} /></Link><time dateTime={dateTime}><CalendarDays size={13} />{displayDate}</time></div></div></article>
         })}</div>}
         {regularUpdates.length > 0 && visibleNews.length === 0 && <p className="updates-age-empty" role="status">No {newsAge === 'recent' ? 'recent' : 'older'} news to show. Choose All news to see every update.</p>}
       </> : <div className="updates-empty"><Search size={25} /><h2>No updates found</h2><p>Try a different search or category.</p></div>}
       {loadError && <p className="updates-load-status" role="status">Live updates could not be reached. Showing this device’s saved updates instead. <span>{loadError}</span></p>}
-      {selectedUpdate && <div className="story-modal-backdrop" role="presentation" onClick={() => setSelectedArticle(null)}><article className="story-modal" role="dialog" aria-modal="true" aria-labelledby="story-modal-title" onClick={(event) => event.stopPropagation()}><button className="story-modal-close" onClick={() => setSelectedArticle(null)} aria-label="Close update"><X size={20} /></button>{selectedUpdate.video ? <UpdateVideoPlayer className="story-modal-video" source={selectedUpdate.video} title={selectedUpdate.title} poster={selectedUpdate.image || undefined} /> : selectedUpdate.image ? <img src={selectedUpdate.image} alt="Carmelite community life" /> : <div className="story-modal-no-image"><HandHeart size={34} /></div>}<div className="story-modal-body"><span className="eyebrow">{selectedUpdate.category.toUpperCase()} · {selectedUpdate.date}</span><h2 id="story-modal-title">{selectedUpdate.title}</h2><p>{selectedUpdate.body}</p><p>In the quiet rhythm of community life, every gathering becomes an invitation to listen, to give thanks, and to walk together in hope.</p><button className="button button-dark" onClick={() => setSelectedArticle(null)}>Close update</button></div></article></div>}
+      {selectedUpdate && <div className="story-modal-backdrop" role="presentation" onClick={() => setSelectedArticle(null)}><article className="story-modal" role="dialog" aria-modal="true" aria-labelledby="story-modal-title" onClick={(event) => event.stopPropagation()}><button className="story-modal-close" onClick={() => setSelectedArticle(null)} aria-label="Close update"><X size={20} /></button>{selectedUpdate.video ? <UpdateVideoPlayer className="story-modal-video" source={selectedUpdate.video} title={selectedUpdate.title} poster={selectedUpdate.image || undefined} /> : selectedUpdate.image ? <ImageWithLoader src={selectedUpdate.image} alt="Carmelite community life" /> : <div className="story-modal-no-image"><HandHeart size={34} /></div>}<div className="story-modal-body"><span className="eyebrow">{selectedUpdate.category.toUpperCase()} · {selectedUpdate.date}</span><h2 id="story-modal-title">{selectedUpdate.title}</h2><p>{selectedUpdate.body}</p><p>In the quiet rhythm of community life, every gathering becomes an invitation to listen, to give thanks, and to walk together in hope.</p><button className="button button-dark" onClick={() => setSelectedArticle(null)}>Close update</button></div></article></div>}
     </section>
   }
-  return <section className="content-page section-wrap"><div className="story-page-intro"><div><span className="eyebrow">{kind === 'life' ? 'A CONTEMPLATIVE WAY' : 'VOICES FROM CARMEL'}</span><h1>{title}</h1></div><p className="page-lead">{desc}</p></div><div className="story-grid">{articles.map((article, i) => <article className="story-card" key={article}><img src={[photo.garden, photo.flower, photo.chapel][i]} alt="A glimpse of Carmelite life" /><div><span className="eyebrow">CARMELITE LIFE</span><h3>{article}</h3><p>In the quiet rhythm of community life, every day offers a new way to listen and to love.</p><a className="text-link" href="#read">Read story <ArrowRight size={15} /></a></div></article>)}</div></section>
+  return <section className="content-page section-wrap"><div className="story-page-intro"><div><span className="eyebrow">{kind === 'life' ? 'A CONTEMPLATIVE WAY' : 'VOICES FROM CARMEL'}</span><h1>{title}</h1></div><p className="page-lead">{desc}</p></div><div className="story-grid">{articles.map((article, i) => <article className="story-card" key={article}><ImageWithLoader src={[photo.garden, photo.flower, photo.chapel][i]} alt="A glimpse of Carmelite life" /><div><span className="eyebrow">CARMELITE LIFE</span><h3>{article}</h3><p>In the quiet rhythm of community life, every day offers a new way to listen and to love.</p><a className="text-link" href="#read">Read story <ArrowRight size={15} /></a></div></article>)}</div></section>
 }
 function UpdateDetailPage() {
   const { id = '' } = useParams()
@@ -1700,7 +1724,7 @@ function UpdateDetailPage() {
     <Link className="text-link" to="/updates"><ArrowLeft size={15} /> All updates</Link>
     <span className="eyebrow">{update.category.toUpperCase()} · {update.date}</span>
     <h1>{update.title}</h1>
-    {update.image && <img className="update-detail-image" src={update.image} alt={update.title} />}
+    {update.image && <ImageWithLoader className="update-detail-image" src={update.image} alt={update.title} />}
     {update.video && <UpdateVideoPlayer className="update-post-video" source={update.video} title={update.title} poster={update.image || undefined} />}
     <div className="story-full-copy">{update.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
     <Link className="button button-outline" to="/updates">More updates</Link>
@@ -1725,7 +1749,7 @@ const discernmentSteps = [
   'Pray constantly for clarity, courage, and complete trust in God.',
 ]
 function CarmelifePage() {
-  const { carmelife: articles } = useManagedContent('carmelife')
+  const { carmelife: articles, isLoading, isReady } = useManagedContent('carmelife')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [fullView, setFullView] = useState(false)
   const [quoteIndex, setQuoteIndex] = useState(0)
@@ -1752,7 +1776,7 @@ function CarmelifePage() {
   }
   return <div className="carmelife-page">
     <section className="life-hero">
-      <img src={vocationHeroImage} alt="Archway in a Carmelite monastery cloister" />
+      <ImageWithLoader src={vocationHeroImage} alt="Archway in a Carmelite monastery cloister" />
       <div className="life-hero-overlay" />
       <h1>Vocation to Carmel</h1>
     </section>
@@ -1765,7 +1789,7 @@ function CarmelifePage() {
         <p>To respond to the call is to respond to a love that was chosen for us from eternity. Our vocation is to be at the heart of the Church, maintaining constant prayer for priests and all humanity.</p>
         <cite>FRANCIS, Vultum Dei quaerere I, 1</cite>
       </div>
-      <div className="rounded-life-image"><img src={seekingFaceImage} alt="Carmelite nuns looking toward the sunset" /></div>
+      <div className="rounded-life-image"><ImageWithLoader src={seekingFaceImage} alt="Carmelite nuns looking toward the sunset" /></div>
     </section>
 
     <section className="life-section monastery-section">
@@ -1782,13 +1806,13 @@ function CarmelifePage() {
 
     <section className="life-section life-stories-section">
       <div className="centered-life-heading"><h2>Stories from <em>Carmel</em></h2><p>Read reflections and vocation stories shared by our sisters.</p></div>
-      {featuredArticles.length ? <div className="life-card-grid">{featuredArticles.map((article) => <article className="life-card" key={article.id}><img src={articleImageFor(article.image, seekingFaceImage)} alt={article.title} /><div><small>{article.author || 'CARMELITE LIFE'}</small><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button type="button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story &rarr;</button></div></article>)}</div> : <p className="content-empty">New entries will appear here when published.</p>}
+      {featuredArticles.length ? <div className="life-card-grid">{featuredArticles.map((article) => <article className="life-card" key={article.id}><ImageWithLoader src={isReady ? articleImageFor(article.image, seekingFaceImage) : undefined} pending={isLoading} alt={article.title} /><div><small>{article.author || 'CARMELITE LIFE'}</small><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button type="button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story &rarr;</button></div></article>)}</div> : <p className="content-empty">New entries will appear here when published.</p>}
       <Link className="button button-outline life-stories-more" to="/carmelife/stories">View more stories <ArrowRight size={15} /></Link>
     </section>
 
     <section className="life-section discernment-section-life" id="discernment">
       <h2>Discerning your <em>vocation</em></h2>
-      <div className="wide-life-image"><img src={discerningImage} alt="A person kneeling in prayer in a chapel" /></div>
+      <div className="wide-life-image"><ImageWithLoader src={discerningImage} alt="A person kneeling in prayer in a chapel" /></div>
       <div className="discernment-copy">
         <h3>“Is God calling me to be a Carmelite nun?”</h3>
         <p>Do you find yourself asking this question? Does the thought of “What If?” keep recurring in your mind like a Last Song Syndrome (LSS)? Does the thought of becoming a Carmelite nun pursue you like a persistent lover?</p>
@@ -1803,7 +1827,7 @@ function CarmelifePage() {
       <button type="button" onClick={() => changeQuote(1)} aria-label="Next quote">&rsaquo;</button>
     </section>
 
-    {selected && <CarmelifeReadingDialog reading={selected} fullView={fullView} onToggleFullView={() => setFullView(!fullView)} onClose={closeStory} fallbackImage={seekingFaceImage} />}
+    {selected && <CarmelifeReadingDialog reading={selected} fullView={fullView} onToggleFullView={() => setFullView(!fullView)} onClose={closeStory} fallbackImage={seekingFaceImage} imagePending={isLoading || !isReady} />}
   </div>
 }
 
@@ -1897,7 +1921,7 @@ function DiscernmentGuidePage() {
     </section>
 
     <section className="discernment-guide-practical">
-      <div className="discernment-guide-practical-image"><img src={practicalAidsImage} alt="A woman praying in a chapel" /></div>
+      <div className="discernment-guide-practical-image"><ImageWithLoader src={practicalAidsImage} alt="A woman praying in a chapel" /></div>
       <div className="discernment-guide-practical-content">
         <span className="eyebrow">PRACTICAL AIDS FOR DISCERNMENT</span>
         <ol>{discernmentSteps.map((step, index) => <li key={step}><b>{index + 1}</b>{step}</li>)}</ol>
@@ -2007,7 +2031,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
           <div className="carmelights-popular-list">{visiblePopularTeachings.map((teaching, index) => {
             const rank = popularPage * 2 + index + 1
             return <button type="button" className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} onClick={() => setSelectedId(teaching.id)}>
-              <span className="carmelights-popular-rank">{rank}</span><img src={articleImageFor(teaching.image, photo.chapel)} alt="" /><span className="carmelights-popular-copy"><small>{teaching.category || 'Prayer'} · {teaching.views.toLocaleString()} {teaching.views === 1 ? 'view' : 'views'}</small><b>{teaching.title}</b><em>{teaching.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
+              <span className="carmelights-popular-rank">{rank}</span><ImageWithLoader src={articleImageFor(teaching.image, photo.chapel)} alt="" /><span className="carmelights-popular-copy"><small>{teaching.category || 'Prayer'} · {teaching.views.toLocaleString()} {teaching.views === 1 ? 'view' : 'views'}</small><b>{teaching.title}</b><em>{teaching.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
             </button>
           })}</div>
           {popularPageCount > 1 && <nav className="carmelights-popular-pagination" aria-label="Browse most-viewed quotes">
@@ -2032,14 +2056,14 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       </div>
       <div className="carmelights-teaching-grid">{visibleTeachings.map((article) => <article className="carmelights-teaching-card" key={article.id}>
         <div className="carmelights-card-top"><span className="carmelights-category-tag">{article.category || 'Prayer'}</span><button type="button" className={`favorite-teaching ${favorites.includes(article.id) ? 'saved' : ''}`} onClick={() => toggleFavorite(article.id)} aria-label={favorites.includes(article.id) ? `Remove ${article.title} from favorites` : `Save ${article.title} to favorites`} aria-pressed={favorites.includes(article.id)} title={favorites.includes(article.id) ? 'Remove from favorites' : 'Save quote'}><Heart size={16} fill={favorites.includes(article.id) ? 'currentColor' : 'none'} /></button></div>
-        <img className="carmelights-teaching-image" src={articleImageFor(article.image, photo.chapel)} alt={article.title} loading="lazy" decoding="async" />
+        <ImageWithLoader className="carmelights-teaching-image" src={content.isReady ? articleImageFor(article.image, photo.chapel) : undefined} pending={content.isLoading} alt={article.title} loading="lazy" decoding="async" />
         <span className="carmelights-card-eyebrow">SAINTS’ QUOTE</span>
         <h2>{article.title}</h2><b className="carmelights-card-author">{article.author}</b>
         <p>{article.body.split(/\n\s*\n/)[0]}</p>
         <button type="button" className="carmelights-read-link" onClick={() => setSelectedId(article.id)}><span><BookOpen size={14} />Read full quote</span><ArrowRight size={14} /></button>
       </article>)}</div>
       {visibleTeachings.length === 0 && <p className="content-empty">No teachings match your search.</p>}
-      {selected && <CarmelightsReadingDialog reading={selected} fullView={fullView} onToggleFullView={() => setFullView(!fullView)} onClose={closeStory} />}
+      {selected && <CarmelightsReadingDialog reading={selected} fullView={fullView} onToggleFullView={() => setFullView(!fullView)} onClose={closeStory} imagePending={content.isLoading || !content.isReady} />}
     </section>
   }
   return <section className="content-page section-wrap">
@@ -2048,7 +2072,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       <p className="page-lead">{isLife ? 'Explore reflections and vocation stories shared by our sisters.' : desc}</p>
     </div>
     <div className="story-grid">{articles.map((article) => <article className="story-card" key={article.id}>
-      <img src={articleImageFor(article.image, isLife ? photo.garden : photo.chapel)} alt={article.title} loading="lazy" decoding="async" />
+      <ImageWithLoader src={content.isReady ? articleImageFor(article.image, isLife ? photo.garden : photo.chapel) : undefined} pending={content.isLoading} alt={article.title} loading="lazy" decoding="async" />
       {!isLife && <button type="button" className={`favorite-teaching ${favorites.includes(article.id) ? 'saved' : ''}`} onClick={() => toggleFavorite(article.id)} aria-label={favorites.includes(article.id) ? `Remove ${article.title} from favorites` : `Save ${article.title} to favorites`} title={favorites.includes(article.id) ? 'Remove from favorites' : 'Save teaching'}><Heart size={17} fill={favorites.includes(article.id) ? 'currentColor' : 'none'} /></button>}
       <div><span className="eyebrow">{article.author || (isLife ? 'VOCATION STORY' : 'CARMELITE SAINT')}</span><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button className="text-link story-read-button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story <ArrowRight size={15} /></button></div>
     </article>)}</div>
@@ -2059,11 +2083,12 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       onToggleFullView={() => setFullView(!fullView)}
       onClose={closeStory}
       fallbackImage={isLife ? photo.garden : photo.chapel}
+      imagePending={content.isLoading || !content.isReady}
     />}
   </section>
 }
 function ContactPage() {
-  const { contactDetails } = useManagedContent('contactDetails')
+  const { contactDetails, isLoading, isReady } = useManagedContent('contactDetails')
   const [email, setEmail] = useState(() => readMemberSession()?.email || '')
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
@@ -2110,7 +2135,7 @@ function ContactPage() {
   }
   return <div className="contact-reference">
     <section className="contact-reference-hero" aria-label="Contact hero">
-      <img src={contactDetails.heroImage} alt="Carmelite sisters gathered together in the mountains" />
+      <ImageWithLoader src={isReady ? contactDetails.heroImage : undefined} pending={isLoading} alt="Carmelite sisters gathered together in the mountains" />
     </section>
     <section className="contact-reference-section" id="section-contact">
       <div className="contact-reference-container contact-reference-layout">
@@ -2573,7 +2598,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   }
   return <>
   <section className={`login-page auth-reference-page member-auth-page${isSignup ? ' member-auth-signup-page' : isStaff ? ' member-auth-staff-page' : ' member-auth-login-page'}`}>
-    <div className="login-art auth-reference-art"><img className="auth-reference-background" src={loginFloralImage} alt="" /><div className="auth-reference-brand"><Brand light /></div><p>“Let your soul be a garden<br />where God may walk.”</p></div>
+    <div className="login-art auth-reference-art"><ImageWithLoader className="auth-reference-background" src={loginFloralImage} alt="" /><div className="auth-reference-brand"><Brand light /></div><p>“Let your soul be a garden<br />where God may walk.”</p></div>
     <form className="login-form auth-reference-form" onSubmit={submit}>
       <span className="eyebrow">{isSignup ? 'HELLO' : isStaff ? 'FEDERATION STAFF' : 'WELCOME BACK'}</span>
       <h1>{isSignup ? <>Create <em>Account</em></> : isStaff ? <>Staff <em>Sign in</em></> : <>Login <em>Account</em></>}</h1>
@@ -2723,7 +2748,7 @@ function PasswordRecoveryPage() {
   }
 
   return <section className="login-page auth-reference-page member-auth-page member-auth-reset-page">
-    <div className="login-art auth-reference-art"><img className="auth-reference-background" src={loginFloralImage} alt="" /><div className="auth-reference-brand"><Brand light /></div><p>“Let your soul be a garden<br />where God may walk.”</p></div>
+    <div className="login-art auth-reference-art"><ImageWithLoader className="auth-reference-background" src={loginFloralImage} alt="" /><div className="auth-reference-brand"><Brand light /></div><p>“Let your soul be a garden<br />where God may walk.”</p></div>
     <form className="login-form auth-reference-form" onSubmit={submit}>
       <span className="eyebrow">{isReset ? 'CHOOSE A NEW PASSWORD' : 'ACCOUNT RECOVERY'}</span>
       <h1>{isReset ? <>Reset <em>Password</em></> : <>Forgot <em>Password?</em></>}</h1>
@@ -2818,7 +2843,7 @@ function MemberProfileDetails({ member, onUpdated }: { member: MemberAccount; on
     <div className="member-section-heading"><span className="eyebrow">YOUR ACCOUNT</span><h2>Profile details</h2><p>Keep your contact details current for messages from the Federation.</p></div>
     <section className="member-profile-avatar-editor" aria-labelledby="member-profile-avatar-title">
       <div className="member-profile-avatar-preview">
-        {avatarImage ? <img src={avatarImage} alt="" /> : <User size={26} aria-hidden="true" />}
+        {avatarImage ? <ImageWithLoader src={avatarImage} alt="" /> : <User size={26} aria-hidden="true" />}
       </div>
       <div className="member-profile-avatar-content">
         <h3 id="member-profile-avatar-title">Profile photo</h3>
@@ -3179,7 +3204,7 @@ function MemberFavoritesView({ member }: { member: MemberAccount }) {
     <div className="member-section-heading"><span className="eyebrow">SAVED FOR LATER</span><h2>Favorite teachings</h2><p>{member.demo ? 'Demo favorites are saved only in this browser.' : 'Teachings saved to your account are loaded from the Federation database.'}</p></div>
     {(error || favoriteError) && <p className="form-error" role="alert">{error || favoriteError}</p>}
     {favoritesLoading ? <p className="staff-empty">Loading favorite teachings…</p> : saved.length ? <div className="member-favorites-list">{saved.map((teaching) => <article className="member-favorite-row" key={teaching.id}>
-      <img src={articleImageFor(teaching.image, photo.chapel)} alt="" />
+      <ImageWithLoader src={articleImageFor(teaching.image, photo.chapel)} alt="" />
       <div><span className="eyebrow">{teaching.author}</span><h3>{teaching.title}</h3><p>{teaching.body}</p><button type="button" className="text-link story-read-button" onClick={() => { setSelectedId(teaching.id); setFullView(false) }}>Read teaching <ArrowRight size={14} /></button></div>
       <button type="button" className="member-favorite-remove" onClick={() => setPendingRemoval({ id: teaching.id, title: teaching.title })} aria-label={`Remove ${teaching.title} from favorites`}><Heart size={17} fill="currentColor" /></button>
     </article>)}</div> : <div className="member-empty"><Heart size={22} /><h3>No favorite teachings yet</h3><p>Save a teaching from Carmelights to find it here.</p><Link className="button button-outline" to="/carmelights">Explore Carmelights <ArrowRight size={14} /></Link></div>}
@@ -3213,7 +3238,7 @@ function MemberRecommendationsView() {
     void loadRecommendations()
     return () => { active = false }
   }, [])
-  return <section className="member-account-section member-recommendations"><div className="member-section-heading"><span className="eyebrow">CARMELITE READINGS</span><h2>Recommended for You</h2><p>{source === 'lightfm' ? 'Selected from reading patterns and teaching themes.' : 'Suggestions based on popular teachings while your reading history grows.'}</p></div>{error ? <p className="form-error" role="alert">{error}</p> : loading ? <p className="member-recommendations-status" role="status">Finding teachings for you…</p> : recommendations.length ? <div className="member-recommendations-grid">{recommendations.map((reading) => <article className="story-card" key={reading.id}><img src={articleImageFor(reading.image, photo.chapel)} alt={reading.title} /><div><span className="eyebrow">{reading.author || 'CARMELITE TEACHING'}</span><h3>{reading.title}</h3><p>{reading.body.split(/\n\s*\n/)[0]}</p><small className="member-recommendation-reason">{reading.reason}</small><Link className="text-link story-read-button" to={`/carmelights?reading=${encodeURIComponent(reading.id)}`}>Read teaching <ArrowRight size={15} /></Link></div></article>)}</div> : <div className="member-empty"><Heart size={22} /><h3>No readings to recommend yet</h3><p>Explore Carmelights and save or read teachings. Your recommendations will adapt as your activity grows.</p><Link className="button button-outline" to="/carmelights">Explore Carmelights <ArrowRight size={14} /></Link></div>}</section>
+  return <section className="member-account-section member-recommendations"><div className="member-section-heading"><span className="eyebrow">CARMELITE READINGS</span><h2>Recommended for You</h2><p>{source === 'lightfm' ? 'Selected from reading patterns and teaching themes.' : 'Suggestions based on popular teachings while your reading history grows.'}</p></div>{error ? <p className="form-error" role="alert">{error}</p> : loading ? <p className="member-recommendations-status" role="status">Finding teachings for you…</p> : recommendations.length ? <div className="member-recommendations-grid">{recommendations.map((reading) => <article className="story-card" key={reading.id}><ImageWithLoader src={articleImageFor(reading.image, photo.chapel)} alt={reading.title} /><div><span className="eyebrow">{reading.author || 'CARMELITE TEACHING'}</span><h3>{reading.title}</h3><p>{reading.body.split(/\n\s*\n/)[0]}</p><small className="member-recommendation-reason">{reading.reason}</small><Link className="text-link story-read-button" to={`/carmelights?reading=${encodeURIComponent(reading.id)}`}>Read teaching <ArrowRight size={15} /></Link></div></article>)}</div> : <div className="member-empty"><Heart size={22} /><h3>No readings to recommend yet</h3><p>Explore Carmelights and save or read teachings. Your recommendations will adapt as your activity grows.</p><Link className="button button-outline" to="/carmelights">Explore Carmelights <ArrowRight size={14} /></Link></div>}</section>
 }
 
 function MemberAccountPage() {
@@ -3272,7 +3297,7 @@ function MemberAccountPage() {
     { id: 'recommendations', label: 'Recommended for You', icon: BookOpen, path: '/account/recommendations' },
   ]
   function signOut() { saveServerSessionRole(null); saveMemberSession(null); if (!isDemoMember) requestServerLogout(); navigate('/') }
-  return <section className="member-account-page"><div className="member-account-shell"><aside className="member-account-sidebar"><div className="member-account-identity"><span className="member-account-avatar">{member.avatarImage ? <img src={member.avatarImage} alt="" /> : member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><b>{member.name}</b><small>{member.email}</small><Link className="member-edit-profile" to="/account"><Pencil size={13} /> Edit profile</Link></div><nav aria-label="Your account">{tabs.map(({ id, label, icon: Icon, path }) => <NavLink key={id} to={path} end={id === 'profile'} className={({ isActive }) => isActive || section === id ? 'active' : ''}><Icon size={16} />{label}</NavLink>)}</nav><button className="member-signout" type="button" onClick={signOut}><LogOut size={15} />Sign out</button></aside><main className="member-account-main">{sessionWarning && <p className="form-error" role="status">{sessionWarning}</p>}{section === 'profile' && <><MemberProfileDetails key={member.email} member={member} onUpdated={setMember} /><MemberDiscernmentSummary key={`discernment-${member.email}`} member={member} /></>}{section === 'donations' && <MemberDonationsView member={member} />}{section === 'discernment' && <MemberDiscernmentView key={member.email} member={member} />}{section === 'security' && <MemberSecurityView member={member} />}{section === 'messages' && <MemberMessagesView member={member} />}{section === 'favorites' && <MemberFavoritesView member={member} />}{section === 'recommendations' && <MemberRecommendationsView />}</main></div></section>
+  return <section className="member-account-page"><div className="member-account-shell"><aside className="member-account-sidebar"><div className="member-account-identity"><span className="member-account-avatar">{member.avatarImage ? <ImageWithLoader src={member.avatarImage} alt="" /> : member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><b>{member.name}</b><small>{member.email}</small><Link className="member-edit-profile" to="/account"><Pencil size={13} /> Edit profile</Link></div><nav aria-label="Your account">{tabs.map(({ id, label, icon: Icon, path }) => <NavLink key={id} to={path} end={id === 'profile'} className={({ isActive }) => isActive || section === id ? 'active' : ''}><Icon size={16} />{label}</NavLink>)}</nav><button className="member-signout" type="button" onClick={signOut}><LogOut size={15} />Sign out</button></aside><main className="member-account-main">{sessionWarning && <p className="form-error" role="status">{sessionWarning}</p>}{section === 'profile' && <><MemberProfileDetails key={member.email} member={member} onUpdated={setMember} /><MemberDiscernmentSummary key={`discernment-${member.email}`} member={member} /></>}{section === 'donations' && <MemberDonationsView member={member} />}{section === 'discernment' && <MemberDiscernmentView key={member.email} member={member} />}{section === 'security' && <MemberSecurityView member={member} />}{section === 'messages' && <MemberMessagesView member={member} />}{section === 'favorites' && <MemberFavoritesView member={member} />}{section === 'recommendations' && <MemberRecommendationsView />}</main></div></section>
 }
 
 const conversations = [{ name: 'Maria Santos', email: 'maria.santos@email.com', subject: 'Monthly offering receipt', text: 'Thank you for confirming my contribution…', time: '10:42 AM', type: 'Donation', unread: true, color: 'rose' }, { name: 'Ana Reyes', email: 'ana.reyes@email.com', subject: 'Discernment and visits', text: 'I have been thinking about visiting…', time: 'Yesterday', type: 'Discerner', unread: true, color: 'gold' }, { name: 'John Dela Cruz', email: 'john.dc@email.com', subject: 'Bank transfer question', text: 'Could you help me verify a transfer?', time: 'Sep 25', type: 'Donation', unread: false, color: 'green' }, { name: 'Rosa Villanueva', email: 'rosa.v@email.com', subject: 'A note to the sisters', text: 'Please include our family in your prayers…', time: 'Sep 24', type: 'General', unread: false, color: 'blue' }]
@@ -3836,7 +3861,7 @@ function UpdatesAdminPage() {
         {videoMode === 'link' && <div className="update-video-field"><label htmlFor="update-video-url">Video URL</label><input id="update-video-url" type="url" value={videoUrl} onChange={(event) => setVideoUrl(event.target.value)} placeholder="https://youtu.be/... or https://vimeo.com/..." /><small>Use a supported YouTube or Vimeo video link.</small>{videoUrl && updateVideoEmbedUrl(videoUrl) && <UpdateVideoPlayer className="update-video-preview" source={videoUrl} title={title || 'Video preview'} />}</div>}
         <p className="update-feature-note">The three newest posts are highlighted automatically.</p>
         <label>Message<textarea value={body} onChange={(event) => setBody(event.target.value)} rows={8} placeholder="Write the update for your communities..." /></label>
-        <label className="update-image-picker">Add a picture <small>Optional</small><ImageCropInput onImage={chooseImage} currentImage={image} ariaLabel="Choose update image" />{image && <img src={image} alt="Selected update preview" />}</label>
+        <label className="update-image-picker">Add a picture <small>Optional</small><ImageCropInput onImage={chooseImage} currentImage={image} ariaLabel="Choose update image" />{image && <ImageWithLoader src={image} alt="Selected update preview" />}</label>
         {error && !editingUpdate && <p className="form-error" role="alert">{error}</p>}
         {success && <p className="form-success" role="status" aria-live="polite">{success}</p>}
         <button className="button button-dark" type="submit" disabled={saving || !updatesReady}>{saving ? 'Saving…' : !updatesReady ? 'Loading…' : 'Publish update'} <ArrowUpRight size={15} /></button>
@@ -3844,7 +3869,7 @@ function UpdatesAdminPage() {
       <section className="admin-panel published-updates">
         <div className="panel-heading"><div><h2>Published posts</h2><p>{updates.length} posts visible on Carmelinks.</p></div></div>
         <div className="published-update-list">{updates.map((update) => <article className="published-update-row" key={update.id}>
-          {update.image ? <img src={update.image} alt="" /> : <span className="published-update-placeholder"><FileText size={18} /></span>}
+          {update.image ? <ImageWithLoader src={update.image} alt="" /> : <span className="published-update-placeholder"><FileText size={18} /></span>}
           <div><b>{update.title}</b><small>{update.category} · {update.date}</small></div>
           <div className="published-update-actions">
             <button className="published-update-edit" type="button" onClick={() => startEditing(update)} aria-label={`Edit ${update.title}`} disabled={saving || !updatesReady}><Pencil size={15} /></button>
@@ -3867,7 +3892,7 @@ function UpdatesAdminPage() {
           {editDraft.videoMode === 'link' && <div className="update-video-field"><label htmlFor="edit-update-video-url">Video URL</label><input id="edit-update-video-url" type="url" value={editDraft.videoUrl} onChange={(event) => setEditDraft({ ...editDraft, videoUrl: event.target.value })} placeholder="https://youtu.be/... or https://vimeo.com/..." /><small>Use a supported YouTube or Vimeo video link.</small>{editDraft.videoUrl && updateVideoEmbedUrl(editDraft.videoUrl) && <UpdateVideoPlayer className="update-video-preview" source={editDraft.videoUrl} title={editDraft.title || 'Video preview'} />}</div>}
           <p className="update-feature-note">The three newest posts are highlighted automatically.</p>
           <label>Message<textarea value={editDraft.body} onChange={(event) => setEditDraft({ ...editDraft, body: event.target.value })} rows={7} placeholder="Write the update for your communities..." required /></label>
-          <label className="update-image-picker">Picture <small>Optional</small><ImageCropInput onImage={chooseEditImage} currentImage={editDraft.image} ariaLabel="Choose update image" />{editDraft.image && <img src={editDraft.image} alt="Update image preview" />}</label>
+          <label className="update-image-picker">Picture <small>Optional</small><ImageCropInput onImage={chooseEditImage} currentImage={editDraft.image} ariaLabel="Choose update image" />{editDraft.image && <ImageWithLoader src={editDraft.image} alt="Update image preview" />}</label>
           {editDraft.image && <button className="button button-outline update-edit-remove-image" type="button" onClick={() => setEditDraft({ ...editDraft, image: '' })}>Remove picture</button>}
           {error && <p className="form-error" role="alert">{error}</p>}
           <footer className="update-edit-actions"><button className="button button-outline" type="button" onClick={() => setEditingUpdate(null)} disabled={saving}>Cancel</button><button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'} <Check size={15} /></button></footer>
@@ -4498,7 +4523,7 @@ function ContentAdminPage() {
       <div className="about-image-editor-grid">
         {aboutImageFields.map(({ key, label }) => <div className="about-image-editor-card" key={key}>
           <label>{label} image URL<input value={aboutImages[key].startsWith('data:') ? '' : aboutImages[key]} onChange={(event) => updateAboutImage(key, event.target.value)} placeholder="https://..." /></label>
-          <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseAboutImage(file, key)} currentImage={aboutImages[key]} ariaLabel={`Choose ${label} image`} /><img src={aboutImages[key]} alt={`${label} preview`} /><small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
+          <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseAboutImage(file, key)} currentImage={aboutImages[key]} ariaLabel={`Choose ${label} image`} /><ImageWithLoader src={aboutImages[key]} pending={!contentReady} alt={`${label} preview`} /><small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
         </div>)}
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -4506,7 +4531,7 @@ function ContentAdminPage() {
     </form> : isContact ? <form className="admin-panel content-editor contact-details-editor" onSubmit={saveContactDetails}>
       <div className="panel-heading"><div><h2>Contact Us content</h2><p>Change the page image and update the phone, email, Facebook link, and location shown on the public website.</p></div></div>
       <label>Contact Us page image URL<input value={contactDetails.heroImage.startsWith('data:') ? '' : contactDetails.heroImage} onChange={(event) => updateContactDetails('heroImage', event.target.value)} placeholder="https://..." /></label>
-      <label className="content-image-picker">Upload or replace Contact Us page image<ImageCropInput onImage={(file) => chooseImage(file, 'contact')} currentImage={contactDetails.heroImage} ariaLabel="Choose Contact Us page image" /><img src={contactDetails.heroImage} alt="Contact Us page image preview" /><small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
+      <label className="content-image-picker">Upload or replace Contact Us page image<ImageCropInput onImage={(file) => chooseImage(file, 'contact')} currentImage={contactDetails.heroImage} ariaLabel="Choose Contact Us page image" /><ImageWithLoader src={contactDetails.heroImage} pending={!contentReady} alt="Contact Us page image preview" /><small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
       <label>Phone number<input required value={contactDetails.phone} onChange={(event) => updateContactDetails('phone', event.target.value)} placeholder="0921 419 2267" /></label>
       <label>Email address<input required type="email" value={contactDetails.email} onChange={(event) => updateContactDetails('email', event.target.value)} placeholder="name@example.com" /></label>
       <label>Facebook link text<input required value={contactDetails.facebookLabel} onChange={(event) => updateContactDetails('facebookLabel', event.target.value)} placeholder="Carmels in Communion on Facebook" /></label>
@@ -4522,7 +4547,7 @@ function ContentAdminPage() {
         <label>City<input required value={monastery.city} onChange={(event) => updateMonastery('city', event.target.value)} placeholder="City or province" /></label>
         <label>Community details<textarea rows={3} value={monastery.description} onChange={(event) => updateMonastery('description', event.target.value)} placeholder="A short introduction to this community" /></label>
         <label>Image URL<input value={monastery.image.startsWith('data:') ? '' : monastery.image} onChange={(event) => updateMonastery('image', event.target.value)} placeholder="https://..." /></label>
-        <label className="content-image-picker">Upload image<ImageCropInput onImage={(file) => chooseImage(file, 'monastery')} currentImage={monastery.image} ariaLabel="Choose monastery image" />{monastery.image && <img src={monasteryImageFor(monastery)} alt="Monastery preview" />}<small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
+        <label className="content-image-picker">Upload image<ImageCropInput onImage={(file) => chooseImage(file, 'monastery')} currentImage={monastery.image} ariaLabel="Choose monastery image" />{monastery.image && <ImageWithLoader src={monasteryImageFor(monastery)} alt="Monastery preview" />}<small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="content-editor-actions">
           <button className="button button-dark" type="submit" disabled={savingManagedContent}>{savingManagedContent ? 'Saving…' : editingMonastery ? 'Save changes' : 'Add monastery'}</button>
@@ -4533,7 +4558,7 @@ function ContentAdminPage() {
       <section className="admin-panel content-records">
         <div className="panel-heading"><div><h2>Communities</h2><p>{content.monasteries.length} public records</p></div></div>
         {content.monasteries.map((item) => <article className="content-record" key={item.id}>
-          <img src={monasteryImageFor(item)} alt="" />
+          <ImageWithLoader src={monasteryImageFor(item)} pending={!contentReady} alt="" />
           <div><b>{item.name}</b><small>{item.city}</small></div>
           <button type="button" aria-label={`Edit ${item.name}`} onClick={() => editMonastery(item)}><Pencil size={15} /></button>
           <button type="button" aria-label={`Delete ${item.name}`} onClick={() => setPendingRemoval({ kind: 'monastery', id: item.id, label: item.name })}><X size={16} /></button>
@@ -4633,7 +4658,7 @@ function ContentAdminPage() {
         </>}
         <label>Story<textarea required rows={7} value={article.body} onChange={(event) => updateArticle('body', event.target.value)} placeholder="Write the entry shown on the public page" /></label>
         <label>{isLife ? 'Story image URL' : 'Teaching image URL'}<input value={article.image.startsWith('data:') ? '' : article.image} onChange={(event) => updateArticle('image', event.target.value)} placeholder="https://..." /></label>
-        <label className="content-image-picker">{isLife ? 'Upload story image' : 'Upload teaching image'}<ImageCropInput onImage={(file) => chooseImage(file, 'article')} currentImage={article.image} ariaLabel={isLife ? 'Choose story image' : 'Choose teaching image'} />{article.image && <img src={articleImageFor(article.image, '')} alt="Entry image preview" />}</label>
+        <label className="content-image-picker">{isLife ? 'Upload story image' : 'Upload teaching image'}<ImageCropInput onImage={(file) => chooseImage(file, 'article')} currentImage={article.image} ariaLabel={isLife ? 'Choose story image' : 'Choose teaching image'} />{article.image && <ImageWithLoader src={articleImageFor(article.image, '')} alt="Entry image preview" />}</label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="content-editor-actions">
           <button className="button button-dark" type="submit" disabled={savingManagedContent}>{savingManagedContent ? 'Saving…' : editingArticle ? 'Save changes' : 'Publish entry'}</button>
@@ -4644,7 +4669,7 @@ function ContentAdminPage() {
       <section className="admin-panel content-records">
         <div className="panel-heading"><div><h2>Published entries</h2><p>{articles.length} visible on {isLife ? 'Carmelife' : 'Carmelights'}</p></div></div>
         {articles.map((item) => <article className="content-record" key={item.id}>
-          <img src={articleImageFor(item.image, photo.chapel)} alt="" />
+          <ImageWithLoader src={articleImageFor(item.image, photo.chapel)} pending={!contentReady} alt="" />
           <div><b>{item.title}</b><small>{item.author}</small></div>
           <button type="button" aria-label={`Edit ${item.title}`} onClick={() => editArticle(item)}><Pencil size={15} /></button>
           <button type="button" aria-label={`Delete ${item.title}`} onClick={() => setPendingRemoval({ kind: 'article', id: item.id, label: item.title })}><X size={16} /></button>
@@ -4655,7 +4680,7 @@ function ContentAdminPage() {
       {homeHeroImages.map((image, index) => <div className="home-hero-image-card" key={`home-hero-image-${index}`}>
         <div className="home-hero-image-heading"><b>Image {index + 1}</b><button type="button" className="home-hero-image-remove" aria-label={`Remove homepage image ${index + 1}`} onClick={() => { setHomeHeroImages((current) => current.filter((_, currentIndex) => currentIndex !== index)); setSuccess(''); setError('') }}><X size={15} />Remove</button></div>
         <label>Image URL<input value={image.startsWith('data:') ? '' : image} onChange={(event) => { setHomeHeroImages((current) => current.map((currentImage, currentIndex) => currentIndex === index ? event.target.value : currentImage)); setSuccess(''); setError('') }} placeholder="https://..." /></label>
-        <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseImage(file, 'home', index)} currentImage={image} ariaLabel={`Choose homepage image ${index + 1}`} />{image && <img src={image} alt={`Homepage image ${index + 1} preview`} />}<small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
+        <label className="content-image-picker">Upload or replace image<ImageCropInput onImage={(file) => chooseImage(file, 'home', index)} currentImage={image} ariaLabel={`Choose homepage image ${index + 1}`} />{image && <ImageWithLoader src={image} pending={!homeImageReady} alt={`Homepage image ${index + 1} preview`} />}<small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
       </div>)}
       <button type="button" className="button button-outline home-hero-image-add" disabled={savingImage || homeHeroImages.length >= 8} onClick={() => { setHomeHeroImages((current) => [...current, '']); setSuccess(''); setError('') }}><Plus size={15} />Add an image{homeHeroImages.length >= 8 ? ' (maximum reached)' : ''}</button>
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -4704,7 +4729,7 @@ function ContentAdminPage() {
           return <form className="home-thumbnail-card" key={card.key} onSubmit={(event) => { void saveHomeSectionImage(event, card.key) }}>
             <div className="home-thumbnail-heading"><h3>{card.sectionLabel}</h3><p>Card: {card.label}</p></div>
             <label>Image URL<input value={sectionImage.startsWith('data:') ? '' : sectionImage} onChange={(event) => { setHomeSectionImages((current) => ({ ...current, [card.key]: event.target.value })); setSuccess(''); setError('') }} placeholder="https://..." /></label>
-            <label className="content-image-picker">Or upload an image<ImageCropInput onImage={(file) => chooseHomeSectionImage(file, card.key)} currentImage={sectionImage || card.image} ariaLabel={`Choose ${card.sectionLabel} thumbnail`} /><img src={sectionImage || card.image} alt={`${card.sectionLabel} thumbnail preview`} /></label>
+            <label className="content-image-picker">Or upload an image<ImageCropInput onImage={(file) => chooseHomeSectionImage(file, card.key)} currentImage={sectionImage || card.image} ariaLabel={`Choose ${card.sectionLabel} thumbnail`} /><ImageWithLoader src={sectionImage || card.image} pending={!homeSectionImagesReady} alt={`${card.sectionLabel} thumbnail preview`} /></label>
             <button className="button button-dark" type="submit" disabled={!homeSectionImagesReady || savingSectionImage !== null}>{savingSectionImage === card.key ? 'Saving…' : `Save ${card.sectionLabel} thumbnail`}</button>
           </form>
         })}
@@ -4897,7 +4922,7 @@ function DonationAdminPage() {
       <section className="donation-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="donation-detail-title">
         <header><div><span className="eyebrow">DONATION TRANSACTION</span><h2 id="donation-detail-title">{selectedDonation.referenceCode}</h2></div><button type="button" aria-label="Close transaction details" onClick={closeDetails}><X size={18} /></button></header>
         <dl className="donation-detail-grid"><div><dt>Source</dt><dd>{selectedDonation.isManual ? 'Manual entry' : 'Submitted through donation form'}</dd></div><div><dt>Amount</dt><dd>{formattedAmount(selectedDonation.amount)}</dd></div><div><dt>Payment method</dt><dd>{donationPaymentLabels[selectedDonation.paymentMethod]}</dd></div><div><dt>Donor</dt><dd>{selectedDonation.isAnonymous ? 'Anonymous' : selectedDonation.donorName || 'Not provided'}</dd></div><div><dt>Email</dt><dd>{selectedDonation.isAnonymous ? 'Not recorded' : selectedDonation.donorEmail || 'Not provided'}</dd></div><div><dt>Phone</dt><dd>{selectedDonation.isAnonymous ? 'Not recorded' : selectedDonation.donorPhone || 'Not provided'}</dd></div><div><dt>Frequency</dt><dd>{selectedDonation.type === 'MONTHLY' ? 'Monthly' : 'One-time'}</dd></div><div className="donation-payment-reference"><dt>Payment reference</dt><dd>{selectedDonation.paymentReference || 'Not provided'}</dd></div><div><dt>Status</dt><dd>{selectedDonation.status}</dd></div><div><dt>Date recorded</dt><dd>{new Date(selectedDonation.createdAt).toLocaleString()}</dd></div></dl>
-        <div className="donation-detail-proof"><h3>Payment proof</h3>{selectedDonation.files?.length ? selectedDonation.files.map((file) => <div key={file.id}>{file.type === 'application/pdf' ? <a href={file.fileUrl} target="_blank" rel="noreferrer">{file.fileName || 'Open proof document'} <ArrowUpRight size={14} /></a> : <a href={file.fileUrl} target="_blank" rel="noreferrer"><img src={file.fileUrl} alt={file.fileName || 'Donation payment proof'} /><span>{file.fileName || 'View proof image'} <ArrowUpRight size={14} /></span></a>}</div>) : <p>{selectedDonation.isManual ? 'No proof was attached to this manual entry.' : 'Proof is not required for donations submitted through the donation form.'}</p>}</div>
+        <div className="donation-detail-proof"><h3>Payment proof</h3>{selectedDonation.files?.length ? selectedDonation.files.map((file) => <div key={file.id}>{file.type === 'application/pdf' ? <a href={file.fileUrl} target="_blank" rel="noreferrer">{file.fileName || 'Open proof document'} <ArrowUpRight size={14} /></a> : <a href={file.fileUrl} target="_blank" rel="noreferrer"><ImageWithLoader src={file.fileUrl} alt={file.fileName || 'Donation payment proof'} /><span>{file.fileName || 'View proof image'} <ArrowUpRight size={14} /></span></a>}</div>) : <p>{selectedDonation.isManual ? 'No proof was attached to this manual entry.' : 'Proof is not required for donations submitted through the donation form.'}</p>}</div>
       </section>
     </div>}
   </>
@@ -5817,7 +5842,7 @@ function AppRoutes() {
     <SessionMonitor />
     <RouteMetadata />
     <Routes>
-    <Route path="/" element={<PublicLayout><HomepageReference useLocalImageCache={isLocalDemoSession()} /></PublicLayout>} />
+    <Route path="/" element={<PublicLayout><HomepageReference /></PublicLayout>} />
     <Route path="/search" element={<PublicLayout><SiteSearchPage /></PublicLayout>} />
     <Route path="/about" element={<PublicLayout><AboutPage /></PublicLayout>} />
     <Route path="/spirituality" element={<PublicLayout><SpiritualityPage /></PublicLayout>} />
