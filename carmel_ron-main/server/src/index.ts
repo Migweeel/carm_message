@@ -788,12 +788,6 @@ const googleAuthSchema = z.object({
   accessToken: z.string().min(1).max(20_000).optional(),
   intent: z.enum(['login', 'signup']),
 }).refine((value) => Boolean(value.credential) !== Boolean(value.accessToken))
-const googleUserInfoSchema = z.object({
-  sub: z.string().min(1),
-  email: z.email(),
-  email_verified: z.boolean(),
-  name: z.string().nullish(),
-})
 const googleAuthUserSelect = {
   id: true,
   name: true,
@@ -843,28 +837,20 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
     }
   } else if (input.accessToken) {
     try {
-      const [tokenInfo, profileResponse] = await Promise.all([
-        googleOAuthClient.getTokenInfo(input.accessToken),
-        fetch('https://openidconnect.googleapis.com/v1/userinfo', {
-          headers: { Authorization: `Bearer ${input.accessToken}` },
-          signal: AbortSignal.timeout(10_000),
-        }),
-      ])
-      if (!profileResponse.ok) return res.status(401).json({ error: 'Google could not verify this sign-in. Please try again.' })
-      const profile = googleUserInfoSchema.safeParse(await profileResponse.json())
+      const tokenInfo = await googleOAuthClient.getTokenInfo(input.accessToken)
       const tokenSubject = tokenInfo.sub || tokenInfo.user_id
-      if (
-        !profile.success
-        || tokenInfo.aud !== googleClientId
-        || !tokenSubject
-        || tokenSubject !== profile.data.sub
-        || tokenInfo.email_verified !== true
-        || tokenInfo.email?.toLowerCase() !== profile.data.email.toLowerCase()
-        || !profile.data.email_verified
-      ) {
+      const audienceMatches = tokenInfo.aud === googleClientId || tokenInfo.azp === googleClientId
+      const emailVerified = tokenInfo.email_verified === true || String(tokenInfo.email_verified).toLowerCase() === 'true'
+      if (!audienceMatches || !tokenSubject || !tokenInfo.email || !emailVerified) {
+        console.error('Google access token claims rejected:', {
+          audienceMatches,
+          subjectPresent: Boolean(tokenSubject),
+          emailPresent: Boolean(tokenInfo.email),
+          emailVerified,
+        })
         return res.status(401).json({ error: 'Google could not verify this sign-in. Please try again.' })
       }
-      payload = profile.data
+      payload = { sub: tokenSubject, email: tokenInfo.email, email_verified: true }
     } catch (error) {
       console.error('Google access token verification failed:', error instanceof Error ? error.name : 'Unknown error')
       return res.status(502).json({ error: 'Google could not verify this sign-in right now. Please try again.' })

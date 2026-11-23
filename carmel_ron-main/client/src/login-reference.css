@@ -410,39 +410,6 @@
   pointer-events: none;
 }
 
-.auth-google-button-trigger {
-  display: flex;
-  min-height: 40px;
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 0 12px;
-  border: 1px solid #dadce0;
-  border-radius: 4px;
-  background: #fff;
-  color: #3c4043;
-  font: 500 14px Arial, Helvetica, sans-serif;
-  cursor: pointer;
-}
-
-.auth-google-button-trigger:hover:not(:disabled) {
-  background: #f8faff;
-  border-color: #c6dafc;
-}
-
-.auth-google-button-trigger:focus-visible {
-  outline: 2px solid #4285f4;
-  outline-offset: 2px;
-}
-
-.auth-google-button-trigger:disabled {
-  cursor: wait;
-  opacity: 0.72;
-}
-
 .auth-facebook-button-wrapper {
   position: relative;
   display: flex;

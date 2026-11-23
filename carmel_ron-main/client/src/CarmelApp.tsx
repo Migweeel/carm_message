@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { BrowserRouter, Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { GoogleOAuthProvider, googleLogout, useGoogleLogin, useGoogleOAuth } from '@react-oauth/google'
+import { GoogleLogin, GoogleOAuthProvider, googleLogout } from '@react-oauth/google'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, RotateCw, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
 import ImageWithLoader from './ImageWithLoader'
 import attractedByTheVeilImage from './assets/attracted-by-the-veil.webp'
@@ -2612,49 +2612,6 @@ async function readApiResponse<T>(response: Response, operation: string): Promis
   return result as T
 }
 
-function GoogleAccountButton({ disabled, onStart, onAccessToken, onError }: {
-  disabled: boolean
-  onStart: () => void
-  onAccessToken: (accessToken: string) => void
-  onError: () => void
-}) {
-  const { scriptLoadedSuccessfully } = useGoogleOAuth()
-  const login = useGoogleLogin({
-    prompt: 'select_account',
-    onSuccess: (response) => {
-      if (!response.access_token) {
-        onError()
-        return
-      }
-      onAccessToken(response.access_token)
-    },
-    onError,
-    onNonOAuthError: onError,
-  })
-  return <button
-    className="auth-google-button-trigger"
-    type="button"
-    disabled={!scriptLoadedSuccessfully || disabled}
-    aria-busy={!scriptLoadedSuccessfully || disabled || undefined}
-    onClick={() => {
-      onStart()
-      try {
-        login()
-      } catch {
-        onError()
-      }
-    }}
-  >
-    <svg aria-hidden="true" viewBox="0 0 48 48" width="18" height="18">
-      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z" transform="translate(0 4)" />
-      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94a11.05 11.05 0 0 1-4.8 7.24l7.74 6C44.4 38.02 46.98 31.9 46.98 24.55Z" />
-      <path fill="#FBBC05" d="M10.54 28.59a14.4 14.4 0 0 1 0-9.18l-7.98-6.19a24 24 0 0 0 0 21.56l7.98-6.19Z" transform="translate(0 4)" />
-      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.74-6c-2.15 1.45-4.9 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z" transform="translate(0 -4)" />
-    </svg>
-    {scriptLoadedSuccessfully ? 'Continue with Google' : 'Loading Google…'}
-  </button>
-}
-
 function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -2668,6 +2625,8 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const [facebookSdkLoading, setFacebookSdkLoading] = useState(() => !isStaff && Boolean(facebookAppId))
   const [facebookSdkError, setFacebookSdkError] = useState(false)
   const [facebookSdkLoadAttempt, setFacebookSdkLoadAttempt] = useState(0)
+  const [googleButtonWidth, setGoogleButtonWidth] = useState(400)
+  const googleButtonRef = useRef<HTMLDivElement>(null)
   const googleRequestInFlight = useRef(false)
   const facebookRequestInFlight = useRef(false)
   const [resendingCode, setResendingCode] = useState(false)
@@ -2710,6 +2669,28 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const timer = window.setInterval(updateRemaining, 1000)
     return () => window.clearInterval(timer)
   }, [verificationOpen, verificationSuccess, resendAvailableAt])
+  useEffect(() => {
+    if (isStaff || !googleClientId) return
+    const container = googleButtonRef.current
+    if (!container) return
+    let resizeTimer = 0
+    const updateWidth = (width: number) => {
+      window.clearTimeout(resizeTimer)
+      resizeTimer = window.setTimeout(() => {
+        const nextWidth = Math.min(400, Math.max(1, Math.floor(width)))
+        setGoogleButtonWidth((currentWidth) => Math.abs(currentWidth - nextWidth) < 2 ? currentWidth : nextWidth)
+      }, 120)
+    }
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) updateWidth(entry.contentRect.width)
+    })
+    updateWidth(container.getBoundingClientRect().width)
+    observer.observe(container)
+    return () => {
+      window.clearTimeout(resizeTimer)
+      observer.disconnect()
+    }
+  }, [isStaff])
   useEffect(() => {
     if (isStaff || !facebookAppId) return
     let active = true
@@ -2844,7 +2825,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       setPending(false)
     }
   }
-  async function continueWithGoogle(accessToken: string) {
+  async function continueWithGoogle(credential: string) {
     if (googleRequestInFlight.current) return
     googleRequestInFlight.current = true
     const controller = new AbortController()
@@ -2856,7 +2837,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken, intent: isSignup ? 'signup' : 'login' }),
+        body: JSON.stringify({ credential, intent: isSignup ? 'signup' : 'login' }),
         signal: controller.signal,
       })
       const result = await readAuthResponse(response)
@@ -3034,15 +3015,27 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       {accountSuccess && <p className="form-success" role="status">{accountSuccess}</p>}
       {!isStaff && <div className="auth-social-login">
         {googleClientId
-          ? <div className={`auth-google-button${pending || googlePending || facebookPending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>
-            <GoogleAccountButton
-              disabled={pending || googlePending || facebookPending}
-              onStart={() => { setError(''); setGooglePending(true) }}
-              onAccessToken={(accessToken) => void continueWithGoogle(accessToken)}
+          ? <div ref={googleButtonRef} className={`auth-google-button${pending || googlePending || facebookPending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>
+            <GoogleLogin
+              onSuccess={(response) => {
+                if (!response.credential) {
+                  setGooglePending(false)
+                  setError('Google could not verify this sign-in. Please try again.')
+                  return
+                }
+                setError('')
+                setGooglePending(true)
+                void continueWithGoogle(response.credential)
+              }}
               onError={() => {
                 setGooglePending(false)
                 setError('Google sign-in was cancelled or could not be completed. Please try again.')
               }}
+              auto_select={false}
+              useOneTap={false}
+              width={String(googleButtonWidth)}
+              theme="outline"
+              size="large"
             />
             {(pending || googlePending || facebookPending) && <p className="auth-social-status" role="status">{googlePending ? 'Connecting to Google…' : facebookPending ? 'Connecting to Facebook…' : 'Please wait…'}</p>}
           </div>
