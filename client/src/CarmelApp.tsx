@@ -1720,7 +1720,7 @@ function LegacyStoryPage({ kind }: { kind: 'updates' }) {
               <span className="featured-update-title">{featuredUpdate.title}</span>
               <span className="featured-update-link">Read update <ArrowRight size={16} /></span>
             </span>
-          </Link>
+          </button>
           {featuredUpdates.length > 1 && <div className="featured-update-controls" aria-label="Featured updates">
             <button type="button" onClick={showPreviousHighlight} aria-label="Previous featured update"><ChevronLeft size={17} /></button>
             <span>{activeHighlightIndex + 1} / {featuredUpdates.length}</span>

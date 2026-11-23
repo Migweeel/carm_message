@@ -1594,6 +1594,8 @@ function LegacyStoryPage({ kind }: { kind: 'updates' }) {
   const [category, setCategory] = useState('All Updates')
   const [newsAge, setNewsAge] = useState<'recent' | 'old' | 'all'>('all')
   const [activeHighlight, setActiveHighlight] = useState(0)
+  const [selectedUpdate, setSelectedUpdate] = useState<SiteUpdate | null>(null)
+  const [updateFullView, setUpdateFullView] = useState(false)
   const highlightTouchStart = useRef<number | null>(null)
   const swipedHighlight = useRef(false)
   const [updates, setUpdates] = useState<SiteUpdate[]>(readSiteUpdates)
@@ -1708,7 +1710,7 @@ function LegacyStoryPage({ kind }: { kind: 'updates' }) {
           }
           highlightTouchStart.current = null
         }}>
-          <Link className="featured-update" to={`/updates/${encodeURIComponent(featuredUpdate.id)}`} target="_blank" rel="noopener noreferrer" aria-label={`Read featured update: ${featuredUpdate.title}`}>
+          <button type="button" className="featured-update" onClick={() => { setSelectedUpdate(featuredUpdate); setUpdateFullView(false) }} aria-label={`Read featured update: ${featuredUpdate.title}`}>
             {featuredUpdate.video?.startsWith('data:video/') ? <video src={featuredUpdate.video} poster={featuredUpdate.image || undefined} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" /> : featuredUpdate.image ? <ImageWithLoader src={featuredUpdate.image} alt="" /> : <span className="featured-update-placeholder" aria-hidden="true">{featuredUpdate.video ? <Play size={38} /> : <HandHeart size={38} />}</span>}
             <span className="featured-update-shade" />
             <span className="featured-update-content">
@@ -1716,7 +1718,7 @@ function LegacyStoryPage({ kind }: { kind: 'updates' }) {
               <span className="featured-update-title">{featuredUpdate.title}</span>
               <span className="featured-update-link">Read update <ArrowRight size={16} /></span>
             </span>
-          </Link>
+          </button>
           {featuredUpdates.length > 1 && <div className="featured-update-controls" aria-label="Featured updates">
             <button type="button" onClick={showPreviousHighlight} aria-label="Previous featured update"><ChevronLeft size={17} /></button>
             <span>{activeHighlightIndex + 1} / {featuredUpdates.length}</span>
@@ -1727,15 +1729,27 @@ function LegacyStoryPage({ kind }: { kind: 'updates' }) {
         const date = new Date(`${update.date}T12:00:00`)
         const dateTime = Number.isNaN(date.getTime()) ? update.date : date.toISOString().slice(0, 10)
         const displayDate = Number.isNaN(date.getTime()) ? update.date : date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-        const updateHref = `/updates/${encodeURIComponent(update.id)}`
         return <article className="update-post" key={update.id}>{update.video
           ? <UpdateVideoPlayer className="update-post-video" source={update.video} title={update.title} poster={update.image || undefined} />
-          : <Link className="update-post-media" to={updateHref} target="_blank" rel="noopener noreferrer" aria-label={`Read update: ${update.title}`}>{update.image ? <ImageWithLoader src={update.image} alt="" /> : <div className="update-no-image"><HandHeart size={30} /><span>Carmels in<br />Communion</span></div>}</Link>}
-          <Link className="update-post-body" to={updateHref} target="_blank" rel="noopener noreferrer"><h2>{update.title}</h2><p>{update.body}</p><div className="update-post-footer"><span className="update-read-link">{update.id === 'papal-address' ? 'View more' : 'View update'} <ArrowRight size={15} /></span><time dateTime={dateTime}><CalendarDays size={13} />{displayDate}</time></div></Link></article>
+          : <button type="button" className="update-post-media" onClick={() => { setSelectedUpdate(update); setUpdateFullView(false) }} aria-label={`Read update: ${update.title}`}>{update.image ? <ImageWithLoader src={update.image} alt="" /> : <div className="update-no-image"><HandHeart size={30} /><span>Carmels in<br />Communion</span></div>}</button>}
+          <button type="button" className="update-post-body" onClick={() => { setSelectedUpdate(update); setUpdateFullView(false) }}><h2>{update.title}</h2><p>{update.body}</p><div className="update-post-footer"><span className="update-read-link">{update.id === 'papal-address' ? 'View more' : 'View update'} <ArrowRight size={15} /></span><time dateTime={dateTime}><CalendarDays size={13} />{displayDate}</time></div></button></article>
         })}</div>}
         {regularUpdates.length > 0 && visibleNews.length === 0 && <p className="updates-age-empty" role="status">No {newsAge === 'recent' ? 'recent' : 'older'} news to show. Choose All news to see every update.</p>}
       </> : <div className="updates-empty"><Search size={25} /><h2>No updates found</h2><p>Try a different search or category.</p></div>}
       {loadError && <p className="updates-load-status" role="status">Live updates could not be reached. Showing this device’s saved updates instead. <span>{loadError}</span></p>}
+      {selectedUpdate && <div className={`story-modal-backdrop ${updateFullView ? 'story-modal-backdrop-full-view' : ''}`} role="presentation" onClick={() => { setSelectedUpdate(null); setUpdateFullView(false) }}>
+        <article className={`story-modal ${updateFullView ? 'story-modal-full-view' : ''}`} role="dialog" aria-modal="true" aria-label={selectedUpdate.title} onClick={(event) => event.stopPropagation()}>
+          <button className="story-modal-close" type="button" onClick={() => { setSelectedUpdate(null); setUpdateFullView(false) }} aria-label="Close update"><X size={18} /></button>
+          {selectedUpdate.video ? <UpdateVideoPlayer className="update-post-video" source={selectedUpdate.video} title={selectedUpdate.title} poster={selectedUpdate.image || undefined} /> : selectedUpdate.image ? <ImageWithLoader src={selectedUpdate.image} alt={selectedUpdate.title} /> : null}
+          <div className="story-modal-body">
+            <span className="eyebrow">{selectedUpdate.category.toUpperCase()} · {selectedUpdate.date}</span>
+            <h2>{selectedUpdate.title}</h2>
+            {!updateFullView && <button className="button button-outline story-full-view-toggle" type="button" onClick={() => setUpdateFullView(true)} aria-label="Read update in full view" aria-expanded={false}>Read in full view <Maximize2 size={15} /></button>}
+            <div className="story-full-copy">{selectedUpdate.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+            {updateFullView && <button className="button button-outline story-full-view-toggle story-full-view-toggle-minimized" type="button" onClick={() => setUpdateFullView(false)} aria-label="Return to update preview" aria-expanded={true}><ChevronDown size={18} /></button>}
+          </div>
+        </article>
+      </div>}
     </section>
   }
   return null

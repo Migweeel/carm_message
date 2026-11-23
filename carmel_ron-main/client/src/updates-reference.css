@@ -44,6 +44,9 @@
 .updates-page .update-post>video,.updates-page .update-post>iframe{width:100%;height:212px;min-height:0;flex:none;background:#211b16;object-fit:cover}
 .updates-page .update-no-image{height:212px;min-height:0;flex:none}
 .updates-page .update-post-body{min-width:0;flex:1;display:flex;flex-direction:column;align-items:stretch;padding:16px 18px 13px;color:inherit;text-decoration:none}
+.updates-page .featured-update,.updates-page .update-post-media,.updates-page .update-post-body{border:0;font:inherit;text-align:left}
+.updates-page .update-post-media{background:transparent;cursor:pointer}
+.updates-page .update-post-body{width:100%;background:transparent;cursor:pointer}
 .updates-page .update-post-media:focus-visible,.updates-page .update-post-body:focus-visible{outline:3px solid #b98042;outline-offset:-3px}
 .updates-page .update-post h2{display:-webkit-box;min-height:39px;margin:0 0 6px;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;color:#33271f;font:500 14px/1.35 var(--serif)}
 .updates-page .update-post p{display:-webkit-box;min-height:35px;margin:0 0 8px;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;color:#82776e;font-size:10px;line-height:1.7}
