@@ -1745,8 +1745,8 @@ function LegacyStoryPage({ kind }: { kind: 'updates' }) {
             <span className="eyebrow">{selectedUpdate.category.toUpperCase()} · {selectedUpdate.date}</span>
             <h2>{selectedUpdate.title}</h2>
             {!updateFullView && <button className="button button-outline story-full-view-toggle" type="button" onClick={() => setUpdateFullView(true)} aria-label="Read update in full view" aria-expanded={false}>Read in full view <Maximize2 size={15} /></button>}
-            {updateFullView && <button className="button button-outline story-full-view-toggle story-full-view-toggle-minimized" type="button" onClick={() => setUpdateFullView(false)} aria-label="Return to update preview" aria-expanded={true}><ChevronDown size={18} /></button>}
             <div className="story-full-copy">{selectedUpdate.body.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+            {updateFullView && <button className="button button-outline story-full-view-toggle story-full-view-toggle-minimized" type="button" onClick={() => setUpdateFullView(false)} aria-label="Return to update preview" aria-expanded={true}><ChevronDown size={18} /></button>}
           </div>
         </article>
       </div>}
