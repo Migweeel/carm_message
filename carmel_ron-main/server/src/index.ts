@@ -784,8 +784,15 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
   return res.status(401).json({ error: 'Email or password is incorrect.' })
 }))
 const googleAuthSchema = z.object({
-  credential: z.string().min(1).max(20_000),
+  credential: z.string().min(1).max(20_000).optional(),
+  accessToken: z.string().min(1).max(20_000).optional(),
   intent: z.enum(['login', 'signup']),
+}).refine((value) => Boolean(value.credential) !== Boolean(value.accessToken))
+const googleUserInfoSchema = z.object({
+  sub: z.string().min(1),
+  email: z.email(),
+  email_verified: z.boolean(),
+  name: z.string().nullish(),
 })
 const googleAuthUserSelect = {
   id: true,
@@ -825,18 +832,50 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
   if (parsed.error) return res.status(400).json({ error: 'Google sign-in could not be started. Please try again.' })
   const input = parsed.data!
 
-  let payload
-  try {
-    const ticket = await googleOAuthClient.verifyIdToken({ idToken: input.credential, audience: googleClientId })
-    payload = ticket.getPayload()
-  } catch (error) {
-    console.error('Google ID token verification failed:', error instanceof Error ? error.name : 'Unknown error')
-    return res.status(401).json({ error: 'Google could not verify this sign-in. Please try again.' })
+  let payload: { sub?: string; email?: string; email_verified?: boolean; name?: string | null } | undefined
+  if (input.credential) {
+    try {
+      const ticket = await googleOAuthClient.verifyIdToken({ idToken: input.credential, audience: googleClientId })
+      payload = ticket.getPayload()
+    } catch (error) {
+      console.error('Google ID token verification failed:', error instanceof Error ? error.name : 'Unknown error')
+      return res.status(401).json({ error: 'Google could not verify this sign-in. Please try again.' })
+    }
+  } else if (input.accessToken) {
+    try {
+      const [tokenInfo, profileResponse] = await Promise.all([
+        googleOAuthClient.getTokenInfo(input.accessToken),
+        fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+          headers: { Authorization: `Bearer ${input.accessToken}` },
+          signal: AbortSignal.timeout(10_000),
+        }),
+      ])
+      if (!profileResponse.ok) return res.status(401).json({ error: 'Google could not verify this sign-in. Please try again.' })
+      const profile = googleUserInfoSchema.safeParse(await profileResponse.json())
+      const tokenSubject = tokenInfo.sub || tokenInfo.user_id
+      if (
+        !profile.success
+        || tokenInfo.aud !== googleClientId
+        || !tokenSubject
+        || tokenSubject !== profile.data.sub
+        || tokenInfo.email_verified !== true
+        || tokenInfo.email?.toLowerCase() !== profile.data.email.toLowerCase()
+        || !profile.data.email_verified
+      ) {
+        return res.status(401).json({ error: 'Google could not verify this sign-in. Please try again.' })
+      }
+      payload = profile.data
+    } catch (error) {
+      console.error('Google access token verification failed:', error instanceof Error ? error.name : 'Unknown error')
+      return res.status(502).json({ error: 'Google could not verify this sign-in right now. Please try again.' })
+    }
   }
   if (!payload?.sub || !payload.email || payload.email_verified !== true) {
     return res.status(401).json({ error: 'Google did not provide a verified email address for this account.' })
   }
 
+  const googleSubject = payload.sub
+  const googleName = payload.name
   const email = payload.email.trim().toLowerCase()
   if (retiredDemoAccountEmails.has(email)) return res.status(403).json({ error: 'This email address is not available for sign-in.' })
   const alreadyRegisteredForSignup = () => res.status(409).json({
@@ -845,7 +884,7 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
     email,
   })
   const findGoogleIdentity = () => prisma.oAuthIdentity.findUnique({
-    where: identityWhereForGoogle(payload.sub),
+    where: identityWhereForGoogle(googleSubject),
     include: { user: { select: googleAuthUserSelect } },
   })
   let identity = await findGoogleIdentity()
@@ -863,7 +902,7 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
         return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
       }
       if (input.intent === 'signup') return alreadyRegisteredForSignup()
-      if (!await linkGoogleIdentityToUser(existingAccount.id, payload.sub)) {
+      if (!await linkGoogleIdentityToUser(existingAccount.id, googleSubject)) {
         return res.status(409).json({ error: 'This Google account is already linked to a different member account.' })
       }
       user = existingAccount
@@ -872,7 +911,7 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
     }
 
     if (!existingAccount) {
-      const name = (payload.name?.trim() || email.split('@')[0]).slice(0, 100)
+      const name = (googleName?.trim() || email.split('@')[0]).slice(0, 100)
       const passwordHash = await bcrypt.hash(randomBytes(32).toString('base64url'), 10)
       try {
         user = await prisma.user.create({
@@ -884,7 +923,7 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
             privacyConsentAt: new Date(),
             privacyPolicyVersion: memberPrivacyVersion,
             discernment: { create: {} },
-            oauthIdentities: { create: { provider: 'GOOGLE', providerUserId: payload.sub } },
+            oauthIdentities: { create: { provider: 'GOOGLE', providerUserId: googleSubject } },
           },
           select: googleAuthUserSelect,
         })
@@ -901,7 +940,7 @@ app.post('/api/auth/google', asyncRoute(async (req, res) => {
             return res.status(403).json({ error: 'Google sign-in is only available for active member accounts.' })
           }
           if (input.intent === 'signup') return alreadyRegisteredForSignup()
-          if (!await linkGoogleIdentityToUser(accountCreatedConcurrently.id, payload.sub)) {
+          if (!await linkGoogleIdentityToUser(accountCreatedConcurrently.id, googleSubject)) {
             return res.status(409).json({ error: 'This Google account is already linked to a different member account.' })
           }
           user = accountCreatedConcurrently

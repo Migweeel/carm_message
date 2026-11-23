@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { BrowserRouter, Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google'
+import { GoogleOAuthProvider, googleLogout, useGoogleLogin, useGoogleOAuth } from '@react-oauth/google'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Award, Banknote, Bell, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Database, Download, Eye, EyeOff, FileText, HandHeart, Heart, Home, Image, LogIn, LogOut, Mail, MapPin, Maximize2, Menu, MessageCircle, Pencil, Play, Plus, RotateCw, Search, ShieldCheck, Smartphone, Upload, User, Users, X } from 'lucide-react'
 import ImageWithLoader from './ImageWithLoader'
 import attractedByTheVeilImage from './assets/attracted-by-the-veil.webp'
@@ -51,6 +51,7 @@ type FacebookSdk = {
   init: (options: { appId: string; cookie: boolean; xfbml: boolean; version: string }) => void
   login: (callback: (response: FacebookLoginResponse) => void, options: { scope: string }) => void
 }
+let initializedFacebookAppId: string | null = null
 
 declare global {
   interface Window {
@@ -343,10 +344,18 @@ function saveServerSessionRole(role: PublicProfile['role'] | null) {
   if (role) localStorage.setItem(serverSessionRoleKey, role)
   else localStorage.removeItem(serverSessionRoleKey)
 }
+let serverLogoutRequest: Promise<void> | null = null
 function requestServerLogout() {
-  void fetch('/api/auth/logout', { method: 'POST', credentials: 'include', keepalive: true }).then((response) => {
+  if (serverLogoutRequest) return serverLogoutRequest
+  serverLogoutRequest = fetch('/api/auth/logout', { method: 'POST', credentials: 'include', keepalive: true }).then((response) => {
     if (!response.ok) console.error(`Sign-out request failed with HTTP ${response.status}.`)
-  }).catch((error: unknown) => console.error('Sign-out request could not reach the account service.', error))
+  }).catch((error: unknown) => console.error('Sign-out request could not reach the account service.', error)).finally(() => {
+    serverLogoutRequest = null
+  })
+  return serverLogoutRequest
+}
+function clearGoogleAutoSelection() {
+  googleLogout()
 }
 const carmelightsCategories = ['Prayer', 'Trust', 'Love', 'Simplicity', 'The Cross', 'Saints']
 const carmeliteSaints = ['St. Teresa of Avila', 'St. John of the Cross', 'St. Thérèse of Lisieux', 'St. Teresa Benedicta of the Cross']
@@ -902,7 +911,10 @@ function readMemberSession(): MemberAccount | null {
 function saveMemberSession(account: MemberAccount | null) {
   if (account) localStorage.setItem(memberSessionKey, JSON.stringify(account))
   else localStorage.removeItem(memberSessionKey)
-  window.dispatchEvent(new Event(memberSessionUpdatedEvent))
+  window.dispatchEvent(new CustomEvent(memberSessionUpdatedEvent, { detail: { signedOut: !account } }))
+}
+function notifyStaffSessionUpdated(signedOut = false) {
+  window.dispatchEvent(new CustomEvent(staffSessionUpdatedEvent, { detail: { signedOut } }))
 }
 function memberDonationKey(email: string) { return `carmel-member-donations:${email.toLowerCase()}` }
 function memberFavoriteKey(email: string) { return `carmel-member-favorites:${email.toLowerCase()}` }
@@ -969,7 +981,13 @@ function Navbar() {
   }, [mobileSearchOpen])
   useEffect(() => {
     let active = true
-    const refresh = () => {
+    let refreshRequest = 0
+    const refresh = (event?: Event) => {
+      const requestId = ++refreshRequest
+      if (event instanceof CustomEvent && event.detail?.signedOut) {
+        setProfile(null)
+        return
+      }
       const localProfile = readPublicProfile()
       if (localProfile) {
         if (!localProfile.prototype) saveServerSessionRole(localProfile.role)
@@ -977,14 +995,16 @@ function Navbar() {
         return
       }
       fetch('/api/auth/me', { credentials: 'include' }).then(async (response) => {
-        if (!response.ok) { if (active) setProfile(null); return }
+        if (!response.ok) { if (active && requestId === refreshRequest) setProfile(null); return }
         const result = await response.json()
-        if (active && ['ADMIN', 'FORMATOR', 'USER'].includes(result.user?.role)) {
+        if (active && requestId === refreshRequest && ['ADMIN', 'FORMATOR', 'USER'].includes(result.user?.role)) {
           const authenticatedProfile = result.user as PublicProfile
           saveServerSessionRole(authenticatedProfile.role)
           setProfile(authenticatedProfile)
+        } else if (active && requestId === refreshRequest) {
+          setProfile(null)
         }
-      }).catch(() => { if (active) setProfile(null) })
+      }).catch(() => { if (active && requestId === refreshRequest) setProfile(null) })
     }
     refresh()
     window.addEventListener(memberSessionUpdatedEvent, refresh)
@@ -993,9 +1013,10 @@ function Navbar() {
     return () => { active = false; window.removeEventListener(memberSessionUpdatedEvent, refresh); window.removeEventListener(staffSessionUpdatedEvent, refresh); window.removeEventListener('storage', refresh) }
   }, [])
   function signOut() {
+    clearGoogleAutoSelection()
     saveServerSessionRole(null)
     if (profile?.role === 'USER') saveMemberSession(null)
-    else { localStorage.removeItem(prototypeSessionKey); window.dispatchEvent(new Event(staffSessionUpdatedEvent)) }
+    else { localStorage.removeItem(prototypeSessionKey); notifyStaffSessionUpdated(true) }
     if (!profile?.prototype) requestServerLogout()
     setProfileOpen(false)
     setOpen(false)
@@ -2591,6 +2612,49 @@ async function readApiResponse<T>(response: Response, operation: string): Promis
   return result as T
 }
 
+function GoogleAccountButton({ disabled, onStart, onAccessToken, onError }: {
+  disabled: boolean
+  onStart: () => void
+  onAccessToken: (accessToken: string) => void
+  onError: () => void
+}) {
+  const { scriptLoadedSuccessfully } = useGoogleOAuth()
+  const login = useGoogleLogin({
+    prompt: 'select_account',
+    onSuccess: (response) => {
+      if (!response.access_token) {
+        onError()
+        return
+      }
+      onAccessToken(response.access_token)
+    },
+    onError,
+    onNonOAuthError: onError,
+  })
+  return <button
+    className="auth-google-button-trigger"
+    type="button"
+    disabled={!scriptLoadedSuccessfully || disabled}
+    aria-busy={!scriptLoadedSuccessfully || disabled || undefined}
+    onClick={() => {
+      onStart()
+      try {
+        login()
+      } catch {
+        onError()
+      }
+    }}
+  >
+    <svg aria-hidden="true" viewBox="0 0 48 48" width="18" height="18">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z" transform="translate(0 4)" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94a11.05 11.05 0 0 1-4.8 7.24l7.74 6C44.4 38.02 46.98 31.9 46.98 24.55Z" />
+      <path fill="#FBBC05" d="M10.54 28.59a14.4 14.4 0 0 1 0-9.18l-7.98-6.19a24 24 0 0 0 0 21.56l7.98-6.19Z" transform="translate(0 4)" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.74-6c-2.15 1.45-4.9 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z" transform="translate(0 -4)" />
+    </svg>
+    {scriptLoadedSuccessfully ? 'Continue with Google' : 'Loading Google…'}
+  </button>
+}
+
 function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -2601,8 +2665,9 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const [googlePending, setGooglePending] = useState(false)
   const [facebookPending, setFacebookPending] = useState(false)
   const [facebookSdkLoaded, setFacebookSdkLoaded] = useState(false)
-  const [googleButtonWidth, setGoogleButtonWidth] = useState(400)
-  const googleButtonRef = useRef<HTMLDivElement>(null)
+  const [facebookSdkLoading, setFacebookSdkLoading] = useState(() => !isStaff && Boolean(facebookAppId))
+  const [facebookSdkError, setFacebookSdkError] = useState(false)
+  const [facebookSdkLoadAttempt, setFacebookSdkLoadAttempt] = useState(0)
   const googleRequestInFlight = useRef(false)
   const facebookRequestInFlight = useRef(false)
   const [resendingCode, setResendingCode] = useState(false)
@@ -2646,60 +2711,67 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     return () => window.clearInterval(timer)
   }, [verificationOpen, verificationSuccess, resendAvailableAt])
   useEffect(() => {
-    if (isStaff || !googleClientId) return
-    const container = googleButtonRef.current
-    if (!container) return
-    let resizeTimer = 0
-    const updateWidth = (width: number) => {
-      window.clearTimeout(resizeTimer)
-      resizeTimer = window.setTimeout(() => {
-        const nextWidth = Math.min(400, Math.max(1, Math.floor(width)))
-        setGoogleButtonWidth((currentWidth) => Math.abs(currentWidth - nextWidth) < 2 ? currentWidth : nextWidth)
-      }, 120)
-    }
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) updateWidth(entry.contentRect.width)
-    })
-    updateWidth(container.getBoundingClientRect().width)
-    observer.observe(container)
-    return () => {
-      window.clearTimeout(resizeTimer)
-      observer.disconnect()
-    }
-  }, [isStaff])
-  useEffect(() => {
     if (isStaff || !facebookAppId) return
+    let active = true
+    let initialized = false
+    let timeoutId = 0
+    let handleScriptError = () => {}
     const initializeFacebook = () => {
+      if (!window.FB || initialized) return
       try {
-        window.FB?.init({ appId: facebookAppId, cookie: true, xfbml: false, version: 'v27.0' })
-        setFacebookSdkLoaded(Boolean(window.FB))
+        if (initializedFacebookAppId !== facebookAppId) {
+          window.FB.init({ appId: facebookAppId, cookie: true, xfbml: false, version: 'v27.0' })
+          initializedFacebookAppId = facebookAppId
+        }
+        initialized = true
+        window.clearTimeout(timeoutId)
+        if (active) {
+          setFacebookSdkLoaded(true)
+          setFacebookSdkLoading(false)
+        }
       } catch {
-        setError('Facebook sign-in could not be initialized. Please try again or use your email and password.')
+        handleScriptError()
       }
     }
-    const handleScriptError = () => {
-      setError('Facebook sign-in could not be loaded. Please try again or use your email and password.')
+    handleScriptError = () => {
+      window.clearTimeout(timeoutId)
+      document.getElementById('facebook-jssdk')?.remove()
+      if (active) {
+        setFacebookSdkLoaded(false)
+        setFacebookSdkLoading(false)
+        setFacebookSdkError(true)
+        setError('Facebook sign-in could not be loaded. Try again or use your email and password.')
+      }
     }
     window.fbAsyncInit = initializeFacebook
-    const existingScript = document.getElementById('facebook-jssdk')
+    const existingScript = document.getElementById('facebook-jssdk') as HTMLScriptElement | null
+    const script = existingScript || document.createElement('script')
+    const handleScriptLoad = () => {
+      if (window.FB) initializeFacebook()
+      else handleScriptError()
+    }
+    script.addEventListener('load', handleScriptLoad, { once: true })
+    script.addEventListener('error', handleScriptError, { once: true })
+    timeoutId = window.setTimeout(handleScriptError, 15_000)
     if (window.FB) {
       initializeFacebook()
     } else if (!existingScript) {
-      const script = document.createElement('script')
       script.id = 'facebook-jssdk'
       script.src = 'https://connect.facebook.net/en_US/sdk.js'
       script.async = true
       script.defer = true
-      script.addEventListener('error', handleScriptError, { once: true })
       document.body.appendChild(script)
     }
     return () => {
-      if (window.fbAsyncInit === initializeFacebook) delete window.fbAsyncInit
-      document.getElementById('facebook-jssdk')?.removeEventListener('error', handleScriptError)
+      active = false
+      window.clearTimeout(timeoutId)
+      script.removeEventListener('load', handleScriptLoad)
+      script.removeEventListener('error', handleScriptError)
     }
-  }, [isStaff])
+  }, [isStaff, facebookSdkLoadAttempt])
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (pending || googlePending || facebookPending) return
     const form = new FormData(event.currentTarget)
     if (isSignup) {
       if (form.get('password') !== form.get('confirmPassword')) {
@@ -2772,7 +2844,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       setPending(false)
     }
   }
-  async function continueWithGoogle(credential: string) {
+  async function continueWithGoogle(accessToken: string) {
     if (googleRequestInFlight.current) return
     googleRequestInFlight.current = true
     const controller = new AbortController()
@@ -2784,7 +2856,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential, intent: isSignup ? 'signup' : 'login' }),
+        body: JSON.stringify({ accessToken, intent: isSignup ? 'signup' : 'login' }),
         signal: controller.signal,
       })
       const result = await readAuthResponse(response)
@@ -2954,7 +3026,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   return <>
   <section className={`login-page auth-reference-page member-auth-page${isSignup ? ' member-auth-signup-page' : isStaff ? ' member-auth-staff-page' : ' member-auth-login-page'}`}>
     <div className="login-art auth-reference-art"><ImageWithLoader className="auth-reference-background" src={loginFloralImage} alt="" /><div className="auth-reference-brand"><Brand light /></div><p>“Let your soul be a garden<br />where God may walk.”</p></div>
-    <form className="login-form auth-reference-form" onSubmit={submit}>
+    <form className="login-form auth-reference-form" onSubmit={submit} aria-busy={pending || googlePending || facebookPending || undefined}>
       <span className="eyebrow">{isSignup ? 'HELLO' : isStaff ? 'FEDERATION STAFF' : 'WELCOME BACK'}</span>
       <h1>{isSignup ? <>Create <em>Account</em></> : isStaff ? <>Staff <em>Sign in</em></> : <>Login <em>Account</em></>}</h1>
       <p>{isSignup ? 'Create a resident account by providing your information.' : isStaff ? 'Sign in to your Federation staff or administrator account.' : 'Please provide your account information.'}</p>
@@ -2962,33 +3034,33 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       {accountSuccess && <p className="form-success" role="status">{accountSuccess}</p>}
       {!isStaff && <div className="auth-social-login">
         {googleClientId
-          ? <div ref={googleButtonRef} className={`auth-google-button${pending || googlePending || facebookPending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>
-            <GoogleLogin
-                onSuccess={(response) => {
-                  if (!response.credential) {
-                    setError('Google did not return a sign-in credential. Please try again.')
-                    return
-                  }
-                  void continueWithGoogle(response.credential)
-                }}
-                onError={() => setError('Google sign-in did not complete. Please try again or use your email and password.')}
-                text="continue_with"
-                theme="outline"
-                shape="rectangular"
-                logo_alignment="center"
-                size="large"
-                width={String(googleButtonWidth)}
-                auto_select={false}
-                use_fedcm_for_button={false}
-              />
+          ? <div className={`auth-google-button${pending || googlePending || facebookPending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>
+            <GoogleAccountButton
+              disabled={pending || googlePending || facebookPending}
+              onStart={() => { setError(''); setGooglePending(true) }}
+              onAccessToken={(accessToken) => void continueWithGoogle(accessToken)}
+              onError={() => {
+                setGooglePending(false)
+                setError('Google sign-in was cancelled or could not be completed. Please try again.')
+              }}
+            />
             {(pending || googlePending || facebookPending) && <p className="auth-social-status" role="status">{googlePending ? 'Connecting to Google…' : facebookPending ? 'Connecting to Facebook…' : 'Please wait…'}</p>}
           </div>
           : <p className="auth-social-consent-note" role="status">Google sign-in is not configured for this website yet.</p>}
         {facebookAppId
           ? <div className={`auth-facebook-button-wrapper${pending || googlePending || facebookPending ? ' auth-facebook-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>
-            <button className="auth-facebook-button" type="button" onClick={handleFacebookLogin} disabled={!facebookSdkLoaded || pending || googlePending || facebookPending}>
+            <button className="auth-facebook-button" type="button" onClick={() => {
+              if (!facebookSdkLoaded) {
+                setError('')
+                setFacebookSdkLoading(true)
+                setFacebookSdkError(false)
+                setFacebookSdkLoadAttempt((attempt) => attempt + 1)
+                return
+              }
+              handleFacebookLogin()
+            }} disabled={facebookSdkLoading || pending || googlePending || facebookPending} aria-busy={facebookSdkLoading || facebookPending || undefined}>
               <span className="auth-facebook-mark" aria-hidden="true">f</span>
-              Continue with Facebook
+              {facebookSdkLoading ? 'Loading Facebook…' : facebookSdkError ? 'Retry Facebook sign-in' : 'Continue with Facebook'}
             </button>
             {(pending || googlePending || facebookPending) && <p className="auth-social-status" role="status">{facebookPending ? 'Connecting to Facebook…' : googlePending ? 'Connecting to Google…' : 'Please wait…'}</p>}
           </div>
@@ -3013,7 +3085,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       {isSignup && <label>Confirm password<PasswordInput name="confirmPassword" required minLength={10} maxLength={128} autoComplete="new-password" placeholder="Re-enter your password" /></label>}
       {!isSignup && <Link className="auth-forgot-password-link" to="/account/forgot-password">Forgot password?</Link>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="button button-dark full-button" disabled={pending}>{pending ? isSignup ? 'Sending verification code…' : 'Signing in…' : isSignup ? <>Create member account <ArrowRight size={16} /></> : isStaff ? <>Staff sign in <ArrowRight size={16} /></> : <>Login <ArrowRight size={16} /></>}</button>
+      <button className="button button-dark full-button" disabled={pending || googlePending || facebookPending}>{pending ? isSignup ? 'Sending verification code…' : 'Signing in…' : googlePending ? 'Connecting to Google…' : facebookPending ? 'Connecting to Facebook…' : isSignup ? <>Create member account <ArrowRight size={16} /></> : isStaff ? <>Staff sign in <ArrowRight size={16} /></> : <>Login <ArrowRight size={16} /></>}</button>
       {isSignup && <p className="auth-signup-terms-note">By creating an account, you agree to the <Link to="/terms">Terms of Service</Link>. For more information about our privacy practices, see our <Link to="/privacy">Privacy Policy</Link>.</p>}
       {isStaff ? <>
         <p className="auth-staff-account-note">Staff accounts are created by a Federation administrator.</p>
@@ -3662,7 +3734,7 @@ function MemberAccountPage() {
     { id: 'favorites', label: 'Favorite teachings', icon: Heart, path: '/account/favorites' },
     { id: 'recommendations', label: 'Recommended for You', icon: BookOpen, path: '/account/recommendations' },
   ]
-  function signOut() { saveServerSessionRole(null); saveMemberSession(null); if (!isDemoMember) requestServerLogout(); navigate('/') }
+  function signOut() { clearGoogleAutoSelection(); saveServerSessionRole(null); saveMemberSession(null); if (!isDemoMember) requestServerLogout(); navigate('/') }
   return <section className="member-account-page"><div className="member-account-shell"><aside className="member-account-sidebar"><div className="member-account-identity"><span className="member-account-avatar">{member.avatarImage ? <ImageWithLoader src={member.avatarImage} alt="" /> : member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><b>{member.name}</b><small>{member.email}</small><Link className="member-edit-profile" to="/account"><Pencil size={13} /> Edit profile</Link></div><nav aria-label="Your account">{tabs.map(({ id, label, icon: Icon, path }) => <NavLink key={id} to={path} end={id === 'profile'} className={({ isActive }) => isActive || section === id ? 'active' : ''}><Icon size={16} />{label}</NavLink>)}</nav><button className="member-signout" type="button" onClick={signOut}><LogOut size={15} />Sign out</button></aside><main className="member-account-main">{sessionWarning && <p className="form-error" role="status">{sessionWarning}</p>}{section === 'profile' && <><MemberProfileDetails key={member.email} member={member} onUpdated={setMember} /><MemberDiscernmentSummary key={`discernment-${member.email}`} member={member} /></>}{section === 'donations' && <MemberDonationsView member={member} />}{section === 'discernment' && <MemberDiscernmentView key={member.email} member={member} />}{section === 'security' && <MemberSecurityView member={member} />}{section === 'messages' && <MemberMessagesView member={member} />}{section === 'favorites' && <MemberFavoritesView member={member} />}{section === 'recommendations' && <MemberRecommendationsView />}</main></div></section>
 }
 
@@ -3762,10 +3834,11 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
   useEffect(() => { const timer = setInterval(() => setClock(new Date()), 60000); return () => clearInterval(timer) }, [])
   useEffect(() => { if (adminSearchOpen) adminSearchInputRef.current?.focus() }, [adminSearchOpen])
   function signOut() {
+    clearGoogleAutoSelection()
     saveServerSessionRole(null)
     localStorage.removeItem(prototypeSessionKey)
     if (!user.prototype) requestServerLogout()
-    window.dispatchEvent(new Event(staffSessionUpdatedEvent))
+    notifyStaffSessionUpdated(true)
     navigate('/staff/login', { replace: true })
   }
   function openProfileEditor() { setProfileName(user.name); setProfileEmail(user.email); setCurrentPassword(''); setNewPassword(''); setProfileError(''); setProfileOpen(false); setEditingProfile(true) }
@@ -6306,7 +6379,8 @@ function SessionMonitor() {
           if (!role) return
           saveServerSessionRole(null)
           saveMemberSession(null)
-          window.dispatchEvent(new Event(staffSessionUpdatedEvent))
+          clearGoogleAutoSelection()
+          notifyStaffSessionUpdated(true)
           setNotice('You were signed out because this account signed in on another device.')
         } else if (!response.ok) {
           console.error(`Session status check failed with HTTP ${response.status}; it will retry.`)
