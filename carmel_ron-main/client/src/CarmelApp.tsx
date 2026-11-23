@@ -1844,13 +1844,13 @@ function CarmelifePage() {
       <h1>Vocation to Carmel</h1>
     </section>
 
-    <p className="life-quote-banner">Our vocation as Discalced Carmelite Nuns is a gift of the Spirit. It is a life of “hidden radical gift of self” directed towards the Church and the salvation of souls.</p>
+    <blockquote className="life-quote-banner"><p>Our vocation as Discalced Carmelite Nuns is a <strong>gift of the Spirit.</strong> It is a life of <strong>“hidden radical gift of self”</strong> is directed towards the <strong>radical gift of self</strong> directed towards the Church and the salvation of souls.</p><cite>Rule and Constitutions 1:10</cite></blockquote>
 
     <section className="life-section face-of-god">
       <div className="life-copy">
-        <h2><strong>Seeking the Face of God</strong> has always been a key focus of Carmel. Carmel has standards for women who have been called to contemplation and willing to serve.</h2>
-        <p>To respond to the call is to respond to a love that was chosen for us from eternity. Our vocation is to be at the heart of the Church, maintaining constant prayer for priests and all humanity.</p>
-        <cite>FRANCIS, Vultum Dei quaerere I, 1</cite>
+        <h2><strong>Seeking the face of God</strong> has always been part of our human history. From the beginning men and women, have been called to a dialogue of love with the creator.</h2>
+        <p>Indeed, mankind is distinguished by an irrepressible religious dimension that leads human hearts to feel the need to seek God, the absolute.</p>
+        <cite><span aria-hidden="true">●</span> FRANCIS, Vultum Dei quaerere I, 1</cite>
       </div>
       <div className="rounded-life-image"><ImageWithLoader src={seekingFaceImage} alt="Carmelite nuns looking toward the sunset" /></div>
     </section>
@@ -1867,12 +1867,6 @@ function CarmelifePage() {
       </div>
     </section>
 
-    <section className="life-section life-stories-section">
-      <div className="centered-life-heading"><h2>Stories from <em>Carmel</em></h2><p>Read reflections and vocation stories shared by our sisters.</p></div>
-      {isLoading ? <p role="status">Loading stories…</p> : !isReady ? <p className="form-error" role="alert">Stories could not be loaded. Please refresh.</p> : featuredArticles.length ? <div className="life-card-grid">{featuredArticles.map((article) => <article className="life-card" key={article.id}><ImageWithLoader src={articleImageFor(article.image, seekingFaceImage)} alt={article.title} /><div><small>{article.author || 'CARMELITE LIFE'}</small><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button type="button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story &rarr;</button></div></article>)}</div> : <p className="content-empty">New entries will appear here when published.</p>}
-      <Link className="button button-outline life-stories-more" to="/carmelife/stories">View more stories <ArrowRight size={15} /></Link>
-    </section>
-
     <section className="life-section discernment-section-life" id="discernment">
       <h2>Discerning your <em>vocation</em></h2>
       <div className="wide-life-image"><ImageWithLoader src={discerningImage} alt="A person kneeling in prayer in a chapel" /></div>
@@ -1884,10 +1878,16 @@ function CarmelifePage() {
       </div>
     </section>
 
+    <section className="life-section life-stories-section">
+      <div className="centered-life-heading"><h2>Stories from <em>Carmel</em></h2><p>Read reflections and vocation stories shared by our sisters.</p></div>
+      {isLoading ? <p role="status">Loading stories…</p> : !isReady ? <p className="form-error" role="alert">Stories could not be loaded. Please refresh.</p> : featuredArticles.length ? <div className="life-card-grid">{featuredArticles.map((article) => <article className="life-card" key={article.id}><ImageWithLoader src={articleImageFor(article.image, seekingFaceImage)} alt={article.title} /><div><small>{article.author || 'CARMELITE LIFE'}</small><h3>{article.title}</h3><p>{article.body.split(/\n\s*\n/)[0]}</p><button type="button" onClick={() => { setSelectedId(article.id); setFullView(false) }}>Read story &rarr;</button></div></article>)}</div> : <p className="content-empty">New entries will appear here when published.</p>}
+      <Link className="button button-outline life-stories-more" to="/carmelife/stories">View more stories <ArrowRight size={15} /></Link>
+    </section>
+
     <section className="life-slider-quote" aria-label="Vocation quotes" onTouchStart={startQuoteSwipe} onTouchEnd={endQuoteSwipe} onTouchCancel={() => { quoteTouchStart.current = null }}>
-      <button type="button" onClick={() => changeQuote(-1)} aria-label="Previous quote">&lsaquo;</button>
+      <button type="button" onClick={() => changeQuote(-1)} aria-label="Previous quote"><ChevronLeft size={20} strokeWidth={1.5} /></button>
       <div className="life-slider-quote-content" aria-live="polite" aria-atomic="true"><blockquote>{quote.quote}</blockquote><cite>{quote.attribution}<br />{quote.source}</cite><div className="life-slider-quote-dots" role="group" aria-label="Choose a vocation quote">{vocationQuotes.map((item, index) => <button key={item.attribution} type="button" className={index === quoteIndex ? 'is-active' : ''} aria-label={`Show quote ${index + 1}`} aria-pressed={index === quoteIndex} onClick={() => setQuoteIndex(index)} />)}</div></div>
-      <button type="button" onClick={() => changeQuote(1)} aria-label="Next quote">&rsaquo;</button>
+      <button type="button" onClick={() => changeQuote(1)} aria-label="Next quote"><ChevronRight size={20} strokeWidth={1.5} /></button>
     </section>
 
     {selected && <CarmelifeReadingDialog reading={selected} fullView={fullView} onToggleFullView={() => setFullView(!fullView)} onClose={closeStory} fallbackImage={seekingFaceImage} imagePending={isLoading || !isReady} />}

@@ -646,6 +646,17 @@
     line-height: 1.6;
   }
 
+  .carmelife-page .life-quote-banner p {
+    padding-right: 0;
+  }
+
+  .carmelife-page .life-quote-banner cite {
+    position: static;
+    display: block;
+    margin-top: 8px;
+    text-align: right;
+  }
+
   .carmelife-page .life-section {
     padding: 34px 20px;
   }
@@ -2462,7 +2473,6 @@
     width: 36px;
     height: 36px;
     flex: 0 0 36px;
-    font-size: 24px;
   }
 
   .carmelife-page .life-slider-quote-content {
