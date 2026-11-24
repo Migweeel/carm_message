@@ -2111,7 +2111,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       startScrollLeft: event.currentTarget.scrollLeft,
       moved: false,
     }
-    if (event.pointerType !== 'mouse') event.currentTarget.setPointerCapture(event.pointerId)
+    event.currentTarget.setPointerCapture(event.pointerId)
   }
   function movePopularDrag(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = popularDrag.current
@@ -2128,6 +2128,9 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
     if (!drag || drag.pointerId !== event.pointerId) return
     popularDrag.current = null
     event.currentTarget.classList.remove('is-dragging')
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
     if (!drag.moved) return
     suppressPopularClick.current = true
     window.setTimeout(() => { suppressPopularClick.current = false }, 400)
@@ -2222,7 +2225,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       <section className="carmelights-most-viewed" aria-labelledby="most-viewed-title">
         <div className="carmelights-most-viewed-heading"><span><Award size={15} /> Reader favorites</span><h2 id="most-viewed-title">Most viewed quotes</h2><p>Ranked by views over the last 30 days.</p></div>
         {popularTeachingsError ? <p className="form-error" role="alert">{popularTeachingsError}</p> : popularTeachingsLoading ? <p role="status">Loading most-viewed quotes…</p> : popularTeachings.length ? <>
-          <div className="carmelights-popular-list" ref={popularListRef} onPointerDown={startPopularDrag} onPointerMove={movePopularDrag} onPointerUp={endPopularDrag} onPointerCancel={endPopularDrag} onPointerLeave={endPopularDrag} onClickCapture={(event) => {
+          <div className="carmelights-popular-list" ref={popularListRef} onPointerDown={startPopularDrag} onPointerMove={movePopularDrag} onPointerUp={endPopularDrag} onPointerCancel={endPopularDrag} onLostPointerCapture={endPopularDrag} onClickCapture={(event) => {
             if (suppressPopularClick.current) {
               event.preventDefault()
               event.stopPropagation()

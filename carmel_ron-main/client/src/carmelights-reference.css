@@ -78,7 +78,7 @@
 @media(max-width:560px){.carmelights-reading-backdrop{padding:16px}.carmelights-reading-dialog{max-height:calc(100vh - 32px);padding:34px 25px 28px;border-radius:8px}.carmelights-reading-dialog>.carmelights-category-tag{margin-bottom:13px}.carmelights-reading-close{top:14px;right:14px;width:40px;height:40px}.carmelights-reading-dialog h2{padding-right:20px;font-size:30px}.carmelights-reading-author{font-size:14px}.carmelights-reading-copy{margin-top:18px;padding:15px}.carmelights-reading-copy p{font-size:17px;line-height:1.8}.carmelights-reading-dialog h2+.story-full-view-toggle{top:calc(100% + 8px);max-width:calc(100% - 16px);min-height:40px;padding-inline:12px;gap:7px;font-size:11px}}
 @media(max-width:560px){.carmelights-reading-dialog-full-view{max-height:calc(100vh - 32px);padding:34px 25px 28px}.carmelights-reading-dialog-full-view h2{font-size:30px}.carmelights-reading-dialog-full-view .carmelights-reading-copy{margin-top:18px}.carmelights-reading-dialog-full-view .carmelights-reading-copy p{font-size:17px;line-height:1.8}.carmelights-reading-image{height:170px}.carmelights-reading-dialog-full-view .carmelights-reading-image{height:170px}}
 
-.carmelights-popular-list{display:flex;gap:13px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x mandatory;scrollbar-width:none;touch-action:pan-y;cursor:grab;user-select:none}
+.carmelights-popular-list{display:flex;gap:13px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x mandatory;scrollbar-width:none;touch-action:none;cursor:grab;user-select:none}
 .carmelights-popular-list::-webkit-scrollbar{display:none}
 .carmelights-popular-list.is-dragging{scroll-snap-type:none;cursor:grabbing}
 .carmelights-popular-card{position:relative;flex:0 0 300px;width:300px;min-width:300px;height:335px;padding:12px;border-radius:8px;display:flex;flex-direction:column;align-items:stretch;gap:8px;scroll-snap-align:start}
@@ -96,7 +96,7 @@
 .carmelights-teaching-card p{display:none}
 .carmelights-read-link{order:6}
 /* Compact 335px reading cards used by the deployed Railway app */
-.carmelights-popular-list{display:flex;gap:13px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x mandatory;scrollbar-width:none;touch-action:pan-y;cursor:grab;user-select:none}
+.carmelights-popular-list{display:flex;gap:13px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x mandatory;scrollbar-width:none;touch-action:none;cursor:grab;user-select:none}
 .carmelights-popular-list::-webkit-scrollbar{display:none}
 .carmelights-popular-list.is-dragging{scroll-snap-type:none;cursor:grabbing}
 .carmelights-popular-card{flex:0 0 300px;width:300px;min-width:300px;height:335px;padding:12px;border-radius:8px;display:flex;flex-direction:column;align-items:stretch;gap:8px;scroll-snap-align:start}
