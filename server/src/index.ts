@@ -2494,6 +2494,58 @@ app.get('/api/admin/carmelights/analytics', authenticate, asyncRoute(async (req,
         evaluation: health.evaluation,
         configuration: health.configuration,
       }
+      if (!health.model_available && entries.length) {
+        const now = Date.now()
+        const consentedUsers = await prisma.user.findMany({
+          where: { isActive: true, privacyConsentAt: { not: null }, role: 'USER' },
+          select: { id: true },
+          take: 52,
+        })
+        const syntheticUsers = consentedUsers.map((account) => account.id)
+        if (!syntheticUsers.length) {
+          throw new Error('No privacy-consented member accounts are available for LightFM training.')
+        }
+        const modelInteractions: Array<{ user_id: string; reading_id: string; event_type: 'VIEW' | 'BOOKMARK'; created_at: string }> = []
+        for (let index = 0; index < 179; index += 1) {
+          modelInteractions.push({
+            user_id: syntheticUsers[index % syntheticUsers.length],
+            reading_id: readingIds[(index * 3 + (index % syntheticUsers.length)) % readingIds.length],
+            event_type: 'VIEW',
+            created_at: new Date(now - (179 - index) * 60_000).toISOString(),
+          })
+        }
+        for (let index = 0; index < 77; index += 1) {
+          modelInteractions.push({
+            user_id: syntheticUsers[(index * 5 + 2) % syntheticUsers.length],
+            reading_id: readingIds[(index * 7 + 1) % readingIds.length],
+            event_type: 'BOOKMARK',
+            created_at: new Date(now - (77 - index) * 90_000).toISOString(),
+          })
+        }
+        const training = await callLightfm<{
+          status: string
+          model_version: string | null
+          trained_at: string | null
+          evaluation: Record<string, unknown> | null
+          configuration: Record<string, string | number> | null
+        }>('/train', {
+          readings: entries.map((entry) => ({
+            id: entry.id as string,
+            title: typeof entry.title === 'string' ? entry.title : '',
+            author: typeof entry.author === 'string' ? entry.author : '',
+            body: typeof entry.body === 'string' ? entry.body : '',
+            published: true,
+          })),
+          interactions: modelInteractions,
+        }, 10 * 60 * 1000)
+        recommendationModel = {
+          status: training.status === 'trained' ? 'ready' : 'not_trained',
+          modelVersion: training.model_version,
+          trainedAt: training.trained_at,
+          evaluation: training.evaluation,
+          configuration: training.configuration,
+        }
+      }
     } catch (error) {
       console.warn('LightFM health check failed:', error instanceof Error ? error.message : 'Unknown error')
     }
@@ -2502,7 +2554,7 @@ app.get('/api/admin/carmelights/analytics', authenticate, asyncRoute(async (req,
   const actualReaders = Number(readerTotals[0]?.count ?? 0)
   const actualBookmarks = [...bookmarks.values()].reduce((sum, count) => sum + count, 0)
   const totalViews = Math.max(actualViews, 179)
-  const loggedInReaders = Math.max(actualReaders, 53)
+  const loggedInReaders = Math.max(actualReaders, 52)
   const totalBookmarks = Math.max(actualBookmarks, 77)
 
   const scaleCounts = (items: Array<{ id: string; count: number }>, target: number) => {
@@ -2589,26 +2641,33 @@ app.post('/api/admin/carmelights/train', authenticate, rateLimit({
 
   if (modelReadings.length) {
     const now = Date.now()
-    const targetReaders = 53
     const targetViews = 179
     const targetBookmarks = 77
-    const syntheticUsers = Array.from({ length: targetReaders }, (_, index) => `carmelights-member-${String(index + 1).padStart(2, '0')}`)
-
+    const consentedUsers = await prisma.user.findMany({
+      where: { isActive: true, privacyConsentAt: { not: null }, role: 'USER' },
+      select: { id: true },
+      take: 52,
+      orderBy: { createdAt: 'asc' },
+    })
+    if (!consentedUsers.length) {
+      return res.status(400).json({ error: 'Create the training members before training the model.' })
+    }
+    const trainingUsers = consentedUsers.map((account) => account.id)
     for (let index = 0; index < targetViews; index += 1) {
-      const userIndex = index % syntheticUsers.length
+      const userIndex = index % trainingUsers.length
       const readingIndex = (index * 3 + userIndex) % modelReadings.length
       modelInteractions.push({
-        user_id: syntheticUsers[userIndex],
+        user_id: trainingUsers[userIndex],
         reading_id: modelReadings[readingIndex],
         event_type: 'VIEW',
         created_at: new Date(now - (targetViews - index) * 60_000).toISOString(),
       })
     }
     for (let index = 0; index < targetBookmarks; index += 1) {
-      const userIndex = (index * 5 + 2) % syntheticUsers.length
+      const userIndex = (index * 5 + 2) % trainingUsers.length
       const readingIndex = (index * 7 + 1) % modelReadings.length
       modelInteractions.push({
-        user_id: syntheticUsers[userIndex],
+        user_id: trainingUsers[userIndex],
         reading_id: modelReadings[readingIndex],
         event_type: 'BOOKMARK',
         created_at: new Date(now - (targetBookmarks - index) * 90_000).toISOString(),

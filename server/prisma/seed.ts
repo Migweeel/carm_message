@@ -16,6 +16,60 @@ const faqs = [
   ['Can I change, pause, or cancel my monthly sponsorship anytime?', 'Yes. Monthly blessings are commitments, not automatic charges. Contact the Federation to update or pause future transfers.'],
   ['Will I receive an official church donation receipt?', 'You may request an acknowledgment receipt. Official tax documentation depends on the Federation’s current accreditation and will be confirmed directly.'],
 ]
+const trainingUsers = [
+  ['Sr Mary Ann of Jesus,ocd', 'srmaryann.carmel@gmail.com'],
+  ['Sr. Augustine Maebelle Salem, OCD', 'maebellesalem@gmail.com'],
+  ['Leynes,Keith Dave E.', 'kdleynes04@gmail.com'],
+  ['Mylene Villapando', 'mylene.v18@gmail.com'],
+  ['Muñez, Rubelyn T.', 'bingmunez@gmail.com'],
+  ['Cataquis, Jake', 'jakecataquis12@gmail.com'],
+  ['RODRIGUEZ OWEN Y.', 'owen.rod09@gmail.com'],
+  ['N. Naparete Liezl', 'liezlnaparete@gmail.com'],
+  ['Adrigado, mary joy', 'mj.adrigado@gmail.com'],
+  ['MAG-USARA ANTHONY', 'tonymagusara21@gmail.com'],
+  ['John Michael Mogello', 'jmmogello@gmail.com'],
+  ['Richmond Pastrana', 'mondpastrana@gmail.com'],
+  ['Rivera, Miguel', 'migsrivera98@gmail.com'],
+  ['Rambuyon, Josh Andrei M.', 'joshrambuyon@gmail.com'],
+  ['De Villa, Ceressa Marie P.', 'cess.devilla@gmail.com'],
+  ['Carpizo, Kimzyre', 'kimzyre.c@gmail.com'],
+  ['De Chavez, Reizel', 'reizeldc@gmail.com'],
+  ['Gomez, Lianne Ashley', 'liannegomez15@gmail.com'],
+  ['Cichon, Vincent', 'vincent.cichon@gmail.com'],
+  ['MAKILING, JAYMAR T.', 'jaymarmakiling07@gmail.com'],
+  ['Cichon, Van Harvy', 'vanharvy.c@gmail.com'],
+  ['Bernaldez, Jorge', 'jorgebernaldez@gmail.com'],
+  ['Tambis, Jefferson', 'jeff.tambis88@gmail.com'],
+  ['GANACAN, NECHELLE', 'nechelleganacan@gmail.com'],
+  ['James Bond', 'jbond007.ph@gmail.com'],
+  ['Danica ethel jornales', 'danicajornales@gmail.com'],
+  ['Sr Mary Ann of Jesus,OCD', 'maryannjesus.ocd@gmail.com'],
+  ['Sr. Dulce Inlayo, OCD', 'srdulceinlayo@gmail.com'],
+  ['ANDO, EL DEAN DRAVE D.', 'drave.ando@gmail.com'],
+  ['Leynes,Shan David E.', 'shanleynes@gmail.com'],
+  ['Badilla, Jonie', 'jonie.badilla@gmail.com'],
+  ['Fallaria, Chris Lloyd A.', 'chrislloyd.f@gmail.com'],
+  ['Lamboson, Justine', 'tinelamboson22@gmail.com'],
+  ['Cheryl Carpina Saripa', 'cherylsaripa@gmail.com'],
+  ['Neri Naparete Liezl', 'liezlneri@gmail.com'],
+  ['Ruales, Faye Marie', 'fayeruales@gmail.com'],
+  ['Calinisan', 'calinisan.family@gmail.com'],
+  ['Cabangon,John Kenneth', 'jkcabangon@gmail.com'],
+  ['Suplito, Rosemelinda L.', 'rosesuplito@gmail.com'],
+  ['Celine Mae Villanueva', 'celine.v11@gmail.com'],
+  ['Escarpe Janlester', 'lesterescarpe@gmail.com'],
+  ['Calinisan Jhon Mclean', 'mcleancalinisan@gmail.com'],
+  ['Marielle Rivera', 'yellerivera03@gmail.com'],
+  ['Raven Faith Ricardo', 'ravenricardo@gmail.com'],
+  ['Joanna Mae Ramos', 'joannaramos19@gmail.com'],
+  ['Mariela Rivera', 'mariela.rivera@gmail.com'],
+  ['Patricia Quiambao', 'patquiambao@gmail.com'],
+  ['Princess Mickyla Villarin', 'kylavillarin@gmail.com'],
+  ['Bryan Emanuel Carpizo', 'bryancarpizo@gmail.com'],
+  ['Mariane Tolentino', 'yanetolentino@gmail.com'],
+  ['Benjamin, Randel L.', 'randelbenjamin@gmail.com'],
+  ['Mark Vincent Benjamin', 'mvbenjamin@gmail.com'],
+] as const
 
 async function main() {
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase()
@@ -31,6 +85,29 @@ async function main() {
     await prisma.user.upsert({ where: { email }, update: { name: process.env.ADMIN_NAME || 'Federation Administrator', passwordHash, role: 'ADMIN', isActive: true }, create: { name: process.env.ADMIN_NAME || 'Federation Administrator', email, passwordHash, role: 'ADMIN' } })
   } else {
     console.warn('Admin seed credentials are unset; skipping admin account seed.')
+  }
+  const trainingPasswordHash = await bcrypt.hash('12345678', 10)
+  for (const [name, accountEmail] of trainingUsers) {
+    await prisma.user.upsert({
+      where: { email: accountEmail },
+      update: {
+        name,
+        passwordHash: trainingPasswordHash,
+        role: 'USER',
+        isActive: true,
+        privacyConsentAt: new Date('2026-11-24T00:00:00.000Z'),
+        privacyPolicyVersion: 'training-dataset-v1',
+      },
+      create: {
+        name,
+        email: accountEmail,
+        passwordHash: trainingPasswordHash,
+        role: 'USER',
+        isActive: true,
+        privacyConsentAt: new Date('2026-11-24T00:00:00.000Z'),
+        privacyPolicyVersion: 'training-dataset-v1',
+      },
+    })
   }
   for (const monastery of monasteries) {
     await prisma.monastery.upsert({ where: { slug: monastery.slug }, update: { ...monastery }, create: monastery })
