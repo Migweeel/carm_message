@@ -1704,6 +1704,7 @@ app.get('/api/donations/:reference', rateLimit({
     where: { referenceCode: donation.referenceCode },
     select: { receiptEmailSentAt: true, receiptEmailSendingAt: true },
   })
+  res.set('Cache-Control', 'private, no-store, max-age=0')
   res.json({
     donation: {
       referenceCode: donation.referenceCode,

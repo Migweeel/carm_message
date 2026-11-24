@@ -4385,7 +4385,11 @@ function ContentAdminPage() {
     setCarmelightsAnalyticsError('')
     async function loadCarmelightsAnalytics() {
       try {
-        const response = await fetch('/api/admin/carmelights/analytics', { credentials: 'include' })
+        const response = await fetch('/api/admin/carmelights/analytics', {
+          credentials: 'include',
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        })
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Carmelights analytics could not be loaded.')
         if (active) setCarmelightsAnalytics(result as CarmelightsAnalytics)
