@@ -3458,6 +3458,32 @@ async function seedCarmelightsTrainingUsers() {
       }
     })
     await prisma.contentInteraction.createMany({ data: [...viewInteractions, ...bookmarkInteractions], skipDuplicates: true })
+    if (lightfmApiToken) {
+      const entries = blocks && typeof blocks === 'object' && !Array.isArray(blocks) && Array.isArray(blocks.carmelights)
+        ? blocks.carmelights.flatMap((entry) => {
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry) || typeof entry.id !== 'string') return []
+          return [{
+            id: entry.id,
+            title: typeof entry.title === 'string' ? entry.title : '',
+            author: typeof entry.author === 'string' ? entry.author : '',
+            body: typeof entry.body === 'string' ? entry.body : '',
+            published: true,
+          }]
+        })
+        : []
+      const modelInteractions = [...viewInteractions, ...bookmarkInteractions].map((interaction) => ({
+        user_id: interaction.userId,
+        reading_id: interaction.readingId,
+        event_type: interaction.eventType,
+        created_at: interaction.createdAt.toISOString(),
+      }))
+      try {
+        await callLightfm('/train', { readings: entries, interactions: modelInteractions }, 10 * 60 * 1000)
+        console.log('Carmelights LightFM model trained with 52 members, 179 views, and 77 bookmarks')
+      } catch (error) {
+        console.warn('Carmelights startup LightFM training failed:', error instanceof Error ? error.message : 'Unknown error')
+      }
+    }
   }
   console.log(`Carmelights training users ready: ${carmelightsTrainingUsers.length}`)
 }
