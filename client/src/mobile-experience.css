@@ -779,20 +779,32 @@
 
   .carmelights-most-viewed .carmelights-popular-list {
     display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
     grid-template-columns: none;
     gap: 8px;
     overflow-x: auto;
+    overflow-y: hidden;
     padding: 0 0 8px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+
+  .carmelights-most-viewed .carmelights-popular-list::-webkit-scrollbar {
+    display: none;
   }
 
   .carmelights-most-viewed .carmelights-popular-card {
-    flex: 0 0 300px;
-    width: 300px;
-    min-width: 300px;
+    flex: 0 0 min(84vw, 300px);
+    width: min(84vw, 300px);
+    min-width: min(84vw, 300px);
     min-height: 335px;
     height: 335px;
     padding: 12px;
     border-radius: 8px;
+    scroll-snap-align: start;
   }
 
   .carmelights-most-viewed .carmelights-popular-card > img {
