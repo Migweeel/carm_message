@@ -8,18 +8,20 @@ import './homepage-reference.css'
 
 const cities = ['Angeles', 'Bacolod', 'Baguio', 'Cagayan de Oro', 'Castillejos', 'Cebu', 'Davao', 'Gumaca', 'Infanta']
 const maxInlineHeroImageLength = 350_000
+let cachedHeroImages: string[] | null = null
+let cachedSectionImages: Partial<Record<HomeSectionKey, string>> | null = null
 
 export default function HomepageReference() {
   const cards = useRef<HTMLDivElement>(null)
   const cardDrag = useRef<{ pointerId: number; startX: number; startScrollLeft: number; moved: boolean } | null>(null)
   const suppressCardClick = useRef(false)
-  const [heroImages, setHeroImages] = useState<string[]>([])
-  const [heroImageLoading, setHeroImageLoading] = useState(true)
+  const [heroImages, setHeroImages] = useState<string[]>(() => cachedHeroImages ?? [])
+  const [heroImageLoading, setHeroImageLoading] = useState(() => cachedHeroImages === null)
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
   const [activeCardIndex, setActiveCardIndex] = useState(0)
-  const [sectionImages, setSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>({})
-  const [sectionImagesReady, setSectionImagesReady] = useState(false)
-  const [sectionImagesLoading, setSectionImagesLoading] = useState(true)
+  const [sectionImages, setSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>(() => cachedSectionImages ?? {})
+  const [sectionImagesReady, setSectionImagesReady] = useState(() => cachedSectionImages !== null)
+  const [sectionImagesLoading, setSectionImagesLoading] = useState(() => cachedSectionImages === null)
 
   function scrollCards(direction: number) {
     cards.current?.scrollBy({ left: direction * 280, behavior: 'smooth' })
@@ -114,25 +116,32 @@ export default function HomepageReference() {
   useEffect(() => {
     let active = true
     let requestGeneration = 0
-    async function loadHeroImage() {
+    async function loadHeroImage(force = false) {
+      if (!force && cachedHeroImages !== null) return
       const currentRequest = ++requestGeneration
-      setHeroImages([])
-      setHeroImageLoading(true)
-      setActiveHeroIndex(0)
+      if (cachedHeroImages === null) setHeroImageLoading(true)
       try {
-        const response = await fetch('/api/content/HOME_HERO_IMAGE', { cache: 'no-store' })
+        const response = await fetch('/api/content/HOME_HERO_IMAGE', { cache: force ? 'no-store' : 'default' })
         if (response.status === 404) {
-          if (active && currentRequest === requestGeneration) setHeroImages([homepageHeroImageFallback])
+          if (active && currentRequest === requestGeneration) {
+            cachedHeroImages = [homepageHeroImageFallback]
+            setHeroImages(cachedHeroImages)
+          }
           return
         }
         if (!response.ok) throw new Error('The saved homepage image could not be loaded.')
         const result: { content?: { blocks?: unknown } } = await response.json()
         const savedImages = getHomepageHeroImages(result.content?.blocks)
         const displayImages = savedImages.filter((image) => !image.startsWith('data:image/') || image.length <= maxInlineHeroImageLength)
+        const resolved = displayImages.length ? displayImages : [homepageHeroImageFallback]
         if (active && currentRequest === requestGeneration) {
-          setHeroImages(displayImages.length ? displayImages : [homepageHeroImageFallback])
-          setActiveHeroIndex(0)
-          cacheHomepageHeroImages(displayImages.length ? displayImages : [homepageHeroImageFallback])
+          const changed = JSON.stringify(cachedHeroImages) !== JSON.stringify(resolved)
+          cachedHeroImages = resolved
+          if (changed) {
+            setHeroImages(resolved)
+            setActiveHeroIndex((current) => current < resolved.length ? current : 0)
+          }
+          cacheHomepageHeroImages(resolved)
         }
       } catch (error) {
         if (active && currentRequest === requestGeneration) console.error('Unable to load the saved homepage image.', error)
@@ -140,13 +149,12 @@ export default function HomepageReference() {
         if (active && currentRequest === requestGeneration) setHeroImageLoading(false)
       }
     }
-    void loadHeroImage()
-    window.addEventListener('carmel-home-hero-updated', loadHeroImage)
-    window.addEventListener('focus', loadHeroImage)
+    const handleHeroUpdated = () => { void loadHeroImage(true) }
+    void loadHeroImage(false)
+    window.addEventListener('carmel-home-hero-updated', handleHeroUpdated)
     return () => {
       active = false
-      window.removeEventListener('carmel-home-hero-updated', loadHeroImage)
-      window.removeEventListener('focus', loadHeroImage)
+      window.removeEventListener('carmel-home-hero-updated', handleHeroUpdated)
     }
   }, [])
 
@@ -161,15 +169,17 @@ export default function HomepageReference() {
   useEffect(() => {
     let active = true
     let requestGeneration = 0
-    async function loadSectionImages() {
+    async function loadSectionImages(force = false) {
+      if (!force && cachedSectionImages !== null) return
       const currentRequest = ++requestGeneration
-      setSectionImages({})
-      setSectionImagesReady(false)
-      setSectionImagesLoading(true)
+      if (cachedSectionImages === null) setSectionImagesLoading(true)
       try {
-        const response = await fetch('/api/content/HOME_SECTION_IMAGES', { cache: 'no-store' })
+        const response = await fetch('/api/content/HOME_SECTION_IMAGES', { cache: force ? 'no-store' : 'default' })
         if (response.status === 404) {
-          if (active && currentRequest === requestGeneration) setSectionImagesReady(true)
+          if (active && currentRequest === requestGeneration) {
+            cachedSectionImages = {}
+            setSectionImagesReady(true)
+          }
           return
         }
         if (!response.ok) throw new Error('The saved homepage thumbnails could not be loaded.')
@@ -183,7 +193,9 @@ export default function HomepageReference() {
           return saved
         }, {})
         if (active && currentRequest === requestGeneration) {
-          setSectionImages(images)
+          const changed = JSON.stringify(cachedSectionImages) !== JSON.stringify(images)
+          cachedSectionImages = images
+          if (changed) setSectionImages(images)
           setSectionImagesReady(true)
         }
       } catch (error) {
@@ -192,19 +204,18 @@ export default function HomepageReference() {
         if (active && currentRequest === requestGeneration) setSectionImagesLoading(false)
       }
     }
-    void loadSectionImages()
-    window.addEventListener('carmel-home-section-images-updated', loadSectionImages)
-    window.addEventListener('focus', loadSectionImages)
+    const handleSectionImagesUpdated = () => { void loadSectionImages(true) }
+    void loadSectionImages(false)
+    window.addEventListener('carmel-home-section-images-updated', handleSectionImagesUpdated)
     return () => {
       active = false
-      window.removeEventListener('carmel-home-section-images-updated', loadSectionImages)
-      window.removeEventListener('focus', loadSectionImages)
+      window.removeEventListener('carmel-home-section-images-updated', handleSectionImagesUpdated)
     }
   }, [])
 
   return <div className="reference-home">
     <section className="reference-hero" id="home">
-      <ImageWithLoader key={activeHeroImage || 'hero-pending'} className="reference-hero-image" src={activeHeroImage} pending={heroImageLoading} alt="" aria-hidden="true" loading={activeHeroIndex === 0 ? 'eager' : 'lazy'} fetchPriority={activeHeroIndex === 0 ? 'high' : 'auto'} decoding="async" />
+      <ImageWithLoader className="reference-hero-image" src={activeHeroImage} pending={heroImageLoading} alt="" aria-hidden="true" loading={activeHeroIndex === 0 ? 'eager' : 'lazy'} fetchPriority={activeHeroIndex === 0 ? 'high' : 'auto'} decoding="async" />
       <div className="reference-hero-overlay" />
       {heroImages.length > 1 && <div className="reference-hero-controls" role="group" aria-label="Featured images">
         <button type="button" onClick={() => changeHeroImage(-1)} aria-label="Previous featured image"><ChevronLeft size={18} /></button>

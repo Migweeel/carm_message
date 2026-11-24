@@ -785,12 +785,19 @@ async function saveManagedContentRecord(
 }
 const managedContentResponseCache = new Map<string, { expiresAt: number; blocks: Partial<ManagedSiteContent> }>()
 function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentState {
-  const [content, setContent] = useState<ManagedSiteContent>(readManagedContent)
-  const [loadState, setLoadState] = useState(() => ({
-    subset,
-    isLoading: !isLocalDemoSession(),
-    isReady: isLocalDemoSession(),
-  }))
+  const cacheKey = subset || 'all'
+  const [content, setContent] = useState<ManagedSiteContent>(() => {
+    const cached = managedContentResponseCache.get(cacheKey)
+    return cached ? normalizeManagedContent(cached.blocks) : readManagedContent()
+  })
+  const [loadState, setLoadState] = useState(() => {
+    const hasCached = managedContentResponseCache.has(cacheKey)
+    return {
+      subset,
+      isLoading: !isLocalDemoSession() && !hasCached,
+      isReady: isLocalDemoSession() || hasCached,
+    }
+  })
   const isLocalDemo = isLocalDemoSession()
   const isLoading = !isLocalDemo && (loadState.subset !== subset || loadState.isLoading)
   const isReady = isLocalDemo || (loadState.subset === subset && loadState.isReady)
@@ -805,12 +812,11 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
       let ready = false
       try {
         const query = subset ? `?collection=${encodeURIComponent(subset)}` : ''
-        const cacheKey = subset || 'all'
         if (force) managedContentResponseCache.delete(cacheKey)
         const cached = managedContentResponseCache.get(cacheKey)
         let blocks = cached && cached.expiresAt > Date.now() ? cached.blocks : undefined
         if (!blocks) {
-          const response = await fetch(`/api/content/SITE_MANAGED${query}`, { cache: 'no-store' })
+          const response = await fetch(`/api/content/SITE_MANAGED${query}`, { cache: force ? 'no-store' : 'default' })
           if (response.status === 404) {
             blocks = {}
           } else {
@@ -818,7 +824,7 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
             if (!response.ok) throw new Error(result.error || 'Saved website content could not be loaded.')
             blocks = result.content?.blocks || {}
           }
-          managedContentResponseCache.set(cacheKey, { expiresAt: Date.now() + 60_000, blocks })
+          managedContentResponseCache.set(cacheKey, { expiresAt: Date.now() + 5 * 60_000, blocks })
         }
         if (active && currentRequest === requestGeneration) {
           setContent(normalizeManagedContent(blocks))
@@ -836,7 +842,7 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
     }
     const refresh = (event?: Event) => {
       if (event?.type === 'storage' && event instanceof StorageEvent && event.key !== managedContentKey && event.key !== null) return
-      managedContentResponseCache.delete(subset || 'all')
+      managedContentResponseCache.delete(cacheKey)
       if (isLocalDemoSession()) {
         requestGeneration += 1
         setContent(readManagedContent())
@@ -850,26 +856,19 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
         setLoadState({ subset, isLoading: false, isReady: true })
         return
       }
-      setLoadState({ subset, isLoading: true, isReady: false })
-      void load(true)
-    }
-    const reload = () => {
-      if (isLocalDemoSession()) return
-      setLoadState({ subset, isLoading: true, isReady: false })
+      // Refresh silently in the background without blanking already-loaded content/images
       void load(true)
     }
     void load()
     window.addEventListener('storage', refresh)
     window.addEventListener(managedContentEvent, refresh)
-    window.addEventListener('focus', reload)
     return () => {
       active = false
       requestGeneration += 1
       window.removeEventListener('storage', refresh)
       window.removeEventListener(managedContentEvent, refresh)
-      window.removeEventListener('focus', reload)
     }
-  }, [subset])
+  }, [subset, cacheKey])
   return { ...content, isLoading, isReady }
 }
 const money = (n: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(n)
