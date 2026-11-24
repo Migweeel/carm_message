@@ -1,11 +1,13 @@
+import gzip
 import hmac
+import json
 import logging
 import os
 import pickle
 import re
 import tempfile
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Literal
@@ -23,6 +25,9 @@ logger = logging.getLogger("carmelights-recommender")
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", "/data"))
 MODEL_PATH = MODEL_DIR / "lightfm-model.pkl"
+GOODBOOKS_BASE_PATH = Path(
+    os.getenv("GOODBOOKS_BASE_PATH", str(Path(__file__).resolve().parent / "data" / "goodbooks_base.json.gz"))
+)
 API_TOKEN = os.getenv("RECOMMENDER_API_TOKEN", "")
 COMPONENTS = max(8, min(128, int(os.getenv("LATENT_COMPONENTS", "30"))))
 EPOCHS = max(5, min(100, int(os.getenv("TRAINING_EPOCHS", "25"))))
@@ -72,7 +77,8 @@ class RecommendRequest(BaseModel):
     readings: list[Reading] = Field(max_length=1000)
     exclude_ids: list[str] = Field(default_factory=list, max_length=1000)
     history_ids: list[str] = Field(default_factory=list, max_length=1000)
-    limit: int = Field(default=8, ge=1, le=20)
+    include_seen: bool = False
+    limit: int = Field(default=8, ge=1, le=200)
 
 
 class Recommendation(BaseModel):
@@ -300,23 +306,95 @@ def health() -> dict[str, object]:
     }
 
 
+def load_goodbooks_base() -> tuple[list[Reading], list[Interaction], dict[str, int | str]]:
+    if not GOODBOOKS_BASE_PATH.is_file():
+        return [], [], {}
+    try:
+        with gzip.open(GOODBOOKS_BASE_PATH, "rt", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        raw_readings = payload.get("readings", [])
+        raw_interactions = payload.get("interactions", [])
+        base_readings = [
+            Reading(
+                id=str(item["id"]),
+                title=str(item.get("title", ""))[:200],
+                author=str(item.get("author", ""))[:200],
+                body=str(item.get("body", ""))[:100_000],
+                published=True,
+            )
+            for item in raw_readings
+            if isinstance(item, dict) and item.get("id")
+        ]
+        # Assign deterministic historical timestamps before live user events so real user
+        # interactions naturally sit at the newest end of the timeline.
+        anchor = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        base_interactions = [
+            Interaction(
+                user_id=f"gb_user:{row[0]}",
+                reading_id=f"gb_book:{row[1]}",
+                event_type="BOOKMARK" if int(row[2]) == 1 else "VIEW",
+                created_at=anchor + timedelta(seconds=index),
+            )
+            for index, row in enumerate(raw_interactions)
+            if isinstance(row, list) and len(row) >= 3
+        ]
+        meta: dict[str, int | str] = {
+            "base_dataset": str(payload.get("source", "kaggle:zygmuntz/goodbooks-10k")),
+            "base_books": len(base_readings),
+            "base_users": int(payload.get("users_count", 0)),
+            "base_interactions": len(base_interactions),
+        }
+        return base_readings, base_interactions, meta
+    except Exception:
+        logger.exception("Failed to load Goodbooks-10k base dataset from %s", GOODBOOKS_BASE_PATH)
+        return [], [], {}
+
+
 @app.post("/train", response_model=TrainResponse, dependencies=[Depends(require_internal_token)])
 def train(request: TrainRequest) -> TrainResponse:
-    readings = [reading for reading in request.readings if reading.published]
+    real_readings = [reading for reading in request.readings if reading.published]
+    real_ids = {reading.id for reading in real_readings}
+    real_eligible = [event for event in request.interactions if event.reading_id in real_ids]
+
+    base_readings, base_interactions, base_meta = load_goodbooks_base()
+    # Avoid any ID collision with live readings
+    readings = list(real_readings) + [item for item in base_readings if item.id not in real_ids]
     published_ids = {reading.id for reading in readings}
-    eligible = [event for event in request.interactions if event.reading_id in published_ids]
+    eligible = base_interactions + real_eligible
+
     preference_weights, _ = aggregate_preferences(eligible, published_ids)
     meaningful = list(preference_weights)
     users = {user_id for user_id, _ in meaningful}
+    real_weights, _ = aggregate_preferences(real_eligible, real_ids)
+    real_users = {user_id for user_id, _ in real_weights}
+
     evaluation: dict[str, object] = {"available": False, "reason": "Not enough distinct users and history to evaluate."}
     trained_status: Literal["trained", "insufficient_data"] = "insufficient_data"
     model_version: str | None = None
     trained_at: str | None = None
 
+    config_info: dict[str, int | float | str] = {
+        "algorithm": "LightFM",
+        "loss": "warp",
+        "components": COMPONENTS,
+        "epochs": EPOCHS,
+        "view_weight": VIEW_WEIGHT,
+        "bookmark_weight": BOOKMARK_WEIGHT,
+        "real_users": len(real_users),
+        "real_readings": len(real_readings),
+        "real_interactions": len(real_weights),
+        **base_meta,
+    }
+
     if len(users) >= 2 and len(readings) >= 3 and len(meaningful) >= 6:
-        latest_events = latest_user_reading_events(eligible, published_ids)
+        # Evaluate on real user interactions when enough exist; otherwise evaluate on combined history
+        eval_source_readings = real_readings if len(real_users) >= 2 and len(real_weights) >= 6 else readings
+        eval_source_events = real_eligible if len(real_users) >= 2 and len(real_weights) >= 6 else eligible
+        eval_source_weights = real_weights if len(real_users) >= 2 and len(real_weights) >= 6 else preference_weights
+        eval_published_ids = {reading.id for reading in eval_source_readings}
+        latest_events = latest_user_reading_events(eval_source_events, eval_published_ids)
         sorted_pairs = sorted(
-            (key for key, weight in preference_weights.items() if weight > 0),
+            (key for key, weight in eval_source_weights.items() if weight > 0),
             key=lambda key: latest_events[key].created_at,
         )
         split_index = max(1, int(len(sorted_pairs) * 0.8))
@@ -324,10 +402,10 @@ def train(request: TrainRequest) -> TrainResponse:
         test_keys = set(test)
         cutoff = latest_events[sorted_pairs[split_index]].created_at if split_index < len(sorted_pairs) else datetime.max.replace(tzinfo=timezone.utc)
         train_events = [
-            event for event in eligible
+            event for event in eval_source_events
             if event.created_at < cutoff and (event.user_id, event.reading_id) not in test_keys
         ]
-        evaluation = ranking_metrics(readings, train_events, test)
+        evaluation = ranking_metrics(eval_source_readings, train_events, test)
         dataset, interactions_matrix, sample_weights, feature_matrix, user_mapping, item_mapping = build_training_dataset(readings, eligible)
         if interactions_matrix.nnz >= 4 and len(user_mapping) >= 2 and len(item_mapping) >= 3:
             model = LightFM(no_components=COMPONENTS, loss="warp", random_state=42)
@@ -340,7 +418,7 @@ def train(request: TrainRequest) -> TrainResponse:
                 verbose=False,
             )
             model_version = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:8]
-            _, seen_by_user = aggregate_preferences(eligible, published_ids)
+            _, seen_by_user = aggregate_preferences(real_eligible, real_ids)
             trained_at = datetime.now(timezone.utc).isoformat()
             bundle = {
                 "version": model_version,
@@ -349,15 +427,8 @@ def train(request: TrainRequest) -> TrainResponse:
                 "user_mapping": user_mapping,
                 "item_mapping": item_mapping,
                 "item_features": feature_matrix,
-                "user_readings": {user_id: sorted(seen_by_user.get(user_id, set())) for user_id in user_mapping},
-                "config": {
-                    "algorithm": "LightFM",
-                    "loss": "warp",
-                    "components": COMPONENTS,
-                    "epochs": EPOCHS,
-                    "view_weight": VIEW_WEIGHT,
-                    "bookmark_weight": BOOKMARK_WEIGHT,
-                },
+                "user_readings": {user_id: sorted(seen_by_user.get(user_id, set())) for user_id in real_users},
+                "config": config_info,
                 "evaluation": evaluation,
             }
             MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -373,7 +444,14 @@ def train(request: TrainRequest) -> TrainResponse:
                 if os.path.exists(temporary_name):
                     os.unlink(temporary_name)
             trained_status = "trained"
-    logger.info("Training finished status=%s users=%s readings=%s interactions=%s", trained_status, len(users), len(readings), len(meaningful))
+    logger.info(
+        "Training finished status=%s users=%s real_users=%s readings=%s interactions=%s",
+        trained_status,
+        len(users),
+        len(real_users),
+        len(readings),
+        len(meaningful),
+    )
     return TrainResponse(
         status=trained_status,
         model_version=model_version,
@@ -381,14 +459,7 @@ def train(request: TrainRequest) -> TrainResponse:
         users=len(users),
         readings=len(readings),
         interactions=len(meaningful),
-        configuration={
-            "algorithm": "LightFM",
-            "loss": "warp",
-            "components": COMPONENTS,
-            "epochs": EPOCHS,
-            "view_weight": VIEW_WEIGHT,
-            "bookmark_weight": BOOKMARK_WEIGHT,
-        },
+        configuration=config_info,
         evaluation=evaluation,
     )
 
@@ -396,42 +467,115 @@ def train(request: TrainRequest) -> TrainResponse:
 @app.post("/recommend", response_model=RecommendResponse, dependencies=[Depends(require_internal_token)])
 def recommend(request: RecommendRequest) -> RecommendResponse:
     readings = [reading for reading in request.readings if reading.published]
-    exclude_ids = set(request.exclude_ids)
+    exclude_ids = set(request.exclude_ids) if not request.include_seen else set()
     history_ids = set(request.history_ids)
     bundle = read_model()
-    if bundle is None or request.user_id not in bundle["user_mapping"]:
-        return RecommendResponse(recommendations=fallback_recommendations(readings, exclude_ids, request.limit, history_ids), source="fallback", model_version=bundle.get("version") if bundle else None)
+    if bundle is None:
+        return RecommendResponse(
+            recommendations=fallback_recommendations(readings, exclude_ids, request.limit, history_ids),
+            source="fallback",
+            model_version=None,
+        )
 
     model = bundle["model"]
-    user_index = bundle["user_mapping"][request.user_id]
     item_mapping = bundle["item_mapping"]
     item_features = bundle["item_features"]
-    seen = set(bundle["user_readings"].get(request.user_id, []))
-    candidates = [reading for reading in readings if reading.id in item_mapping and reading.id not in exclude_ids and reading.id not in seen]
+    seen = set() if request.include_seen else set(bundle["user_readings"].get(request.user_id, []))
+    candidates = [
+        reading for reading in readings
+        if reading.id in item_mapping and reading.id not in exclude_ids and reading.id not in seen
+    ]
     new_readings = [
         reading for reading in readings
         if reading.id not in item_mapping and reading.id not in exclude_ids and reading.id not in seen
     ]
     if not candidates:
-        return RecommendResponse(recommendations=fallback_recommendations(readings, exclude_ids | seen, request.limit, history_ids | seen), source="fallback", model_version=bundle.get("version"))
+        return RecommendResponse(
+            recommendations=fallback_recommendations(readings, exclude_ids | seen, request.limit, history_ids | seen),
+            source="fallback",
+            model_version=bundle.get("version"),
+        )
+
+    biases, embeddings = model.get_item_representations(features=item_features)
     indices = np.asarray([item_mapping[reading.id] for reading in candidates])
-    scores = model.predict(user_index, indices, item_features=item_features, num_threads=1)
-    ranked = sorted(zip(candidates, scores.tolist()), key=lambda pair: pair[1], reverse=True)
+    has_trained_user = request.user_id in bundle["user_mapping"]
+
+    if has_trained_user:
+        user_index = bundle["user_mapping"][request.user_id]
+        base_scores = model.predict(user_index, indices, item_features=item_features, num_threads=1).astype(float)
+        reason_label = "Based on your reading and saved teachings"
+    else:
+        base_scores = biases[indices].astype(float)
+        reason_label = "Personalized from your reading preferences"
+
+    # Follow up real user activity immediately using LightFM item embeddings + topic/author overlap
+    # so even new users or newly viewed/bookmarked quotes personalize the ranking right away.
+    history_indices = [item_mapping[rid] for rid in history_ids if rid in item_mapping]
+    history_features = set().union(*(metadata_features(reading) for reading in readings if reading.id in history_ids)) if history_ids else set()
+    live_scores = np.zeros(len(candidates), dtype=float)
+    if history_indices:
+        profile_vec = embeddings[history_indices].mean(axis=0)
+        profile_norm = max(float(np.linalg.norm(profile_vec)), 1e-12)
+        cand_vecs = embeddings[indices]
+        cand_norms = np.maximum(np.linalg.norm(cand_vecs, axis=1) * profile_norm, 1e-12)
+        live_scores += (cand_vecs @ profile_vec) / cand_norms
+    if history_features:
+        for idx, reading in enumerate(candidates):
+            overlap = len(metadata_features(reading) & history_features)
+            if overlap:
+                live_scores[idx] += min(0.75, overlap * 0.08)
+
+    if has_trained_user:
+        # Normalize base_scores to comparable scale and blend with live follow-up signal
+        std = float(np.std(base_scores)) if len(base_scores) > 1 else 1.0
+        norm_base = (base_scores - float(np.mean(base_scores))) / (std if std > 1e-6 else 1.0)
+        final_scores = norm_base + (0.65 * live_scores if history_ids else 0.0)
+    elif history_ids:
+        final_scores = live_scores + 0.15 * base_scores
+    else:
+        # Cold-start user with no interactions yet: LightFM item bias + popularity
+        pop = np.asarray([float(reading.popularity) for reading in candidates], dtype=float)
+        max_pop = max(float(np.max(pop)), 1.0)
+        final_scores = base_scores + 0.35 * (pop / max_pop)
+        reason_label = "Recommended Carmelights teaching"
+
+    # When include_seen=True (full Carmelights grid), keep already-read quotes visible
+    # while gently prioritizing unread quotes matching the user's preferences.
+    if request.include_seen and history_ids:
+        for idx, reading in enumerate(candidates):
+            if reading.id in history_ids:
+                final_scores[idx] -= 0.12
+
+    ranked = sorted(zip(candidates, final_scores.tolist()), key=lambda pair: pair[1], reverse=True)
     recommendations: list[Recommendation] = []
     seen_authors: set[str] = set()
+    diversify_cap = min(request.limit // 2, 6)
     for reading, score in ranked:
         author = reading.author.strip().lower()
-        if author and author in seen_authors and len(recommendations) < request.limit // 2:
+        if author and author in seen_authors and len(recommendations) < diversify_cap:
             continue
-        recommendations.append(Recommendation(reading_id=reading.id, score=float(score), reason="Based on your reading and saved teachings"))
+        recommendations.append(Recommendation(reading_id=reading.id, score=float(score), reason=reason_label))
         if author:
             seen_authors.add(author)
         if len(recommendations) == request.limit:
             break
     if len(recommendations) < request.limit:
+        chosen_ids = {item.reading_id for item in recommendations}
+        for reading, score in ranked:
+            if reading.id in chosen_ids:
+                continue
+            recommendations.append(Recommendation(reading_id=reading.id, score=float(score), reason=reason_label))
+            chosen_ids.add(reading.id)
+            if len(recommendations) == request.limit:
+                break
+    if len(recommendations) < request.limit and new_readings:
         new_items = fallback_recommendations(new_readings, set(), request.limit - len(recommendations), history_ids | seen)
         recommendations.extend(new_items)
-    return RecommendResponse(recommendations=recommendations, source="lightfm", model_version=bundle.get("version"))
+    return RecommendResponse(
+        recommendations=recommendations,
+        source="lightfm" if (has_trained_user or history_ids) else "fallback",
+        model_version=bundle.get("version"),
+    )
 
 
 @app.post("/related", response_model=RecommendResponse, dependencies=[Depends(require_internal_token)])

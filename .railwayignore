@@ -11,3 +11,8 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+/assets/
+/client/
+/png's/
+/recommender/
+/server/

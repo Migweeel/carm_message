@@ -2170,6 +2170,8 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   const [popularTeachings, setPopularTeachings] = useState<PopularTeaching[]>([])
   const [popularTeachingsLoading, setPopularTeachingsLoading] = useState(true)
   const [popularTeachingsError, setPopularTeachingsError] = useState('')
+  const [personalizedRanks, setPersonalizedRanks] = useState<Map<string, number>>(() => new Map())
+  const [interactionTick, setInteractionTick] = useState(0)
   const popularListRef = useRef<HTMLDivElement>(null)
   const popularDrag = useRef<{ pointerId: number; startX: number; startScrollLeft: number; moved: boolean } | null>(null)
   const suppressPopularClick = useRef(false)
@@ -2179,7 +2181,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
     || popularTeachings.find((teaching) => teaching.id === selectedId)
   const desc = isLife ? 'Vocation stories and glimpses of a contemplative life rooted in prayer and sisterhood.' : 'Discover words of wisdom from Carmelite saints—quotes that invite prayer, deepen trust, and draw the heart closer to God.'
   function startPopularDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.pointerType === 'mouse' && event.button !== 0) return
+    if (event.pointerType !== 'mouse' || event.button !== 0) return
     popularDrag.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -2257,6 +2259,30 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
     return () => { active = false }
   }, [isLife, kind])
   useEffect(() => {
+    if (isLife || kind === 'updates' || !member || isLocalDemoSession()) {
+      setPersonalizedRanks(new Map())
+      return
+    }
+    let active = true
+    async function loadPersonalizedOrder() {
+      try {
+        const response = await fetch('/api/recommendations?limit=200&includeSeen=true', { credentials: 'include' })
+        if (!response.ok) return
+        const result = await response.json() as { items?: Array<{ id?: string }> }
+        if (!active || !Array.isArray(result.items)) return
+        const ranks = new Map<string, number>()
+        result.items.forEach((item, index) => {
+          if (item && typeof item.id === 'string') ranks.set(item.id, index)
+        })
+        setPersonalizedRanks(ranks)
+      } catch {
+        // Keep existing order if recommendations are temporarily unavailable
+      }
+    }
+    void loadPersonalizedOrder()
+    return () => { active = false }
+  }, [isLife, kind, member, favorites, interactionTick])
+  useEffect(() => {
     if (isLife || kind === 'updates' || !selectedId || isLocalDemoSession()) return
     void fetch('/api/content/interactions', {
       method: 'POST',
@@ -2265,6 +2291,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
       body: JSON.stringify({ readingId: selectedId, type: 'VIEW' }),
     }).then(async (response) => {
       if (!response.ok) throw new Error((await response.json()).error || 'The reading view could not be recorded.')
+      setInteractionTick((tick) => tick + 1)
     }).catch((error: unknown) => console.error('Unable to record Carmelights view.', error))
   }, [isLife, kind, selectedId])
   if (kind === 'updates') return <LegacyStoryPage kind={kind} />
@@ -2285,12 +2312,22 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
   if (!isLife) {
     const categories = [...new Set([...carmelightsCategories, ...articles.map((article) => article.category?.trim()).filter((category): category is string => Boolean(category))])].sort((a, b) => a.localeCompare(b))
     const saints = [...new Set(articles.map((article) => article.author.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
-    const visibleTeachings = articles.filter((article) => {
+    const filteredTeachings = articles.filter((article) => {
       const matchesCategory = teachingCategory === 'All' || (article.category || 'Prayer') === teachingCategory
       const matchesSaint = teachingSaint === 'All' || article.author.trim() === teachingSaint
       const searchableText = `${article.title} ${article.author} ${article.body} ${article.category || ''}`.toLowerCase()
       return matchesCategory && matchesSaint && searchableText.includes(teachingQuery.trim().toLowerCase())
     })
+    const visibleTeachings = personalizedRanks.size
+      ? [...filteredTeachings].sort((left, right) => {
+        const leftRank = personalizedRanks.get(left.id)
+        const rightRank = personalizedRanks.get(right.id)
+        if (leftRank !== undefined && rightRank !== undefined) return leftRank - rightRank
+        if (leftRank !== undefined) return -1
+        if (rightRank !== undefined) return 1
+        return 0
+      })
+      : filteredTeachings
     return <section className="carmelights-page section-wrap">
       <header className="carmelights-heading">
         <h1>Saints’ <em>Quotes</em></h1>

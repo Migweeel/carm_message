@@ -11,11 +11,14 @@ import main
 from main import (
     Interaction,
     Reading,
+    RecommendRequest,
     TrainRequest,
     aggregate_preferences,
     build_training_dataset,
     fallback_recommendations,
+    load_goodbooks_base,
     metadata_features,
+    recommend,
     train,
 )
 
@@ -99,11 +102,43 @@ class RecommendationHelpersTests(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as temporary_directory:
             model_path = Path(temporary_directory) / "lightfm-model.pkl"
-            with patch.object(main, "MODEL_DIR", Path(temporary_directory)), patch.object(main, "MODEL_PATH", model_path):
+            missing_base = Path(temporary_directory) / "missing.json.gz"
+            with (
+                patch.object(main, "MODEL_DIR", Path(temporary_directory)),
+                patch.object(main, "MODEL_PATH", model_path),
+                patch.object(main, "GOODBOOKS_BASE_PATH", missing_base),
+            ):
                 result = train(TrainRequest(readings=readings, interactions=events))
 
             self.assertEqual(result.status, "trained")
             self.assertTrue(model_path.is_file())
+
+    def test_goodbooks_base_loads_and_personalizes_new_users_by_history(self) -> None:
+        base_readings, base_interactions, meta = load_goodbooks_base()
+        self.assertGreater(len(base_readings), 100)
+        self.assertGreater(len(base_interactions), 1000)
+        self.assertIn("goodbooks-10k", str(meta.get("base_dataset", "")))
+
+        readings = [
+            Reading(id="q-prayer", title="Contemplative Prayer in Silence", author="St. John of the Cross", body="Silence prayer contemplation faith"),
+            Reading(id="q-love", title="Little Way of Love and Mercy", author="St. Therese", body="Love mercy charity kindness heart"),
+            Reading(id="q-prayer-2", title="Silence and Contemplation", author="St. Teresa", body="Contemplative silence prayer god"),
+            Reading(id="q-love-2", title="Merciful Love and Charity", author="St. Elizabeth", body="Love mercy heart compassion"),
+        ]
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            model_path = Path(temporary_directory) / "lightfm-model.pkl"
+            with patch.object(main, "MODEL_DIR", Path(temporary_directory)), patch.object(main, "MODEL_PATH", model_path):
+                trained = train(TrainRequest(readings=readings, interactions=[]))
+                self.assertEqual(trained.status, "trained")
+                prayer_user = recommend(RecommendRequest(user_id="new-user-a", readings=readings, history_ids=["q-prayer"], include_seen=True, limit=4))
+                love_user = recommend(RecommendRequest(user_id="new-user-b", readings=readings, history_ids=["q-love"], include_seen=True, limit=4))
+                self.assertEqual(prayer_user.source, "lightfm")
+                self.assertEqual(love_user.source, "lightfm")
+                self.assertEqual(len(prayer_user.recommendations), 4)
+                self.assertNotEqual(
+                    [item.reading_id for item in prayer_user.recommendations],
+                    [item.reading_id for item in love_user.recommendations],
+                )
 
 
 if __name__ == "__main__":

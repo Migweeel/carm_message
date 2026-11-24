@@ -2794,19 +2794,22 @@ app.get('/api/recommendations', authenticate, allowRoles('USER'), asyncRoute(asy
   const stopWords = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'your', 'you', 'are', 'was', 'were', 'our', 'their', 'have', 'has', 'will', 'what', 'when', 'where', 'which', 'who', 'how', 'not', 'but', 'can', 'all', 'one', 'more', 'than', 'through', 'about', 'carmel', 'carmelite', 'saint', 'teaching'])
   const terms = (value: string) => value.toLowerCase().match(/[a-z0-9]{3,}/g)?.filter((word) => !stopWords.has(word)) || []
   const interests = new Set(entries.filter(({ id }) => historyIds.has(id)).flatMap(({ title, author, body }) => [...terms(title), ...terms(author), ...terms(body.slice(0, 5000))]))
+  const includeSeen = req.query.includeSeen === 'true' || req.query.includeSeen === '1'
+  const requestedLimit = Number(req.query.limit)
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(200, Math.floor(requestedLimit))) : 8
   const fallback = () => ({
     source: 'fallback',
     modelVersion: null,
     items: [...entries]
-      .filter(({ id }) => !excluded.has(id))
+      .filter(({ id }) => includeSeen || !excluded.has(id))
       .sort((left, right) => {
         const score = (entry: typeof left) => {
           const matches = [...terms(`${entry.title} ${entry.author} ${entry.body.slice(0, 5000)}`)].filter((term) => interests.has(term)).length
-          return matches * 2 + (popularityById.get(entry.id) || 0)
+          return matches * 2 + (popularityById.get(entry.id) || 0) - (includeSeen && historyIds.has(entry.id) ? 0.5 : 0)
         }
         return score(right) - score(left)
       })
-      .slice(0, 8)
+      .slice(0, limit)
       .map((reading) => ({
         ...reading,
         reason: interests.size && terms(`${reading.title} ${reading.author} ${reading.body.slice(0, 5000)}`).some((term) => interests.has(term))
@@ -2823,9 +2826,10 @@ app.get('/api/recommendations', authenticate, allowRoles('USER'), asyncRoute(asy
     }>('/recommend', {
       user_id: user.id,
       readings,
-      exclude_ids: [...excluded],
+      exclude_ids: includeSeen ? [] : [...excluded],
       history_ids: [...historyIds],
-      limit: 8,
+      include_seen: includeSeen,
+      limit,
     })
     const articleById = new Map(entries.map((entry) => [entry.id, entry]))
     res.json({
@@ -3373,7 +3377,65 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error(error)
   res.status(500).json({ error: 'The request could not be completed. Please try again.' })
 })
-const server = app.listen(port, () => console.log(`Carmel API listening on http://localhost:${port}`))
+async function syncLightfmWithRealUsersOnStartup() {
+  if (!lightfmApiToken) return
+  try {
+    const content = await prisma.pageContent.findUnique({ where: { pageKey: 'SITE_MANAGED' }, select: { blocks: true } })
+    const blocks = content?.blocks
+    const entries = blocks && typeof blocks === 'object' && !Array.isArray(blocks) && Array.isArray(blocks.carmelights)
+      ? blocks.carmelights.flatMap((entry) => {
+        const parsed = managedArticleSchema.safeParse(entry)
+        return parsed.success ? [parsed.data] : []
+      })
+      : []
+    if (!entries.length) return
+    const interactions = await prisma.$queryRaw<Array<{ userId: string; readingId: string; eventType: 'VIEW' | 'BOOKMARK' | 'UNBOOKMARK'; createdAt: Date }>>(Prisma.sql`
+      SELECT DISTINCT ON (interaction."userId", interaction."readingId", interaction."eventType") interaction."userId", interaction."readingId", interaction."eventType", interaction."createdAt"
+      FROM "ContentInteraction" AS interaction
+      JOIN "User" AS account ON account."id" = interaction."userId"
+      WHERE interaction."userId" IS NOT NULL
+        AND account."isActive" = true
+        AND account."privacyConsentAt" IS NOT NULL
+        AND interaction."eventType" IN ('VIEW'::"ContentInteractionType", 'BOOKMARK'::"ContentInteractionType", 'UNBOOKMARK'::"ContentInteractionType")
+        AND interaction."readingId" = ANY(${entries.map((entry) => entry.id)}::text[])
+      ORDER BY interaction."userId", interaction."readingId", interaction."eventType", interaction."createdAt" DESC
+      LIMIT 500000
+    `)
+    const training = await callLightfm<{
+      status: string
+      model_version: string | null
+      users: number
+      readings: number
+      interactions: number
+      configuration: Record<string, unknown>
+      evaluation: Record<string, unknown>
+    }>('/train', {
+      readings: entries.map(({ id, title, author, body }) => ({ id, title, author, body, published: true })),
+      interactions: interactions.map((interaction) => ({
+        user_id: interaction.userId,
+        reading_id: interaction.readingId,
+        event_type: interaction.eventType,
+        created_at: interaction.createdAt.toISOString(),
+      })),
+    }, 10 * 60 * 1000)
+    console.log('Carmelights LightFM trained (Goodbooks-10k + real users):', JSON.stringify({
+      status: training.status,
+      modelVersion: training.model_version,
+      users: training.users,
+      readings: training.readings,
+      interactions: training.interactions,
+      configuration: training.configuration,
+      evaluation: training.evaluation,
+    }))
+  } catch (error) {
+    console.warn('Carmelights startup LightFM training failed:', error instanceof Error ? error.message : 'Unknown error')
+  }
+}
+
+const server = app.listen(port, () => {
+  console.log(`Carmel API listening on http://localhost:${port}`)
+  void syncLightfmWithRealUsersOnStartup()
+})
 async function shutdown() { server.close(); await prisma.$disconnect() }
 process.on('SIGINT', () => void shutdown())
 process.on('SIGTERM', () => void shutdown())
