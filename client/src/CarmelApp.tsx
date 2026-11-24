@@ -807,6 +807,11 @@ const directThreadsUpdatedEvent = 'carmel-direct-threads-updated'
 const adminMessagesReadEvent = 'carmel-admin-messages-read'
 type MemberGender = 'MALE' | 'FEMALE' | 'ANONYMOUS'
 type MemberAccount = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; avatarImage?: string | null; role: 'USER'; prototype?: boolean; demo?: true }
+function AccountAvatar({ name, avatarImage, className = '' }: { name: string; avatarImage?: string | null; className?: string }) {
+  return <span className={className}>{avatarImage
+    ? <ImageWithLoader src={avatarImage} alt="" />
+    : name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
+}
 function useMemberFavorites(member: MemberAccount | null) {
   const [favorites, setFavorites] = useState<string[]>([])
   const [loading, setLoading] = useState(Boolean(member))
@@ -2423,7 +2428,7 @@ function DonationsPage() {
     {!receiptCode && <div className="trust-row"><span><ShieldCheck />100% Direct to Monasteries</span><span><User />Anonymous Giving Supported</span><span><Smartphone />Helpline: (0921) 419-2267</span></div>}</div>
 }
 type StaffRole = 'ADMIN' | 'FORMATOR'
-type PrototypeStaff = { id: string; name: string; email: string; role: StaffRole; passwordHash?: string; isActive?: boolean; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean; prototype?: boolean; demo?: true }
+type PrototypeStaff = { id: string; name: string; email: string; avatarImage?: string | null; role: StaffRole; passwordHash?: string; isActive?: boolean; canManageUsers?: boolean; canManageDetails?: boolean; canManageUpdates?: boolean; prototype?: boolean; demo?: true }
 type FormatorPermissionKey = 'canManageUsers' | 'canManageDetails' | 'canManageUpdates'
 type PermissionAction = 'GRANT' | 'REVOKE'
 type PendingPermission = { staff: PrototypeStaff[]; memberName: string; labels: string[]; action: PermissionAction }
@@ -3326,7 +3331,7 @@ function MemberSecurityView({ member }: { member: MemberAccount }) {
 }
 
 function MemberMessagesView({ member }: { member: MemberAccount }) {
-  type StaffContact = { id: string; name: string; role: 'ADMIN' | 'FORMATOR' }
+  type StaffContact = { id: string; name: string; role: 'ADMIN' | 'FORMATOR'; avatarImage?: string | null }
   const [staff, setStaff] = useState<StaffContact[]>([])
   const [conversations, setConversations] = useState<ApiConversation[]>([])
   const [selectedId, setSelectedId] = useState('')
@@ -3432,7 +3437,7 @@ function MemberMessagesView({ member }: { member: MemberAccount }) {
             const recipient = conversation.staffRecipient
             const lastMessage = conversation.messages.at(-1)
             return <button key={conversation.id} className={`conversation-row direct-recipient ${selectedId === conversation.id && !isComposing ? 'selected' : ''}`} type="button" onClick={() => { setSelectedId(conversation.id); setIsComposing(false); setError('') }}>
-              <span className={`avatar ${recipient?.role === 'FORMATOR' ? 'green' : 'gold'}`}>{(recipient?.name || 'Federation office').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
+            <AccountAvatar name={recipient?.name || 'Federation office'} avatarImage={recipient?.avatarImage} className={`avatar ${recipient?.role === 'FORMATOR' ? 'green' : 'gold'}`} />
               <span><b>{recipient?.name || 'Federation office'}</b><small>{recipient?.role === 'FORMATOR' ? 'Staff' : recipient?.role === 'ADMIN' ? 'Administrator' : 'Federation staff'}</small><small>{lastMessage?.body || conversation.subject}</small></span>
             </button>
           })}
@@ -3453,7 +3458,7 @@ function MemberMessagesView({ member }: { member: MemberAccount }) {
           <div className="direct-thread-messages"><p className="direct-empty">{staff.length ? 'Write a private message to the selected staff member.' : 'No staff contacts are available right now.'}</p></div>
           <form className="direct-compose" onSubmit={send}><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…" aria-label="Write a message" maxLength={5000} /><button className="button button-dark" type="submit" aria-label="Send message" disabled={!draft.trim() || !recipientId || sending}>{sending ? 'Sending…' : <ArrowRight size={15} />}</button></form>
         </> : selected ? <>
-          <header className="direct-thread-head"><span className={`avatar ${selectedRecipient?.role === 'FORMATOR' ? 'green' : 'gold'}`}>{(selectedRecipient?.name || 'Federation office').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><b>{selectedRecipient?.name || 'Federation office'}</b><small>{selectedRecipient?.role === 'FORMATOR' ? 'Staff' : selectedRecipient?.role === 'ADMIN' ? 'Administrator' : 'Federation staff'}</small><small>{selected.subject}</small></div></header>
+          <header className="direct-thread-head"><AccountAvatar name={selectedRecipient?.name || 'Federation office'} avatarImage={selectedRecipient?.avatarImage} className={`avatar ${selectedRecipient?.role === 'FORMATOR' ? 'green' : 'gold'}`} /><div><b>{selectedRecipient?.name || 'Federation office'}</b><small>{selectedRecipient?.role === 'FORMATOR' ? 'Staff' : selectedRecipient?.role === 'ADMIN' ? 'Administrator' : 'Federation staff'}</small><small>{selected.subject}</small></div></header>
           <div className="direct-thread-messages">{selected.messages.length ? selected.messages.map((message) => {
             const outgoing = message.senderType === 'VISITOR'
             const senderName = outgoing ? member.name : message.sender?.name || selectedRecipient?.name || 'Federation staff'
@@ -3679,6 +3684,7 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
   const [editingProfile, setEditingProfile] = useState(false)
   const [profileName, setProfileName] = useState(user.name)
   const [profileEmail, setProfileEmail] = useState(user.email)
+  const [profileAvatar, setProfileAvatar] = useState(user.avatarImage || '')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [profileError, setProfileError] = useState('')
@@ -3692,7 +3698,7 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
     window.dispatchEvent(new Event(staffSessionUpdatedEvent))
     navigate('/staff/login', { replace: true })
   }
-  function openProfileEditor() { setProfileName(user.name); setProfileEmail(user.email); setCurrentPassword(''); setNewPassword(''); setProfileError(''); setProfileOpen(false); setEditingProfile(true) }
+  function openProfileEditor() { setProfileName(user.name); setProfileEmail(user.email); setProfileAvatar(user.avatarImage || ''); setCurrentPassword(''); setNewPassword(''); setProfileError(''); setProfileOpen(false); setEditingProfile(true) }
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setProfileError('')
@@ -3708,7 +3714,7 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
         setEditingProfile(false)
         return
       }
-      const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, ...(currentPassword ? { currentPassword } : {}), ...(newPassword ? { newPassword } : {}) }) })
+      const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, avatarImage: profileAvatar || null, ...(currentPassword ? { currentPassword } : {}), ...(newPassword ? { newPassword } : {}) }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Unable to update your account.')
       onUserUpdated({ ...user, ...result.user, passwordHash: user.passwordHash })
@@ -3737,12 +3743,12 @@ function AdminShell({ children, user, onUserUpdated }: { children: ReactNode; us
             {adminSearchOpen && <label className="admin-search-popover" id="admin-search-popover"><Search size={17} aria-hidden="true" /><input ref={adminSearchInputRef} aria-label={user.role === 'ADMIN' ? 'Search donations, donors, or messages' : 'Search messages or community users'} placeholder={user.role === 'ADMIN' ? 'Search donations, donors, or messages...' : 'Search messages or community users...'} /></label>}
           </div>
           <AdminNotificationsMenu notifications={notifications.notifications} unreadCount={notifications.unreadMessageCount} loading={notifications.loading} error={notifications.error} refresh={notifications.refresh} />
-          <div className="profile-control"><button type="button" className="admin-user" aria-haspopup="menu" aria-expanded={profileOpen} onClick={() => setProfileOpen(!profileOpen)}><i>{user.name[0]?.toUpperCase()}</i><span>{user.name}<small>{user.role === 'ADMIN' ? 'Administrator' : 'Staff'}</small></span><ChevronDown size={14} /></button>{profileOpen && <div className="profile-dropdown" role="menu"><div className="profile-dropdown-identity"><b>{user.name}</b><small>{user.email}</small></div><Link to="/" role="menuitem" onClick={() => setProfileOpen(false)}><ArrowUpRight size={15} />View website</Link><button type="button" role="menuitem" onClick={openProfileEditor}><Pencil size={15} />Edit account</button><button type="button" role="menuitem" onClick={signOut}><LogOut size={15} />Log out</button></div>}</div>
+          <div className="profile-control"><button type="button" className="admin-user" aria-haspopup="menu" aria-expanded={profileOpen} onClick={() => setProfileOpen(!profileOpen)}><i>{user.avatarImage ? <ImageWithLoader src={user.avatarImage} alt="" /> : user.name[0]?.toUpperCase()}</i><span>{user.name}<small>{user.role === 'ADMIN' ? 'Administrator' : 'Staff'}</small></span><ChevronDown size={14} /></button>{profileOpen && <div className="profile-dropdown" role="menu"><div className="profile-dropdown-identity"><b>{user.name}</b><small>{user.email}</small></div><Link to="/" role="menuitem" onClick={() => setProfileOpen(false)}><ArrowUpRight size={15} />View website</Link><button type="button" role="menuitem" onClick={openProfileEditor}><Pencil size={15} />Edit account</button><button type="button" role="menuitem" onClick={signOut}><LogOut size={15} />Log out</button></div>}</div>
         </div>
       </header>
       <div className="admin-content">{children}</div>
     </div>
-    {editingProfile && <div className="profile-modal-backdrop"><section className="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title"><header><div><span className="eyebrow">ACCOUNT</span><h2 id="profile-modal-title">Edit account</h2></div><button type="button" aria-label="Close edit account" onClick={() => setEditingProfile(false)}><X size={18} /></button></header><form onSubmit={saveProfile}><label>Full name<input value={profileName} onChange={(event) => setProfileName(event.target.value)} required minLength={2} maxLength={100} /></label><label>Email address<input type="email" value={profileEmail} onChange={(event) => setProfileEmail(event.target.value)} required /></label><div className="profile-password-fields"><span>Change password <small>Leave blank to keep your current password.</small></span><label>Current password<PasswordInput value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" /></label><label>New password<PasswordInput value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={10} maxLength={128} autoComplete="new-password" /></label></div>{profileError && <p className="form-error" role="alert">{profileError}</p>}<footer><button className="button button-outline" type="button" onClick={() => setEditingProfile(false)}>Cancel</button><button className="button button-dark" type="submit" disabled={profilePending}>{profilePending ? 'Saving…' : 'Save changes'}</button></footer></form></section></div>}
+    {editingProfile && <div className="profile-modal-backdrop"><section className="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title"><header><div><span className="eyebrow">ACCOUNT</span><h2 id="profile-modal-title">Edit account</h2></div><button type="button" aria-label="Close edit account" onClick={() => setEditingProfile(false)}><X size={18} /></button></header><form onSubmit={saveProfile}><div className="member-profile-avatar-editor"><div className="member-profile-avatar-preview">{profileAvatar ? <ImageWithLoader src={profileAvatar} alt="" /> : <User size={26} aria-hidden="true" />}</div><div className="member-profile-avatar-content"><h3>Profile photo</h3><p>Upload or remove the photo shown in staff and message views.</p><div className="member-profile-avatar-controls"><ImageCropInput onImage={(file) => { void optimizeImageFile(file).then((image) => setProfileAvatar(image)).catch((reason) => setProfileError(reason instanceof Error ? reason.message : 'Unable to update the profile photo.')) }} currentImage={profileAvatar || undefined} ariaLabel="Upload staff profile photo" maxBytes={1_000_000} maxWidth={800} />{profileAvatar && <button className="member-profile-avatar-remove" type="button" onClick={() => setProfileAvatar('')}>Remove photo</button>}</div></div></div><label>Full name<input value={profileName} onChange={(event) => setProfileName(event.target.value)} required minLength={2} maxLength={100} /></label><label>Email address<input type="email" value={profileEmail} onChange={(event) => setProfileEmail(event.target.value)} required /></label><div className="profile-password-fields"><span>Change password <small>Leave blank to keep your current password.</small></span><label>Current password<PasswordInput value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" /></label><label>New password<PasswordInput value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={10} maxLength={128} autoComplete="new-password" /></label></div>{profileError && <p className="form-error" role="alert">{profileError}</p>}<footer><button className="button button-outline" type="button" onClick={() => setEditingProfile(false)}>Cancel</button><button className="button button-dark" type="submit" disabled={profilePending}>{profilePending ? 'Saving…' : 'Save changes'}</button></footer></form></section></div>}
   </div>
 }
 function StatCard({ label, value, sub, tone, badge, icon: Icon = Banknote, trend = '↗ 12.8% this month', to }: { label: string; value: string; sub: string; tone: string; badge?: string; icon?: typeof Banknote; trend?: string; to?: string }) {
@@ -5703,6 +5709,7 @@ type ManagedAccount = {
   email: string
   phone: string
   address: string
+  avatarImage?: string | null
   role: StaffRole | 'USER'
   isActive: boolean
   canManageUsers: boolean
@@ -5908,8 +5915,8 @@ function PermissionConfirmationHost() {
   return <div className="permission-confirm-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setRequest(null) }}><section className="permission-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="permission-confirm-title"><span className="permission-confirm-icon"><ShieldCheck size={21} /></span><span className="eyebrow">STAFF ACCESS</span><h2 id="permission-confirm-title">{granting ? 'Grant access?' : 'Revoke access?'}</h2><p>{granting ? `${request.memberName} will gain access to:` : `${request.memberName} will lose access to:`}</p><ul className="permission-confirm-list">{request.labels.map((label) => <li key={label}>{label}</li>)}</ul><footer><button className="button button-outline" onClick={() => setRequest(null)}>Cancel</button><button className={`button ${granting ? 'button-dark' : 'permission-revoke-button'}`} onClick={confirm}>{granting ? 'Confirm grant' : 'Confirm revoke'}</button></footer></section></div>
 }
 
-type ApiConversationMessage = { id: string; senderId: string | null; senderType: 'VISITOR' | 'ADMIN' | 'FORMATOR'; body: string; createdAt: string; sender: { id: string; name: string; role: string } | null }
-type ApiConversation = { id: string; userId: string | null; name: string; email: string; subject: string; category: string; isRead: boolean; lastMessageAt: string; user: { id: string; role: string; isActive: boolean } | null; staffRecipient?: { id: string; name: string; role: string } | null; messages: ApiConversationMessage[] }
+type ApiConversationMessage = { id: string; senderId: string | null; senderType: 'VISITOR' | 'ADMIN' | 'FORMATOR'; body: string; createdAt: string; sender: { id: string; name: string; role: string; avatarImage?: string | null } | null }
+type ApiConversation = { id: string; userId: string | null; name: string; email: string; subject: string; category: string; isRead: boolean; lastMessageAt: string; user: { id: string; name?: string; email?: string; avatarImage?: string | null; role: string; isActive: boolean } | null; staffRecipient?: { id: string; name: string; role: string; avatarImage?: string | null } | null; messages: ApiConversationMessage[] }
 function DirectMessagesPage({ user }: { user: PrototypeStaff }) {
   const location = useLocation()
   const [selectedId, setSelectedId] = useState(() => new URLSearchParams(location.search).get('conversation') || '')
@@ -6007,9 +6014,9 @@ function DirectMessagesPage({ user }: { user: PrototypeStaff }) {
       <aside className="conversation-list direct-inbox-list">
         <label className="conversation-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" aria-label="Search conversations" /></label>
         <div className="inbox-tabs direct-message-tabs"><button className={messageFilter === 'All' ? 'active' : ''} onClick={() => setMessageFilter('All')}>All</button><button className={messageFilter === 'Unread' ? 'active' : ''} onClick={() => setMessageFilter('Unread')}>Unread{unreadCount > 0 && <i>{unreadCount}</i>}</button></div>
-        <div className="direct-recipient-list">{loading ? <p className="direct-empty">Loading conversations…</p> : visible.map((conversation) => <button key={conversation.id} className={`conversation-row direct-recipient ${selected?.id === conversation.id ? 'selected' : ''}`} onClick={() => void selectConversation(conversation)}><span className={`avatar ${conversation.userId ? 'gold' : 'green'}`}>{conversation.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><span><b>{conversation.name}</b><small>{conversation.userId ? 'Discerner' : conversation.category === 'DISCERNER' ? 'Vocation inquiry' : 'Contact inquiry'} · {conversation.email}</small><small>To: {conversation.staffRecipient ? `${conversation.staffRecipient.name} · ${conversation.staffRecipient.role === 'FORMATOR' ? 'Staff' : 'Admin'}` : 'Admin'}</small><small>{conversation.messages.at(-1)?.body || conversation.subject}</small></span></button>)}{!loading && visible.length === 0 && <p className="direct-empty">No {messageFilter === 'Unread' ? 'unread ' : ''}conversations.</p>}</div>
+        <div className="direct-recipient-list">{loading ? <p className="direct-empty">Loading conversations…</p> : visible.map((conversation) => <button key={conversation.id} className={`conversation-row direct-recipient ${selected?.id === conversation.id ? 'selected' : ''}`} onClick={() => void selectConversation(conversation)}><AccountAvatar name={conversation.user?.name || conversation.name} avatarImage={conversation.user?.avatarImage} className={`avatar ${conversation.userId ? 'gold' : 'green'}`} /><span><b>{conversation.name}</b><small>{conversation.userId ? 'Discerner' : conversation.category === 'DISCERNER' ? 'Vocation inquiry' : 'Contact inquiry'} · {conversation.email}</small><small>To: {conversation.staffRecipient ? `${conversation.staffRecipient.name} · ${conversation.staffRecipient.role === 'FORMATOR' ? 'Staff' : 'Admin'}` : 'Admin'}</small><small>{conversation.messages.at(-1)?.body || conversation.subject}</small></span></button>)}{!loading && visible.length === 0 && <p className="direct-empty">No {messageFilter === 'Unread' ? 'unread ' : ''}conversations.</p>}</div>
       </aside>
-      <div className="direct-thread">{selected ? <><header className="direct-thread-head"><span className={`avatar ${selected.userId ? 'gold' : 'green'}`}>{selected.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><b>{selected.name}</b><small>{selected.userId ? 'Discerner account' : 'Contact inquiry'} · {selected.email}</small><small>Addressed to {selected.staffRecipient ? `${selected.staffRecipient.name} · ${selected.staffRecipient.role === 'FORMATOR' ? 'Staff' : 'Admin'}` : 'Admin'}</small><small>{selected.subject}</small></div></header><div className="direct-thread-messages">{selected.messages.length ? selected.messages.map((message) => { const outgoing = message.senderType !== 'VISITOR'; const senderName = outgoing ? message.sender?.name || (message.senderType === 'FORMATOR' ? 'Staff' : 'Federation office') : selected.name; return <article className={`direct-message ${outgoing ? 'outgoing' : ''}`} key={message.id}><b>{outgoing ? `${senderName}${message.sender?.role === 'FORMATOR' ? ' · Staff' : ''}` : senderName}</b><p>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article> }) : <p className="direct-empty">No messages in this conversation yet.</p>}</div><form className="direct-compose" onSubmit={send}><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={`Reply to ${selected.name}…`} aria-label="Write a reply" maxLength={5000} /><button className="button button-dark" type="submit" aria-label="Send reply" disabled={!draft.trim() || sending}>{sending ? 'Sending…' : <ArrowRight size={15} />}</button></form></> : <div className="direct-empty">{loading ? 'Loading conversations…' : 'Select a conversation to reply.'}</div>}</div>
+      <div className="direct-thread">{selected ? <><header className="direct-thread-head"><AccountAvatar name={selected.user?.name || selected.name} avatarImage={selected.user?.avatarImage} className={`avatar ${selected.userId ? 'gold' : 'green'}`} /><div><b>{selected.name}</b><small>{selected.userId ? 'Discerner account' : 'Contact inquiry'} · {selected.email}</small><small>Addressed to {selected.staffRecipient ? `${selected.staffRecipient.name} · ${selected.staffRecipient.role === 'FORMATOR' ? 'Staff' : 'Admin'}` : 'Admin'}</small><small>{selected.subject}</small></div></header><div className="direct-thread-messages">{selected.messages.length ? selected.messages.map((message) => { const outgoing = message.senderType !== 'VISITOR'; const senderName = outgoing ? message.sender?.name || (message.senderType === 'FORMATOR' ? 'Staff' : 'Federation office') : selected.name; const senderAvatar = outgoing ? message.sender?.avatarImage : selected.user?.avatarImage; return <article className={`direct-message ${outgoing ? 'outgoing' : ''}`} key={message.id}><AccountAvatar name={senderName} avatarImage={senderAvatar} className={`avatar ${outgoing ? 'green' : 'gold'}`} /><b>{outgoing ? `${senderName}${message.sender?.role === 'FORMATOR' ? ' · Staff' : ''}` : senderName}</b><p>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article> }) : <p className="direct-empty">No messages in this conversation yet.</p>}</div><form className="direct-compose" onSubmit={send}><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={`Reply to ${selected.name}…`} aria-label="Write a reply" maxLength={5000} /><button className="button button-dark" type="submit" aria-label="Send reply" disabled={!draft.trim() || sending}>{sending ? 'Sending…' : <ArrowRight size={15} />}</button></form></> : <div className="direct-empty">{loading ? 'Loading conversations…' : 'Select a conversation to reply.'}</div>}</div>
     </section>
   </>
 }
@@ -6082,7 +6089,7 @@ function FormatorUsersPage() {
     {error && <p className="form-error" role="alert">{error}</p>}
     {success && <p className="form-success" role="status" aria-live="polite">{success}</p>}
     <section className="managed-section"><header className="managed-section-heading"><div><span className="eyebrow">COMMUNITY ACCESS</span><h2>Community users</h2><p>{users.length} {users.length === 1 ? 'account' : 'accounts'} · status management only</p></div><span className="staff-role-label">USER ACCESS</span></header>
-      {loading ? <div className="staff-empty">Loading community accounts…</div> : users.length ? <div className="managed-user-list">{users.map((person) => <article className="managed-user-row" key={person.id}><span className="managed-avatar user-avatar">{person.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div className="managed-user-identity"><h3>{person.name}</h3><p>{person.email}</p><small>{person.phone || 'No phone provided'} · {person.address || 'No address provided'}</small></div><span className={`access-status ${person.isActive ? 'enabled' : 'disabled'}`}>{person.isActive ? 'Active' : 'Disabled'}</span><div className="managed-user-actions"><ManagedPasswordResetButton account={person} onChanged={setSuccess} /><button className="staff-action" disabled={saving} onClick={() => person.isActive ? setPendingUser({ account: person, action: 'block' }) : void updateUserStatus(person)}>{person.isActive ? 'Block' : 'Unblock'}</button><button className="staff-remove" disabled={saving} onClick={() => setPendingUser({ account: person, action: 'delete' })}>Delete</button></div></article>)}</div> : <div className="staff-empty"><Users size={24} /><p>No community users yet.</p></div>}
+      {loading ? <div className="staff-empty">Loading community accounts…</div> : users.length ? <div className="managed-user-list">{users.map((person) => <article className="managed-user-row" key={person.id}><AccountAvatar name={person.name} avatarImage={person.avatarImage} className="managed-avatar user-avatar" /><div className="managed-user-identity"><h3>{person.name}</h3><p>{person.email}</p><small>{person.phone || 'No phone provided'} · {person.address || 'No address provided'}</small></div><span className={`access-status ${person.isActive ? 'enabled' : 'disabled'}`}>{person.isActive ? 'Active' : 'Disabled'}</span><div className="managed-user-actions"><ManagedPasswordResetButton account={person} onChanged={setSuccess} /><button className="staff-action" disabled={saving} onClick={() => person.isActive ? setPendingUser({ account: person, action: 'block' }) : void updateUserStatus(person)}>{person.isActive ? 'Block' : 'Unblock'}</button><button className="staff-remove" disabled={saving} onClick={() => setPendingUser({ account: person, action: 'delete' })}>Delete</button></div></article>)}</div> : <div className="staff-empty"><Users size={24} /><p>No community users yet.</p></div>}
     </section>
     {pendingUser && <AccountActionConfirmation title={pendingUser.action === 'delete' ? 'Delete this account?' : 'Block this account?'} description={pendingUser.action === 'delete' ? `Permanently delete ${pendingUser.account.name}'s community account? This cannot be undone.` : `${pendingUser.account.name} will no longer be able to sign in. You can unblock the account later.`} confirmLabel={pendingUser.action === 'delete' ? 'Delete account' : 'Block account'} onCancel={() => setPendingUser(null)} onConfirm={() => void (pendingUser.action === 'delete' ? deleteUser(pendingUser.account) : updateUserStatus(pendingUser.account))} />}
   </main>
@@ -6090,7 +6097,7 @@ function FormatorUsersPage() {
 
 function RoleAwareUsersPage({ user }: { user: PrototypeStaff }) { return user.role === 'ADMIN' ? <ManageUsersPage /> : <FormatorUsersPage /> }
 
-type AdminDiscerner = { userId: string; name: string; email: string; monastery: string; stage: DiscernmentStage; updatedAt: string }
+type AdminDiscerner = { userId: string; name: string; email: string; avatarImage?: string | null; monastery: string; stage: DiscernmentStage; updatedAt: string }
 function AdminDiscernmentListPage() {
   const [records, setRecords] = useState<AdminDiscerner[]>([])
   const [query, setQuery] = useState('')
@@ -6104,10 +6111,11 @@ function AdminDiscernmentListPage() {
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Unable to load discerners.')
         if (active) {
-          setRecords((result.discerners || []).map((record: { userId: string; monastery: string; stage: string; updatedAt: string; user: { name: string; email: string } }) => ({
+          setRecords((result.discerners || []).map((record: { userId: string; monastery: string; stage: string; updatedAt: string; user: { name: string; email: string; avatarImage?: string | null } }) => ({
             userId: record.userId,
             name: record.user.name,
             email: record.user.email,
+            avatarImage: record.user.avatarImage,
             monastery: record.monastery,
             stage: normalizeDiscernmentStage(record.stage),
             updatedAt: record.updatedAt,
@@ -6141,7 +6149,7 @@ function AdminDiscernmentListPage() {
       <div className="discerner-columns-heading" aria-hidden="true"><span>Discerner</span><span>Journey progress</span><span>Update stage</span></div>
       {filtered.map((record) => {
         return <article className="discerner-row" key={record.userId}>
-          <div className="discerner-identity"><span className="managed-avatar user-avatar">{record.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><h2>{record.name}</h2><p>{record.email}</p>{record.monastery && <small>{record.monastery}</small>}</div></div>
+          <div className="discerner-identity"><AccountAvatar name={record.name} avatarImage={record.avatarImage} className="managed-avatar user-avatar" /><div><h2>{record.name}</h2><p>{record.email}</p>{record.monastery && <small>{record.monastery}</small>}</div></div>
           <DiscernmentStageProgress stage={record.stage} compact label={`Discernment progress for ${record.name}`} updatedAt={record.updatedAt} />
           <label className="discerner-stage-edit"><span>Update stage</span><select value={record.stage} onChange={(event) => void updateStage(record, event.target.value as DiscernmentStage)} disabled={pendingUserId === record.userId}>{discernmentStages.map((stage) => <option value={stage.id} key={stage.id}>{stage.label}</option>)}</select></label>
         </article>

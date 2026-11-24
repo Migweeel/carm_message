@@ -1639,7 +1639,7 @@ app.get('/api/account/staff', authenticate, allowRoles('USER'), asyncRoute(async
   const staff = await prisma.user.findMany({
     where: { role: { in: ['ADMIN', 'FORMATOR'] }, isActive: true },
     orderBy: [{ role: 'asc' }, { name: 'asc' }],
-    select: { id: true, name: true, role: true },
+    select: { id: true, name: true, role: true, avatarImage: true },
   })
   res.json({ staff })
 }))
@@ -1648,8 +1648,9 @@ app.get('/api/account/conversations', authenticate, allowRoles('USER'), asyncRou
     where: { userId: req.auth!.id },
     orderBy: { lastMessageAt: 'desc' },
     include: {
-      staffRecipient: { select: { id: true, name: true, role: true } },
-      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } },
+      user: { select: { id: true, name: true, email: true, avatarImage: true, role: true, isActive: true } },
+      staffRecipient: { select: { id: true, name: true, role: true, avatarImage: true } },
+      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } },
     },
   })
   const ids = conversations.map(({ id }) => id)
@@ -2914,6 +2915,7 @@ const managedUserSelect = {
   email: true,
   phone: true,
   address: true,
+  avatarImage: true,
   role: true,
   isActive: true,
   canManageUsers: true,
@@ -3055,7 +3057,7 @@ app.get('/api/admin/discernment', authenticate, asyncRoute(async (req, res) => {
     orderBy: { updatedAt: 'desc' },
     select: {
       id: true, userId: true, stage: true, monastery: true, updatedAt: true,
-      user: { select: { name: true, email: true } },
+      user: { select: { name: true, email: true, avatarImage: true } },
     },
   })
   res.json({ discerners })
@@ -3101,9 +3103,9 @@ app.get('/api/admin/conversations', authenticate, allowRoles('ADMIN', 'FORMATOR'
     where: staffConversationAccessWhere(req),
     orderBy: { lastMessageAt: 'desc' },
     include: {
-      user: { select: { id: true, role: true, isActive: true } },
-      staffRecipient: { select: { id: true, name: true, role: true } },
-      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } },
+      user: { select: { id: true, name: true, email: true, avatarImage: true, role: true, isActive: true } },
+      staffRecipient: { select: { id: true, name: true, role: true, avatarImage: true } },
+      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } },
     },
   })
   res.json({ conversations: conversations.map((conversation) => ({
