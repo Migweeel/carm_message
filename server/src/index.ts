@@ -2560,12 +2560,12 @@ app.get('/api/admin/carmelights/analytics', authenticate, asyncRoute(async (req,
           throw new Error('No privacy-consented member accounts are available for LightFM training.')
         }
         const modelInteractions: Array<{ user_id: string; reading_id: string; event_type: 'VIEW' | 'BOOKMARK'; created_at: string }> = []
-        for (let index = 0; index < 179; index += 1) {
+        for (let index = 0; index < 252; index += 1) {
           modelInteractions.push({
             user_id: syntheticUsers[index % syntheticUsers.length],
             reading_id: readingIds[(index * 3 + (index % syntheticUsers.length)) % readingIds.length],
             event_type: 'VIEW',
-            created_at: new Date(now - (179 - index) * 60_000).toISOString(),
+            created_at: new Date(now - (252 - index) * 60_000).toISOString(),
           })
         }
         for (let index = 0; index < 77; index += 1) {
@@ -2607,7 +2607,7 @@ app.get('/api/admin/carmelights/analytics', authenticate, asyncRoute(async (req,
   const actualViews = Number(viewTotals[0]?.count ?? 0)
   const actualReaders = Number(readerTotals[0]?.count ?? 0)
   const actualBookmarks = [...bookmarks.values()].reduce((sum, count) => sum + count, 0)
-  const totalViews = Math.max(actualViews, 179)
+  const totalViews = Math.max(actualViews, 252)
   const datasetReaderCount = await prisma.user.count({
     where: { role: 'USER', isActive: true, privacyConsentAt: { not: null }, privacyPolicyVersion: 'training-dataset-v1' },
   })
@@ -3396,7 +3396,7 @@ async function seedCarmelightsTrainingUsers() {
     : []
   if (trainingAccounts.length && readingIds.length) {
     const now = Date.now()
-    const viewInteractions = Array.from({ length: 179 }, (_, index) => {
+    const viewInteractions = Array.from({ length: 252 }, (_, index) => {
       const user = trainingAccounts[index % trainingAccounts.length]
       const readingId = readingIds[(index * 3 + (index % trainingAccounts.length)) % readingIds.length]
       const dedupeKey = createHash('sha256').update(`training-view\0${user.id}\0${readingId}\0${index}`).digest('hex')
@@ -3406,7 +3406,7 @@ async function seedCarmelightsTrainingUsers() {
         readingId,
         eventType: 'VIEW' as const,
         dedupeKey,
-        createdAt: new Date(now - (179 - index) * 60_000),
+        createdAt: new Date(now - (252 - index) * 60_000),
       }
     })
     const bookmarkInteractions = Array.from({ length: 77 }, (_, index) => {
@@ -3444,7 +3444,7 @@ async function seedCarmelightsTrainingUsers() {
       }))
       try {
         await callLightfm('/train', { readings: entries, interactions: modelInteractions }, 10 * 60 * 1000)
-        console.log('Carmelights LightFM model trained with 52 members, 179 views, and 77 bookmarks')
+        console.log('Carmelights LightFM model trained with 52 members, 252 views, and 77 bookmarks')
       } catch (error) {
         console.warn('Carmelights startup LightFM training failed:', error instanceof Error ? error.message : 'Unknown error')
       }
