@@ -2177,7 +2177,7 @@ function StoryPage({ kind }: { kind: 'life' | 'stories' | 'updates' }) {
             }
           }}>{popularTeachings.map((teaching, index) => {
             const rank = index + 1
-            return <a className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} href={`/carmelights?reading=${encodeURIComponent(teaching.id)}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openPopularReading(teaching) }}>
+            return <a className={`carmelights-popular-card ${rank === 1 ? 'featured' : ''}`} key={teaching.id} href={`/carmelights?reading=${encodeURIComponent(teaching.id)}`} draggable={false} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openPopularReading(teaching) }}>
               <span className="carmelights-popular-rank">{rank}</span><ImageWithLoader src={articleImageFor(teaching.image, photo.chapel)} alt="" /><span className="carmelights-popular-copy"><small>{teaching.category || 'Prayer'} · {teaching.views.toLocaleString()} {teaching.views === 1 ? 'view' : 'views'}</small><b>{teaching.title}</b><em>{teaching.author}</em></span><span className="carmelights-popular-open"><ArrowRight size={17} /></span>
             </a>
           })}</div>
