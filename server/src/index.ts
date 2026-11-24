@@ -2683,6 +2683,7 @@ app.post('/api/admin/carmelights/train', authenticate, rateLimit({
     WHERE interaction."userId" IS NOT NULL
       AND account."isActive" = true
       AND account."privacyConsentAt" IS NOT NULL
+      AND account."privacyPolicyVersion" = 'training-dataset-v1'
       AND interaction."eventType" IN ('VIEW'::"ContentInteractionType", 'BOOKMARK'::"ContentInteractionType", 'UNBOOKMARK'::"ContentInteractionType")
       AND interaction."readingId" = ANY(${entries.map((entry) => entry.id)}::text[])
     ORDER BY interaction."userId", interaction."readingId", interaction."eventType", interaction."createdAt" DESC
@@ -2695,42 +2696,6 @@ app.post('/api/admin/carmelights/train', authenticate, rateLimit({
     event_type: interaction.eventType,
     created_at: interaction.createdAt.toISOString(),
   }))
-
-  if (modelReadings.length) {
-    const now = Date.now()
-    const targetViews = 179
-    const targetBookmarks = 77
-    const consentedUsers = await prisma.user.findMany({
-      where: { isActive: true, privacyConsentAt: { not: null }, role: 'USER' },
-      select: { id: true },
-      take: 52,
-      orderBy: { createdAt: 'asc' },
-    })
-    if (!consentedUsers.length) {
-      return res.status(400).json({ error: 'Create the training members before training the model.' })
-    }
-    const trainingUsers = consentedUsers.map((account) => account.id)
-    for (let index = 0; index < targetViews; index += 1) {
-      const userIndex = index % trainingUsers.length
-      const readingIndex = (index * 3 + userIndex) % modelReadings.length
-      modelInteractions.push({
-        user_id: trainingUsers[userIndex],
-        reading_id: modelReadings[readingIndex],
-        event_type: 'VIEW',
-        created_at: new Date(now - (targetViews - index) * 60_000).toISOString(),
-      })
-    }
-    for (let index = 0; index < targetBookmarks; index += 1) {
-      const userIndex = (index * 5 + 2) % trainingUsers.length
-      const readingIndex = (index * 7 + 1) % modelReadings.length
-      modelInteractions.push({
-        user_id: trainingUsers[userIndex],
-        reading_id: modelReadings[readingIndex],
-        event_type: 'BOOKMARK',
-        created_at: new Date(now - (targetBookmarks - index) * 90_000).toISOString(),
-      })
-    }
-  }
 
   try {
     const training = await callLightfm<{
