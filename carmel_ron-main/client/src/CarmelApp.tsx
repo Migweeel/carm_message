@@ -399,13 +399,14 @@ const monasteryAssetByCity: Record<string, string> = {
   Mati: '/assets/image_monasteries/MATI_CARMEL.webp',
   Naga: '/assets/image_monasteries/NAGA_ARMEL.webp',
   Ozamis: '/assets/image_monasteries/OZAMIZ_CARMEL.webp',
+  Ozamiz: '/assets/image_monasteries/OZAMIZ_CARMEL.webp',
   'Quezon City': '/assets/image_monasteries/QUEZON_CITY_CARMEL.webp',
   'San Fernando': '/assets/image_monasteries/SAN_FERNANDO_LA_UNION_CARMEL.webp',
   'San Pablo': '/assets/image_monasteries/SAN_PABLO_CARMEL.webp',
   Zamboanga: '/assets/image_monasteries/ZAMBOANGA_CARMEL.webp',
 }
 function monasteryImageFor(monastery: Pick<ManagedMonastery, 'city' | 'image'>) {
-  const optimizedImage = monasteryAssetByCity[monastery.city]
+  const optimizedImage = monasteryAssetByCity[monastery.city] || monasteryAssetByCity[monastery.city === 'Ozamis' ? 'Ozamiz' : ''] || monasteryAssetByCity[monastery.city === 'Ozamiz' ? 'Ozamis' : '']
   if (!optimizedImage) return monastery.image || photo.chapel
   const legacyPng = optimizedImage.replace(/\.webp$/i, '.png')
   const legacyJpeg = optimizedImage.replace(/\.webp$/i, '.jpg')
@@ -736,15 +737,7 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
   useEffect(() => {
     let active = true
     let requestGeneration = 0
-    const refresh = (event?: Event) => {
-      if (event?.type === 'storage' && event instanceof StorageEvent && event.key !== managedContentKey && event.key !== null) return
-      managedContentResponseCache.delete(subset || 'all')
-      const eventContent = event instanceof CustomEvent ? event.detail as ManagedSiteContent | undefined : undefined
-      requestGeneration += 1
-      setContent(eventContent || readManagedContent())
-      setLoadState({ subset, isLoading: false, isReady: true })
-    }
-    async function load() {
+    async function load(force = false) {
       if (isLocalDemoSession()) {
         return
       }
@@ -753,6 +746,7 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
       try {
         const query = subset ? `?collection=${encodeURIComponent(subset)}` : ''
         const cacheKey = subset || 'all'
+        if (force) managedContentResponseCache.delete(cacheKey)
         const cached = managedContentResponseCache.get(cacheKey)
         let blocks = cached && cached.expiresAt > Date.now() ? cached.blocks : undefined
         if (!blocks) {
@@ -777,15 +771,44 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
           ready = true
         }
       } catch (error) {
-        if (active && currentRequest === requestGeneration) console.error('Unable to load saved website content.', error)
+        if (active && currentRequest === requestGeneration) {
+          console.error('Unable to load saved website content.', error)
+          setContent((current) => current || defaultManagedContent)
+          ready = true
+        }
       } finally {
         if (active && currentRequest === requestGeneration) setLoadState({ subset, isLoading: false, isReady: ready })
       }
     }
+    const refresh = (event?: Event) => {
+      if (event?.type === 'storage' && event instanceof StorageEvent && event.key !== managedContentKey && event.key !== null) return
+      managedContentResponseCache.delete(subset || 'all')
+      if (isLocalDemoSession()) {
+        requestGeneration += 1
+        setContent(readManagedContent())
+        setLoadState({ subset, isLoading: false, isReady: true })
+        return
+      }
+      const eventContent = event instanceof CustomEvent ? event.detail as ManagedSiteContent | undefined : undefined
+      if (eventContent) {
+        requestGeneration += 1
+        setContent({
+          ...defaultManagedContent,
+          ...eventContent,
+          aboutImages: { ...defaultManagedContent.aboutImages, ...eventContent.aboutImages },
+          aboutText: { ...defaultManagedContent.aboutText, ...eventContent.aboutText },
+          contactDetails: { ...defaultManagedContent.contactDetails, ...eventContent.contactDetails },
+        })
+        setLoadState({ subset, isLoading: false, isReady: true })
+        return
+      }
+      setLoadState({ subset, isLoading: true, isReady: false })
+      void load(true)
+    }
     const reload = () => {
       if (isLocalDemoSession()) return
       setLoadState({ subset, isLoading: true, isReady: false })
-      void load()
+      void load(true)
     }
     void load()
     window.addEventListener('storage', refresh)
@@ -1505,16 +1528,21 @@ function MonasteriesPage() {
     ['section-mindanao', 'Mindanao Monasteries', ['Cagayan de Oro', 'Davao', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Zamboanga']],
     ['section-east-malaysia', 'East Malaysia Monasteries', ['Kuching']],
   ] as const
-  const visibleRegions = regions.map(([id, title, citiesInRegion]) => ({
+  const knownCityKeys = new Set(regions.flatMap(([, , citiesInRegion]) => citiesInRegion.map((city) => city.toLowerCase())))
+  const visibleRegions: Array<{ id: string; title: string; items: ManagedMonastery[] }> = regions.map(([id, title, citiesInRegion]) => ({
     id,
     title,
     items: citiesInRegion.map((city) => monasteries.find((monastery) => monastery.city.toLowerCase() === city.toLowerCase())).filter((monastery): monastery is ManagedMonastery => Boolean(monastery)),
-  })).filter((region) => region.items.length && (selectedRegion === 'all' || region.id === selectedRegion))
-  const monasteryCount = visibleRegions.reduce((count, region) => count + region.items.length, 0)
-  const facebookFor = (monastery: ManagedMonastery) => monasteryFacebookByCity[monastery.city]
+  }))
+  const otherMonasteries = monasteries.filter((monastery) => !knownCityKeys.has(monastery.city.toLowerCase()))
+  if (otherMonasteries.length) visibleRegions.push({ id: 'section-other', title: 'Other Communities', items: otherMonasteries })
+  const filteredRegions = visibleRegions.filter((region) => region.items.length && (selectedRegion === 'all' || region.id === selectedRegion))
+  const monasteryCount = filteredRegions.reduce((count, region) => count + region.items.length, 0)
+  const facebookFor = (monastery: ManagedMonastery) => monasteryFacebookByCity[monastery.city] ?? monasteryFacebookByCity[monastery.city === 'Ozamiz' ? 'Ozamis' : '']
   return <div className="monasteries-reference">
-    <section className="monasteries-intro"><div className="monasteries-container"><p className="monasteries-kicker">FIND A COMMUNITY</p><h1>Our <em>Monasteries</em></h1><p className="monasteries-lead">{monasteryCount === 23 ? 'Twenty-three' : monasteryCount} communities, one contemplative family across Luzon, Visayas, and Mindanao. Find a Carmel near you.</p><blockquote className="monasteries-quote"><p>“How much has the apostolate been enriched by the prayers and sacrifices radiating from monasteries! And how great is the joy and prophecy proclaimed to the world by the silence of the cloister.”</p><cite>— Pope Francis, Vultum Dei Quaerere</cite></blockquote><div className="monasteries-filters"><label className="monasteries-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by city" aria-label="Search by city" /></label><label className="monasteries-region-filter"><span className="sr-only">Filter by region</span><select value={selectedRegion} onChange={(event) => setSelectedRegion(event.target.value)}><option value="all">All regions</option>{regions.map(([id, title]) => <option value={id} key={id}>{title.replace(' Monasteries', '')}</option>)}</select><ChevronDown size={14} aria-hidden="true" /></label></div></div></section>
-    {visibleRegions.map((region, regionIndex) => <section className="region-section" id={region.id} key={region.id}>
+    <section className="monasteries-intro"><div className="monasteries-container"><p className="monasteries-kicker">FIND A COMMUNITY</p><h1>Our <em>Monasteries</em></h1><p className="monasteries-lead">{monasteryCount === 23 ? 'Twenty-three' : monasteryCount} communities, one contemplative family across Luzon, Visayas, and Mindanao. Find a Carmel near you.</p><blockquote className="monasteries-quote"><p>“How much has the apostolate been enriched by the prayers and sacrifices radiating from monasteries! And how great is the joy and prophecy proclaimed to the world by the silence of the cloister.”</p><cite>— Pope Francis, Vultum Dei Quaerere</cite></blockquote><div className="monasteries-filters"><label className="monasteries-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by city" aria-label="Search by city" /></label><label className="monasteries-region-filter"><span className="sr-only">Filter by region</span><select value={selectedRegion} onChange={(event) => setSelectedRegion(event.target.value)}>    <option value="all">All regions</option>{visibleRegions.filter((region) => region.items.length > 0).map((region) => <option value={region.id} key={region.id}>{region.title.replace(' Monasteries', '').replace(' Communities', '')}</option>)}</select><ChevronDown size={14} aria-hidden="true" /></label></div></div></section>
+        {filteredRegions.length === 0 && <p className="content-empty monasteries-empty">No communities match your search.</p>}
+        {filteredRegions.map((region, regionIndex) => <section className="region-section" id={region.id} key={region.id}>
       <div className="region-header"><h2>{region.title}</h2><hr /></div>
       <div className="monasteries-reference-grid">{region.items.map((monastery, index) => <article className="monastery-reference-card" id={`monastery-${monastery.city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} key={monastery.city}>
         <ImageWithLoader src={content.isReady ? monasteryImageFor(monastery) : undefined} pending={content.isLoading} alt={`Carmelite community in ${monastery.city}`} loading={regionIndex === 0 && index < 3 ? 'eager' : 'lazy'} fetchPriority={regionIndex === 0 && index === 0 ? 'high' : 'auto'} decoding="async" />
@@ -1525,7 +1553,6 @@ function MonasteriesPage() {
         </div>
       </article>)}</div>
     </section>)}
-    {monasteries.length === 0 && <p className="content-empty monasteries-empty">No communities match your search.</p>}
   </div>
 }
 function updateDateInputValue(value: string) {
