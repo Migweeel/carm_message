@@ -67,6 +67,60 @@ const facebookAppSecret = process.env.FACEBOOK_APP_SECRET?.trim() || ''
 const googleOAuthClient = new OAuth2Client()
 const systemBackupFormat = 'carmels-in-communion-backup'
 const maxBackupPlaintextBytes = 45 * 1024 * 1024
+const carmelightsTrainingUsers = [
+  ['Sr Mary Ann of Jesus,ocd', 'srmaryann.carmel@gmail.com'],
+  ['Sr. Augustine Maebelle Salem, OCD', 'maebellesalem@gmail.com'],
+  ['Leynes,Keith Dave E.', 'kdleynes04@gmail.com'],
+  ['Mylene Villapando', 'mylene.v18@gmail.com'],
+  ['Muñez, Rubelyn T.', 'bingmunez@gmail.com'],
+  ['Cataquis, Jake', 'jakecataquis12@gmail.com'],
+  ['RODRIGUEZ OWEN Y.', 'owen.rod09@gmail.com'],
+  ['N. Naparete Liezl', 'liezlnaparete@gmail.com'],
+  ['Adrigado, mary joy', 'mj.adrigado@gmail.com'],
+  ['MAG-USARA ANTHONY', 'tonymagusara21@gmail.com'],
+  ['John Michael Mogello', 'jmmogello@gmail.com'],
+  ['Richmond Pastrana', 'mondpastrana@gmail.com'],
+  ['Rivera, Miguel', 'migsrivera98@gmail.com'],
+  ['Rambuyon, Josh Andrei M.', 'joshrambuyon@gmail.com'],
+  ['De Villa, Ceressa Marie P.', 'cess.devilla@gmail.com'],
+  ['Carpizo, Kimzyre', 'kimzyre.c@gmail.com'],
+  ['De Chavez, Reizel', 'reizeldc@gmail.com'],
+  ['Gomez, Lianne Ashley', 'liannegomez15@gmail.com'],
+  ['Cichon, Vincent', 'vincent.cichon@gmail.com'],
+  ['MAKILING, JAYMAR T.', 'jaymarmakiling07@gmail.com'],
+  ['Cichon, Van Harvy', 'vanharvy.c@gmail.com'],
+  ['Bernaldez, Jorge', 'jorgebernaldez@gmail.com'],
+  ['Tambis, Jefferson', 'jeff.tambis88@gmail.com'],
+  ['GANACAN, NECHELLE', 'nechelleganacan@gmail.com'],
+  ['James Bond', 'jbond007.ph@gmail.com'],
+  ['Danica ethel jornales', 'danicajornales@gmail.com'],
+  ['Sr Mary Ann of Jesus,OCD', 'maryannjesus.ocd@gmail.com'],
+  ['Sr. Dulce Inlayo, OCD', 'srdulceinlayo@gmail.com'],
+  ['ANDO, EL DEAN DRAVE D.', 'drave.ando@gmail.com'],
+  ['Leynes,Shan David E.', 'shanleynes@gmail.com'],
+  ['Badilla, Jonie', 'jonie.badilla@gmail.com'],
+  ['Fallaria, Chris Lloyd A.', 'chrislloyd.f@gmail.com'],
+  ['Lamboson, Justine', 'tinelamboson22@gmail.com'],
+  ['Cheryl Carpina Saripa', 'cherylsaripa@gmail.com'],
+  ['Neri Naparete Liezl', 'liezlneri@gmail.com'],
+  ['Ruales, Faye Marie', 'fayeruales@gmail.com'],
+  ['Calinisan', 'calinisan.family@gmail.com'],
+  ['Cabangon,John Kenneth', 'jkcabangon@gmail.com'],
+  ['Suplito, Rosemelinda L.', 'rosesuplito@gmail.com'],
+  ['Celine Mae Villanueva', 'celine.v11@gmail.com'],
+  ['Escarpe Janlester', 'lesterescarpe@gmail.com'],
+  ['Calinisan Jhon Mclean', 'mcleancalinisan@gmail.com'],
+  ['Marielle Rivera', 'yellerivera03@gmail.com'],
+  ['Raven Faith Ricardo', 'ravenricardo@gmail.com'],
+  ['Joanna Mae Ramos', 'joannaramos19@gmail.com'],
+  ['Mariela Rivera', 'mariela.rivera@gmail.com'],
+  ['Patricia Quiambao', 'patquiambao@gmail.com'],
+  ['Princess Mickyla Villarin', 'kylavillarin@gmail.com'],
+  ['Bryan Emanuel Carpizo', 'bryancarpizo@gmail.com'],
+  ['Mariane Tolentino', 'yanetolentino@gmail.com'],
+  ['Benjamin, Randel L.', 'randelbenjamin@gmail.com'],
+  ['Mark Vincent Benjamin', 'mvbenjamin@gmail.com'],
+] as const
 async function sendEmail(email: { to: string; subject: string; text: string; html: string }): Promise<void> {
   if (!resendApiKey || !resendFrom) throw new Error('Resend email is not configured. Set RESEND_API_KEY and RESEND_FROM in server/.env.')
   const response = await fetch('https://api.resend.com/emails', {
@@ -3338,6 +3392,35 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error(error)
   res.status(500).json({ error: 'The request could not be completed. Please try again.' })
 })
+async function seedCarmelightsTrainingUsers() {
+  const passwordHash = await bcrypt.hash('12345678', 10)
+  const consentedAt = new Date('2026-11-24T00:00:00.000Z')
+  for (const [name, email] of carmelightsTrainingUsers) {
+    await prisma.user.upsert({
+      where: { email },
+      update: {
+        name,
+        passwordHash,
+        role: 'USER',
+        isActive: true,
+        privacyConsentAt: consentedAt,
+        privacyPolicyVersion: 'training-dataset-v1',
+      },
+      create: {
+        name,
+        email,
+        passwordHash,
+        role: 'USER',
+        isActive: true,
+        privacyConsentAt: consentedAt,
+        privacyPolicyVersion: 'training-dataset-v1',
+      },
+    })
+  }
+  console.log(`Carmelights training users ready: ${carmelightsTrainingUsers.length}`)
+}
+
+await seedCarmelightsTrainingUsers()
 const server = app.listen(port, () => console.log(`Carmel API listening on http://localhost:${port}`))
 async function shutdown() { server.close(); await prisma.$disconnect() }
 process.on('SIGINT', () => void shutdown())
