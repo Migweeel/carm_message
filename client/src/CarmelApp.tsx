@@ -1132,7 +1132,7 @@ function SiteSearchPage() {
           <span className="eyebrow">{item.detail}</span>
           <h2>{item.title}</h2>
           <p>{snippet.length > 220 ? `${snippet.slice(0, 217)}…` : snippet}</p>
-        </button>
+        </Link>
       })}</div> : <p className="site-search-empty">No results found. Try a different search term.</p>}
     </> : <p className="site-search-empty">Enter a search term to find pages and content across the site.</p>}
   </section>
@@ -2451,7 +2451,7 @@ const demoAdminProfileKey = 'carmel-prototype-admin-profile'
 const permissionRequestEvent = 'carmel-permission-requested'
 const staffUpdatedEvent = 'carmel-staff-updated'
 const prototypeStaffKey = 'carmel-prototype-staff'
-type PrototypeUser = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; role: 'USER'; isBlocked: boolean; isActive?: boolean; passwordHash?: string; createdAt?: string; privacyConsentAt?: string; privacyPolicyVersion?: string }
+type PrototypeUser = { id: string; name: string; email: string; gender?: MemberGender; phone?: string; address?: string; avatarImage?: string | null; role: 'USER'; isBlocked: boolean; isActive?: boolean; passwordHash?: string; createdAt?: string; privacyConsentAt?: string; privacyPolicyVersion?: string }
 function readPrototypeUsers(): PrototypeUser[] { localStorage.removeItem(prototypeUsersKey); return [] }
 
 async function hashPrototypePassword(password: string) {
