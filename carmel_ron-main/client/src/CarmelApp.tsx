@@ -359,8 +359,41 @@ function clearGoogleAutoSelection() {
 }
 const carmelightsCategories = ['Prayer', 'Trust', 'Love', 'Simplicity', 'The Cross', 'Saints']
 const carmeliteSaints = ['St. Teresa of Avila', 'St. John of the Cross', 'St. Thérèse of Lisieux', 'St. Teresa Benedicta of the Cross']
-type ManagedMonastery = { id: string; name: string; city: string; description: string; image: string }
+type MonasteryRegion = 'luzon' | 'visayas' | 'mindanao' | 'east-malaysia'
+type ManagedMonastery = { id: string; name: string; city: string; region?: MonasteryRegion; description: string; image: string }
 type ManagedArticle = { id: string; title: string; author: string; body: string; image: string; category?: string }
+const monasteryRegionDefinitions: Array<{ id: MonasteryRegion; sectionId: string; title: string; label: string }> = [
+  { id: 'luzon', sectionId: 'section-luzon', title: 'Luzon Monasteries', label: 'Luzon' },
+  { id: 'visayas', sectionId: 'section-visayas', title: 'Visayas Monasteries', label: 'Visayas' },
+  { id: 'mindanao', sectionId: 'section-mindanao', title: 'Mindanao Monasteries', label: 'Mindanao' },
+  { id: 'east-malaysia', sectionId: 'section-east-malaysia', title: 'East Malaysia Monasteries', label: 'East Malaysia' },
+]
+const monasteryRegionIds = new Set(monasteryRegionDefinitions.map((region) => region.id))
+const monasteryRegionByCity: Record<string, MonasteryRegion> = Object.entries({
+  luzon: [
+    'Angeles', 'Antipolo', 'Baguio', 'Batangas', 'Caloocan', 'Castillejos', 'Cavite', 'Gumaca', 'Infanta', 'Laoag', 'Las Piñas', 'Las Pinas', 'Legazpi', 'Lipa', 'Lucena', 'Makati', 'Malabon', 'Mandaluyong', 'Manila', 'Marikina', 'Muntinlupa', 'Naga', 'Navotas', 'Olongapo', 'Parañaque', 'Paranaque', 'Pasay', 'Pasig', 'Quezon City', 'San Fernando', 'San Jose', 'San Juan', 'San Pablo', 'Tagaytay', 'Taguig', 'Tuguegarao', 'Valenzuela',
+  ],
+  visayas: ['Bacolod', 'Cebu', 'Cebu City', 'Dumaguete', 'Iloilo', 'Tacloban', 'Tagbilaran'],
+  mindanao: ['Butuan', 'Cagayan de Oro', 'Cotabato', 'Davao', 'Davao City', 'General Santos', 'Iligan', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Ozamis', 'Zamboanga'],
+  'east-malaysia': ['Kuching', 'Kota Kinabalu', 'Sandakan'],
+} satisfies Record<MonasteryRegion, string[]>).reduce<Record<string, MonasteryRegion>>((map, [region, cities]) => {
+  cities.forEach((city) => { map[city.trim().toLowerCase()] = region as MonasteryRegion })
+  return map
+}, {})
+function normalizeMonasteryRegion(value: unknown): MonasteryRegion | undefined {
+  return typeof value === 'string' && monasteryRegionIds.has(value as MonasteryRegion) ? value as MonasteryRegion : undefined
+}
+function inferMonasteryRegion(city: string): MonasteryRegion | undefined {
+  const normalizedCity = city.trim().toLowerCase()
+  if (!normalizedCity) return undefined
+  return monasteryRegionByCity[normalizedCity] ?? monasteryRegionByCity[normalizedCity.replace(/\s+/g, ' ')]
+}
+function resolveMonasteryRegion(monastery: Pick<ManagedMonastery, 'city' | 'region'>): MonasteryRegion | undefined {
+  return normalizeMonasteryRegion(monastery.region) ?? inferMonasteryRegion(monastery.city)
+}
+function normalizeManagedMonastery(monastery: ManagedMonastery): ManagedMonastery {
+  return { ...monastery, region: resolveMonasteryRegion(monastery) }
+}
 type PopularTeaching = ManagedArticle & { views: number }
 type ManagedContactDetails = { phone: string; email: string; facebookLabel: string; facebookUrl: string; location: string; heroImage: string }
 type ManagedAboutImages = { spirituality: string; assembly: string; assemblyCaption: string; officers: string; purposeOne: string; purposeTwo: string; purposeThree: string; purposeFour: string; quote: string }
@@ -627,8 +660,8 @@ const defaultManagedContent: ManagedSiteContent = {
     location: 'Brgy. Tongohin, Purok Nagsusumikap\nKarmelo, Infanta, Quezon',
     heroImage: '/assets/images/contact-hero.webp',
   },
-  monasteries: monasteryCities.map((city, index) => ({ id: `monastery-${index}`, name: city === 'Iloilo' ? 'Jaro Carmel' : `${city} Carmel`, city, description: `A Carmelite community in ${city}${city === 'Kuching' ? ', Malaysia' : ', Philippines'}.`, image: monasteryAssetByCity[city] || [photo.chapel, photo.garden, photo.flower][index % 3] })),
-  monasteriesVersion: 2,
+  monasteries: monasteryCities.map((city, index) => ({ id: `monastery-${index}`, name: city === 'Iloilo' ? 'Jaro Carmel' : `${city} Carmel`, city, region: inferMonasteryRegion(city), description: `A Carmelite community in ${city}${city === 'Kuching' ? ', Malaysia' : ', Philippines'}.`, image: monasteryAssetByCity[city] || [photo.chapel, photo.garden, photo.flower][index % 3] })),
+  monasteriesVersion: 3,
   carmelife: [],
   carmelights: [
     { id: 'saint-john', title: 'Seeking God in stillness', author: 'St. John of the Cross', body: 'John points toward an attentive, inward prayer that makes space for God beyond noise and distraction.', image: photo.chapel, category: 'Prayer' },
@@ -655,13 +688,13 @@ function readManagedContent(): ManagedSiteContent {
     const stored = isLocalDemoSession()
       ? JSON.parse(localStorage.getItem(managedContentKey) || 'null') as Partial<ManagedSiteContent> | null
       : null
-    const savedMonasteries = stored?.monasteries || defaultManagedContent.monasteries
-    const monasteries = stored?.monasteriesVersion === 2 ? savedMonasteries : defaultManagedContent.monasteries.map((defaultMonastery) => {
+    const savedMonasteries = Array.isArray(stored?.monasteries) ? stored.monasteries : defaultManagedContent.monasteries
+    const mergedKnownMonasteries = defaultManagedContent.monasteries.map((defaultMonastery) => {
       const savedMonastery = savedMonasteries.find((monastery) => monastery.city.toLowerCase() === defaultMonastery.city.toLowerCase() || (defaultMonastery.city === 'Ozamiz' && monastery.city.toLowerCase() === 'ozamis'))
       if (!savedMonastery) return { ...defaultMonastery, id: `monastery-${defaultMonastery.city.toLowerCase().replace(/\s+/g, '-')}` }
       const legacyName = `Carmel of ${savedMonastery.city}`
       const legacyDescription = `A Carmelite community in ${savedMonastery.city}, Philippines.`
-      return {
+      return normalizeManagedMonastery({
         ...defaultMonastery,
         ...savedMonastery,
         id: /^monastery-\d+$/.test(savedMonastery.id) ? `monastery-${defaultMonastery.city.toLowerCase().replace(/\s+/g, '-')}` : savedMonastery.id,
@@ -669,15 +702,41 @@ function readManagedContent(): ManagedSiteContent {
         name: savedMonastery.name === legacyName ? defaultMonastery.name : savedMonastery.name,
         description: savedMonastery.description === legacyDescription ? defaultMonastery.description : savedMonastery.description,
         image: savedMonastery.image && !savedMonastery.image.includes('unsplash.com') ? savedMonastery.image : defaultMonastery.image,
-      }
-    }).concat(savedMonasteries.filter((monastery) => !monasteryCities.some((city) => city.toLowerCase() === monastery.city.toLowerCase()) && monastery.city.toLowerCase() !== 'ozamis'))
-    const content = { ...defaultManagedContent, ...stored, aboutImages: { ...defaultManagedContent.aboutImages, ...stored?.aboutImages }, aboutText: { ...defaultManagedContent.aboutText, ...stored?.aboutText }, contactDetails: { ...defaultManagedContent.contactDetails, ...stored?.contactDetails }, monasteries, monasteriesVersion: 2, carmelife: (stored?.carmelife || defaultManagedContent.carmelife).filter((article) => !legacyCarmelifeDemoIds.has(article.id)), carmelights: stored?.carmelights || defaultManagedContent.carmelights }
-    if (isLocalDemoSession() && stored && stored.monasteriesVersion !== 2) localStorage.setItem(managedContentKey, JSON.stringify(content))
+      })
+    })
+    const extraMonasteries = savedMonasteries
+      .filter((monastery) => !monasteryCities.some((city) => city.toLowerCase() === monastery.city.toLowerCase()) && monastery.city.toLowerCase() !== 'ozamis')
+      .map((monastery) => normalizeManagedMonastery(monastery as ManagedMonastery))
+    const content = {
+      ...defaultManagedContent,
+      ...stored,
+      aboutImages: { ...defaultManagedContent.aboutImages, ...stored?.aboutImages },
+      aboutText: { ...defaultManagedContent.aboutText, ...stored?.aboutText },
+      contactDetails: { ...defaultManagedContent.contactDetails, ...stored?.contactDetails },
+      monasteries: [...mergedKnownMonasteries, ...extraMonasteries],
+      monasteriesVersion: 3,
+      carmelife: (stored?.carmelife || defaultManagedContent.carmelife).filter((article) => !legacyCarmelifeDemoIds.has(article.id)),
+      carmelights: stored?.carmelights || defaultManagedContent.carmelights,
+    }
+    if (isLocalDemoSession() && stored && stored.monasteriesVersion !== 3) localStorage.setItem(managedContentKey, JSON.stringify(content))
     return content
   } catch { return defaultManagedContent }
 }
+function normalizeManagedContent(content: Partial<ManagedSiteContent>): ManagedSiteContent {
+  return {
+    ...defaultManagedContent,
+    ...content,
+    aboutImages: { ...defaultManagedContent.aboutImages, ...content.aboutImages },
+    aboutText: { ...defaultManagedContent.aboutText, ...content.aboutText },
+    contactDetails: { ...defaultManagedContent.contactDetails, ...content.contactDetails },
+    monasteries: (content.monasteries || defaultManagedContent.monasteries).map((monastery) => normalizeManagedMonastery(monastery as ManagedMonastery)),
+    monasteriesVersion: 3,
+    carmelife: (content.carmelife || defaultManagedContent.carmelife).filter((article) => !legacyCarmelifeDemoIds.has(article.id)),
+    carmelights: content.carmelights || defaultManagedContent.carmelights,
+  }
+}
 async function saveManagedContent(content: ManagedSiteContent) {
-  const versionedContent = { ...content, monasteriesVersion: 2 }
+  const versionedContent = normalizeManagedContent({ ...content, monasteriesVersion: 3 })
   if (isLocalDemoSession()) {
     cacheManagedContent(versionedContent)
     return
@@ -690,13 +749,14 @@ async function saveManagedContent(content: ManagedSiteContent) {
   })
   const result = await response.json()
   if (!response.ok) throw new Error(result.error || 'Website content could not be saved.')
-  cacheManagedContent(result.content.blocks)
+  cacheManagedContent(normalizeManagedContent(result.content.blocks || versionedContent))
 }
 function cacheManagedContent(content: ManagedSiteContent) {
+  const normalizedContent = normalizeManagedContent(content)
   managedContentResponseCache.clear()
   if (isLocalDemoSession()) {
     try {
-      localStorage.setItem(managedContentKey, JSON.stringify(content))
+      localStorage.setItem(managedContentKey, JSON.stringify(normalizedContent))
     } catch (error) {
       if (error instanceof DOMException && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
         throw new Error('This browser is out of local storage. Use a smaller image or sign in with a staff account to publish changes.')
@@ -704,7 +764,7 @@ function cacheManagedContent(content: ManagedSiteContent) {
       throw error
     }
   }
-  window.dispatchEvent(new CustomEvent<ManagedSiteContent>(managedContentEvent, { detail: content }))
+  window.dispatchEvent(new CustomEvent<ManagedSiteContent>(managedContentEvent, { detail: normalizedContent }))
 }
 async function saveManagedContentRecord(
   collection: 'monasteries' | 'carmelife' | 'carmelights',
@@ -761,13 +821,7 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
           managedContentResponseCache.set(cacheKey, { expiresAt: Date.now() + 60_000, blocks })
         }
         if (active && currentRequest === requestGeneration) {
-          setContent({
-            ...defaultManagedContent,
-            ...blocks,
-            aboutImages: { ...defaultManagedContent.aboutImages, ...blocks.aboutImages },
-            aboutText: { ...defaultManagedContent.aboutText, ...blocks.aboutText },
-            contactDetails: { ...defaultManagedContent.contactDetails, ...blocks.contactDetails },
-          })
+          setContent(normalizeManagedContent(blocks))
           ready = true
         }
       } catch (error) {
@@ -792,13 +846,7 @@ function useManagedContent(subset?: ManagedContentSubset): ManagedSiteContentSta
       const eventContent = event instanceof CustomEvent ? event.detail as ManagedSiteContent | undefined : undefined
       if (eventContent) {
         requestGeneration += 1
-        setContent({
-          ...defaultManagedContent,
-          ...eventContent,
-          aboutImages: { ...defaultManagedContent.aboutImages, ...eventContent.aboutImages },
-          aboutText: { ...defaultManagedContent.aboutText, ...eventContent.aboutText },
-          contactDetails: { ...defaultManagedContent.contactDetails, ...eventContent.contactDetails },
-        })
+        setContent(normalizeManagedContent(eventContent))
         setLoadState({ subset, isLoading: false, isReady: true })
         return
       }
@@ -1521,34 +1569,30 @@ function MonasteriesPage() {
       target.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
   }, [location.hash, content.isReady])
-  const monasteries = content.monasteries.filter((monastery) => `${monastery.name} ${monastery.city} ${monastery.description}`.toLowerCase().includes(query.toLowerCase()))
-  const regions = [
-    ['section-luzon', 'Luzon Monasteries', ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo']],
-    ['section-visayas', 'Visayas Monasteries', ['Bacolod', 'Cebu', 'Iloilo']],
-    ['section-mindanao', 'Mindanao Monasteries', ['Cagayan de Oro', 'Davao', 'Jolo', 'Malaybalay', 'Mati', 'Ozamiz', 'Zamboanga']],
-    ['section-east-malaysia', 'East Malaysia Monasteries', ['Kuching']],
-  ] as const
-  const knownCityKeys = new Set(regions.flatMap(([, , citiesInRegion]) => citiesInRegion.map((city) => city.toLowerCase())))
-  const visibleRegions: Array<{ id: string; title: string; items: ManagedMonastery[] }> = regions.map(([id, title, citiesInRegion]) => ({
-    id,
-    title,
-    items: citiesInRegion.map((city) => monasteries.find((monastery) => monastery.city.toLowerCase() === city.toLowerCase())).filter((monastery): monastery is ManagedMonastery => Boolean(monastery)),
+  const monasteries = content.monasteries
+    .map((monastery) => normalizeManagedMonastery(monastery))
+    .filter((monastery) => `${monastery.name} ${monastery.city} ${monastery.description}`.toLowerCase().includes(query.toLowerCase()))
+  const visibleRegions: Array<{ id: string; title: string; items: ManagedMonastery[] }> = monasteryRegionDefinitions.map((region) => ({
+    id: region.sectionId,
+    title: region.title,
+    items: monasteries.filter((monastery) => resolveMonasteryRegion(monastery) === region.id),
   }))
-  const otherMonasteries = monasteries.filter((monastery) => !knownCityKeys.has(monastery.city.toLowerCase()))
+  const otherMonasteries = monasteries.filter((monastery) => !resolveMonasteryRegion(monastery))
   if (otherMonasteries.length) visibleRegions.push({ id: 'section-other', title: 'Other Communities', items: otherMonasteries })
   const filteredRegions = visibleRegions.filter((region) => region.items.length && (selectedRegion === 'all' || region.id === selectedRegion))
   const monasteryCount = filteredRegions.reduce((count, region) => count + region.items.length, 0)
   const facebookFor = (monastery: ManagedMonastery) => monasteryFacebookByCity[monastery.city] ?? monasteryFacebookByCity[monastery.city === 'Ozamiz' ? 'Ozamis' : '']
+  const countryFor = (monastery: ManagedMonastery) => resolveMonasteryRegion(monastery) === 'east-malaysia' || monastery.city.trim().toLowerCase() === 'kuching' ? 'Malaysia' : 'Philippines'
   return <div className="monasteries-reference">
     <section className="monasteries-intro"><div className="monasteries-container"><p className="monasteries-kicker">FIND A COMMUNITY</p><h1>Our <em>Monasteries</em></h1><p className="monasteries-lead">{monasteryCount === 23 ? 'Twenty-three' : monasteryCount} communities, one contemplative family across Luzon, Visayas, and Mindanao. Find a Carmel near you.</p><blockquote className="monasteries-quote"><p>“How much has the apostolate been enriched by the prayers and sacrifices radiating from monasteries! And how great is the joy and prophecy proclaimed to the world by the silence of the cloister.”</p><cite>— Pope Francis, Vultum Dei Quaerere</cite></blockquote><div className="monasteries-filters"><label className="monasteries-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by city" aria-label="Search by city" /></label><label className="monasteries-region-filter"><span className="sr-only">Filter by region</span><select value={selectedRegion} onChange={(event) => setSelectedRegion(event.target.value)}>    <option value="all">All regions</option>{visibleRegions.filter((region) => region.items.length > 0).map((region) => <option value={region.id} key={region.id}>{region.title.replace(' Monasteries', '').replace(' Communities', '')}</option>)}</select><ChevronDown size={14} aria-hidden="true" /></label></div></div></section>
         {filteredRegions.length === 0 && <p className="content-empty monasteries-empty">No communities match your search.</p>}
         {filteredRegions.map((region, regionIndex) => <section className="region-section" id={region.id} key={region.id}>
       <div className="region-header"><h2>{region.title}</h2><hr /></div>
-      <div className="monasteries-reference-grid">{region.items.map((monastery, index) => <article className="monastery-reference-card" id={`monastery-${monastery.city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} key={monastery.city}>
+      <div className="monasteries-reference-grid">{region.items.map((monastery, index) => <article className="monastery-reference-card" id={`monastery-${monastery.city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} key={monastery.id || monastery.city}>
         <ImageWithLoader src={content.isReady ? monasteryImageFor(monastery) : undefined} pending={content.isLoading} alt={`Carmelite community in ${monastery.city}`} loading={regionIndex === 0 && index < 3 ? 'eager' : 'lazy'} fetchPriority={regionIndex === 0 && index === 0 ? 'high' : 'auto'} decoding="async" />
         <div className="monastery-card-content">
           <div className="card-title-block"><h3>{monastery.name}</h3><p>{monastery.description}</p></div>
-          <dl><div><dt><MapPin size={13} /></dt><dd>{monastery.city}, {monastery.city === 'Kuching' ? 'Malaysia' : 'Philippines'}</dd></div><div><dt><Mail size={13} /></dt><dd><a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a></dd></div></dl>
+          <dl><div><dt><MapPin size={13} /></dt><dd>{monastery.city}, {countryFor(monastery)}</dd></div><div><dt><Mail size={13} /></dt><dd><a href="mailto:ocdnuns.vocpromph@gmail.com">ocdnuns.vocpromph@gmail.com</a></dd></div></dl>
           <div className="card-actions">{facebookFor(monastery) && <a className="btn-facebook" href={facebookFor(monastery)} target="_blank" rel="noopener noreferrer"><span className="facebook-mark" aria-hidden="true">f</span>Facebook</a>}<a className="link-directions" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${monastery.name} ${monastery.city}`)}`} target="_blank" rel="noopener noreferrer">Directions <ArrowRight size={13} /></a></div>
         </div>
       </article>)}</div>
@@ -4410,7 +4454,7 @@ function ContentAdminPage() {
   const [aboutImages, setAboutImages] = useState<ManagedAboutImages>(content.aboutImages)
   const [aboutText, setAboutText] = useState<ManagedAboutText>(content.aboutText)
   const [homeSectionImages, setHomeSectionImages] = useState<Partial<Record<HomeSectionKey, string>>>({})
-  const [monastery, setMonastery] = useState<ManagedMonastery>({ id: '', name: '', city: '', description: '', image: '' })
+  const [monastery, setMonastery] = useState<ManagedMonastery>({ id: '', name: '', city: '', region: 'luzon', description: '', image: '' })
   const [article, setArticle] = useState<ManagedArticle>({ id: '', title: '', author: '', body: '', image: '' })
   const [editingMonastery, setEditingMonastery] = useState(false)
   const [editingArticle, setEditingArticle] = useState(false)
@@ -4474,7 +4518,7 @@ function ContentAdminPage() {
   }
   function cancelMonasteryEdit() {
     setEditingMonastery(false)
-    setMonastery({ id: '', name: '', city: '', description: '', image: '' })
+    setMonastery({ id: '', name: '', city: '', region: 'luzon', description: '', image: '' })
     setError('')
     setSuccess('')
   }
@@ -4487,7 +4531,8 @@ function ContentAdminPage() {
     setSuccess('')
   }
   function editMonastery(item: ManagedMonastery) {
-    setMonastery({ ...item })
+    const normalized = normalizeManagedMonastery(item)
+    setMonastery({ ...normalized, region: normalized.region || 'luzon' })
     setArticle({ id: '', title: '', author: '', body: '', image: '' })
     setEditingMonastery(true)
     setEditingArticle(false)
@@ -4864,7 +4909,7 @@ function ContentAdminPage() {
     if (savingManagedContent) return
     if (!contentReady) { setError('Saved website content is still loading. Please try again.'); return }
     setSuccess('')
-    const record = { ...monastery, id: monastery.id || crypto.randomUUID(), image: monastery.image || photo.chapel }
+    const record = normalizeManagedMonastery({ ...monastery, id: monastery.id || crypto.randomUUID(), image: monastery.image || photo.chapel, region: monastery.region || inferMonasteryRegion(monastery.city) || 'luzon' })
     const monasteries = editingMonastery ? content.monasteries.map((item) => item.id === record.id ? record : item) : [record, ...content.monasteries]
     const nextContent = { ...content, monasteries }
     setSavingManagedContent(true)
@@ -4873,7 +4918,7 @@ function ContentAdminPage() {
     try {
       cacheManagedContent(nextContent)
       await saveManagedContentRecord('monasteries', record.id, record)
-      setMonastery({ id: '', name: '', city: '', description: '', image: '' })
+      setMonastery({ id: '', name: '', city: '', region: 'luzon', description: '', image: '' })
       setEditingMonastery(false)
       setError('')
       setSuccess(isLocalDemoSession()
@@ -4962,7 +5007,19 @@ function ContentAdminPage() {
       setSavingManagedContent(false)
     }
   }
-  const updateMonastery = (key: keyof ManagedMonastery, value: string) => { setSuccess(''); setMonastery((current) => ({ ...current, [key]: value })) }
+  const updateMonastery = (key: keyof ManagedMonastery, value: string) => {
+    setSuccess('')
+    setMonastery((current) => {
+      const next = { ...current, [key]: value }
+      if (key === 'city') {
+        const inferredRegion = inferMonasteryRegion(value)
+        if (inferredRegion) next.region = inferredRegion
+        else if (!current.region) next.region = 'luzon'
+      }
+      if (key === 'region' && monasteryRegionIds.has(value as MonasteryRegion)) next.region = value as MonasteryRegion
+      return next
+    })
+  }
   const updateArticle = (key: keyof ManagedArticle, value: string) => { setSuccess(''); setArticle((current) => ({ ...current, [key]: value })) }
 
   if (section === 'discernment') return <Navigate to="/discernment" replace />
@@ -5016,6 +5073,7 @@ function ContentAdminPage() {
         <div className="panel-heading"><div><h2 id={editingMonastery ? 'content-editor-title' : undefined}>{editingMonastery ? 'Edit community details' : 'Add a monastery'}</h2><p>{editingMonastery ? `Update the details for ${monastery.name}.` : 'Include community information for visitors.'}</p></div>{editingMonastery && <button type="button" className="content-editor-close" aria-label="Close editor" onClick={cancelMonasteryEdit}><X size={17} /></button>}</div>
         <label>Community name<input required value={monastery.name} onChange={(event) => updateMonastery('name', event.target.value)} placeholder="Carmel of ..." /></label>
         <label>City<input required value={monastery.city} onChange={(event) => updateMonastery('city', event.target.value)} placeholder="City or province" /></label>
+        <label>Region<select required value={monastery.region || inferMonasteryRegion(monastery.city) || 'luzon'} onChange={(event) => updateMonastery('region', event.target.value)}>{monasteryRegionDefinitions.map((region) => <option key={region.id} value={region.id}>{region.label}</option>)}</select></label>
         <label>Community details<textarea rows={3} value={monastery.description} onChange={(event) => updateMonastery('description', event.target.value)} placeholder="A short introduction to this community" /></label>
         <label>Image URL<input value={monastery.image.startsWith('data:') ? '' : monastery.image} onChange={(event) => updateMonastery('image', event.target.value)} placeholder="https://..." /></label>
         <label className="content-image-picker">Upload image<ImageCropInput onImage={(file) => chooseImage(file, 'monastery')} currentImage={monastery.image} ariaLabel="Choose monastery image" />{monastery.image && <ImageWithLoader src={monasteryImageFor(monastery)} alt="Monastery preview" />}<small>Choose an image up to 20 MB to crop and optimize it for the 2 MB upload limit.</small></label>
@@ -5030,7 +5088,7 @@ function ContentAdminPage() {
         <div className="panel-heading"><div><h2>Communities</h2><p>{content.monasteries.length} public records</p></div></div>
         {content.isReady ? content.monasteries.map((item) => <article className="content-record" key={item.id}>
           <ImageWithLoader src={monasteryImageFor(item)} pending={!contentReady} alt="" />
-          <div><b>{item.name}</b><small>{item.city}</small></div>
+          <div><b>{item.name}</b><small>{item.city}{resolveMonasteryRegion(item) ? ` • ${monasteryRegionDefinitions.find((region) => region.id === resolveMonasteryRegion(item))?.label || 'Region'}` : ''}</small></div>
           <button type="button" aria-label={`Edit ${item.name}`} onClick={() => editMonastery(item)}><Pencil size={15} /></button>
           <button type="button" aria-label={`Delete ${item.name}`} onClick={() => setPendingRemoval({ kind: 'monastery', id: item.id, label: item.name })}><X size={16} /></button>
         </article>) : <p role={content.isLoading ? 'status' : 'alert'}>{content.isLoading ? 'Loading communities…' : 'Communities could not be loaded. Please refresh.'}</p>}

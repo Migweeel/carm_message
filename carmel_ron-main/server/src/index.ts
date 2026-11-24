@@ -2144,6 +2144,7 @@ const managedMonasterySchema = z.object({
   id: z.string().min(1).max(100),
   name: z.string().trim().min(1).max(200),
   city: z.string().trim().min(1).max(100),
+  region: z.enum(['luzon', 'visayas', 'mindanao', 'east-malaysia']).optional(),
   description: z.string().max(5000),
   image: z.string().max(3_000_000),
 })
