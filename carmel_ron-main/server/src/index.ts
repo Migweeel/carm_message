@@ -1674,7 +1674,7 @@ app.get('/api/account/staff', authenticate, allowRoles('USER'), asyncRoute(async
   const staff = await prisma.user.findMany({
     where: { role: { in: ['ADMIN', 'FORMATOR'] }, isActive: true },
     orderBy: [{ role: 'asc' }, { name: 'asc' }],
-    select: { id: true, name: true, role: true },
+    select: { id: true, name: true, role: true, avatarImage: true },
   })
   res.json({ staff })
 }))
@@ -1683,8 +1683,9 @@ app.get('/api/account/conversations', authenticate, allowRoles('USER'), asyncRou
     where: { userId: req.auth!.id },
     orderBy: { lastMessageAt: 'desc' },
     include: {
-      staffRecipient: { select: { id: true, name: true, role: true } },
-      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } },
+      user: { select: { id: true, name: true, email: true, avatarImage: true, role: true, isActive: true } },
+      staffRecipient: { select: { id: true, name: true, role: true, avatarImage: true } },
+      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } },
     },
   })
   const ids = conversations.map(({ id }) => id)
@@ -1720,8 +1721,9 @@ app.post('/api/account/conversations', authenticate, allowRoles('USER'), asyncRo
       messages: { create: { senderId: user.id, senderType: 'VISITOR', body: parsed.data!.body } },
     },
     include: {
-      staffRecipient: { select: { id: true, name: true, role: true } },
-      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } },
+      user: { select: { id: true, name: true, email: true, avatarImage: true, role: true, isActive: true } },
+      staffRecipient: { select: { id: true, name: true, role: true, avatarImage: true } },
+      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } },
     },
   })
   res.status(201).json({ conversation })
@@ -1740,8 +1742,9 @@ app.post('/api/account/conversations/:id/messages', authenticate, allowRoles('US
     return tx.conversation.findUniqueOrThrow({
       where: { id: conversation.id },
       include: {
-        staffRecipient: { select: { id: true, name: true, role: true } },
-        messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } },
+        user: { select: { id: true, name: true, email: true, avatarImage: true, role: true, isActive: true } },
+        staffRecipient: { select: { id: true, name: true, role: true, avatarImage: true } },
+        messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } },
       },
     })
   })
@@ -1753,7 +1756,11 @@ app.get('/api/account/conversation', authenticate, allowRoles('USER'), asyncRout
   const conversation = await prisma.conversation.findFirst({
     where: { userId: user.id },
     orderBy: { lastMessageAt: 'desc' },
-    include: { messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } } },
+    include: {
+      user: { select: { id: true, name: true, email: true, avatarImage: true, role: true, isActive: true } },
+      staffRecipient: { select: { id: true, name: true, role: true, avatarImage: true } },
+      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } },
+    },
   })
   if (conversation) {
     await prisma.message.updateMany({ where: { conversationId: conversation.id, senderType: { in: ['ADMIN', 'FORMATOR'] }, readAt: null }, data: { readAt: new Date() } })
@@ -1773,7 +1780,11 @@ app.post('/api/account/conversation/messages', authenticate, allowRoles('USER'),
     await tx.message.create({ data: { conversationId: thread.id, senderId: user.id, senderType: 'VISITOR', body: parsed.data!.body } })
     return tx.conversation.findUniqueOrThrow({
       where: { id: thread.id },
-      include: { messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } } },
+      include: {
+        user: { select: { id: true, name: true, email: true, avatarImage: true, role: true, isActive: true } },
+        staffRecipient: { select: { id: true, name: true, role: true, avatarImage: true } },
+        messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } },
+      },
     })
   })
   res.status(201).json({ conversation })
@@ -1879,7 +1890,7 @@ app.post('/api/chat/conversations', rateLimit({ windowMs: 15 * 60 * 1000, limit:
       category: 'GENERAL',
       messages: { create: { senderType: 'VISITOR', body: parsed.data!.body } },
     },
-    include: { messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } } },
+    include: { messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } } },
   })
   const token = jwt.sign({ purpose: 'visitor-chat', conversationId: conversation.id }, jwtSecret, { expiresIn: '30d' })
   res.cookie('carmel_chat_session', token, { ...visitorChatCookieOptions, maxAge: 30 * 24 * 60 * 60 * 1000 })
@@ -1893,7 +1904,7 @@ app.get('/api/chat/conversation', asyncRoute(async (req, res) => {
   }
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    include: { messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } } },
+    include: { messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } } },
   })
   if (!conversation) {
     res.clearCookie('carmel_chat_session', visitorChatCookieOptions)
@@ -1922,7 +1933,7 @@ app.post('/api/chat/messages', rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, 
     await tx.conversation.update({ where: { id: conversationId }, data: { isRead: false, lastMessageAt: new Date() } })
     return tx.conversation.findUniqueOrThrow({
       where: { id: conversationId },
-      include: { messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } } },
+      include: { messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } } },
     })
   })
   res.status(201).json({ conversation: updated, unreadCount: 0 })
@@ -2912,6 +2923,7 @@ const managedUserSelect = {
   id: true,
   name: true,
   email: true,
+  avatarImage: true,
   phone: true,
   address: true,
   role: true,
@@ -3055,7 +3067,7 @@ app.get('/api/admin/discernment', authenticate, asyncRoute(async (req, res) => {
     orderBy: { updatedAt: 'desc' },
     select: {
       id: true, userId: true, stage: true, monastery: true, updatedAt: true,
-      user: { select: { name: true, email: true } },
+      user: { select: { name: true, email: true, avatarImage: true } },
     },
   })
   res.json({ discerners })
@@ -3101,9 +3113,9 @@ app.get('/api/admin/conversations', authenticate, allowRoles('ADMIN', 'FORMATOR'
     where: staffConversationAccessWhere(req),
     orderBy: { lastMessageAt: 'desc' },
     include: {
-      user: { select: { id: true, role: true, isActive: true } },
-      staffRecipient: { select: { id: true, name: true, role: true } },
-      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true } } } },
+      user: { select: { id: true, name: true, email: true, avatarImage: true, role: true, isActive: true } },
+      staffRecipient: { select: { id: true, name: true, role: true, avatarImage: true } },
+      messages: { orderBy: { createdAt: 'asc' }, include: { sender: { select: { id: true, name: true, role: true, avatarImage: true } } } },
     },
   })
   res.json({ conversations: conversations.map((conversation) => ({

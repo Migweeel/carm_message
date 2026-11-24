@@ -470,3 +470,10 @@
 .image-crop-apply:disabled{opacity:.5;cursor:wait}
 .session-replaced-notice{position:fixed;z-index:1100;right:20px;bottom:20px;width:min(440px,calc(100vw - 40px));padding:15px 18px;border:1px solid #ddbd91;border-radius:8px;background:#fff8ec;color:#4f3824;box-shadow:0 10px 32px rgba(45,30,18,.2);font-size:13px;font-weight:600}
 @media(max-width:560px){.image-crop-backdrop{padding:12px}.image-crop-dialog{padding:17px}.image-crop-dialog>header h2{font-size:20px}.image-crop-dialog>footer .button{flex:1;padding-inline:8px}.session-replaced-notice{right:12px;bottom:12px;width:calc(100vw - 24px)}}
+.managed-avatar img,.avatar img,.admin-user>i img{width:100%;height:100%;border-radius:inherit;object-fit:cover}
+.message-avatar{position:absolute;top:8px;left:8px;width:25px;height:25px;border:1px solid rgba(135,104,68,.22);border-radius:50%;display:grid;place-items:center;overflow:hidden;background:#f5eee5;color:var(--brown-700);font:700 8px var(--heading)}
+.message-avatar img{width:100%;height:100%;border-radius:inherit;object-fit:cover}
+.direct-message{position:relative;padding-left:42px}
+.direct-message.outgoing{padding-right:42px;padding-left:13px}
+.direct-message.outgoing .message-avatar{right:8px;left:auto}
+.notifier-message{position:relative;padding-left:39px}
