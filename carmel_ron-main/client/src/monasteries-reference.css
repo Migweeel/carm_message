@@ -22,6 +22,8 @@
 .region-header hr{margin:9px 0 15px;border:0;border-top:1px solid #e6ddd3}
 .monasteries-reference-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .monastery-reference-card{min-width:0;overflow:hidden;background:#f7f2ea}
+.monastery-reference-card.is-hash-target{outline:3px solid #c18a4d;outline-offset:5px;box-shadow:0 12px 34px rgba(161,105,45,.28);animation:monastery-highlight-pulse 1.8s ease-in-out 2}
+@keyframes monastery-highlight-pulse{0%,100%{box-shadow:0 12px 34px rgba(161,105,45,.28)}50%{box-shadow:0 12px 42px rgba(193,138,77,.55)}}
 .monastery-reference-card>img{width:100%;height:150px;object-fit:cover}
 .monastery-card-content{display:flex;min-height:148px;flex-direction:column;gap:8px;padding:12px 14px 10px}
 .card-title-block h3{margin:0;color:#33271f;font-size:13px;font-weight:700;text-transform:none}

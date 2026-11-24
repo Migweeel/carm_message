@@ -1474,7 +1474,17 @@ function MonasteriesPage() {
   void LegacyMonasteriesPage
   const [query, setQuery] = useState('')
   const [selectedRegion, setSelectedRegion] = useState('all')
+  const location = useLocation()
   const content = useManagedContent('monasteries')
+  useEffect(() => {
+    if (!location.hash || !content.isReady) return
+    document.querySelectorAll('.monastery-reference-card.is-hash-target').forEach((card) => card.classList.remove('is-hash-target'))
+    const target = document.getElementById(location.hash.slice(1))
+    if (target) window.requestAnimationFrame(() => {
+      target.classList.add('is-hash-target')
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }, [location.hash, content.isReady])
   const monasteries = content.monasteries.filter((monastery) => `${monastery.name} ${monastery.city} ${monastery.description}`.toLowerCase().includes(query.toLowerCase()))
   const regions = [
     ['section-luzon', 'Luzon Monasteries', ['Angeles', 'Baguio', 'Castillejos', 'Gumaca', 'Infanta', 'Laoag', 'Lipa', 'Lucena', 'Naga', 'Quezon City', 'San Fernando', 'San Pablo']],
@@ -1493,7 +1503,7 @@ function MonasteriesPage() {
     <section className="monasteries-intro"><div className="monasteries-container"><p className="monasteries-kicker">FIND A COMMUNITY</p><h1>Our <em>Monasteries</em></h1><p className="monasteries-lead">{monasteryCount === 23 ? 'Twenty-three' : monasteryCount} communities, one contemplative family across Luzon, Visayas, and Mindanao. Find a Carmel near you.</p><blockquote className="monasteries-quote"><p>“How much has the apostolate been enriched by the prayers and sacrifices radiating from monasteries! And how great is the joy and prophecy proclaimed to the world by the silence of the cloister.”</p><cite>— Pope Francis, Vultum Dei Quaerere</cite></blockquote><div className="monasteries-filters"><label className="monasteries-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by city" aria-label="Search by city" /></label><label className="monasteries-region-filter"><span className="sr-only">Filter by region</span><select value={selectedRegion} onChange={(event) => setSelectedRegion(event.target.value)}><option value="all">All regions</option>{regions.map(([id, title]) => <option value={id} key={id}>{title.replace(' Monasteries', '')}</option>)}</select><ChevronDown size={14} aria-hidden="true" /></label></div></div></section>
     {visibleRegions.map((region, regionIndex) => <section className="region-section" id={region.id} key={region.id}>
       <div className="region-header"><h2>{region.title}</h2><hr /></div>
-      <div className="monasteries-reference-grid">{region.items.map((monastery, index) => <article className="monastery-reference-card" key={monastery.city}>
+      <div className="monasteries-reference-grid">{region.items.map((monastery, index) => <article className="monastery-reference-card" id={`monastery-${monastery.city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} key={monastery.city}>
         <ImageWithLoader src={content.isReady ? monasteryImageFor(monastery) : undefined} pending={content.isLoading} alt={`Carmelite community in ${monastery.city}`} loading={regionIndex === 0 && index < 3 ? 'eager' : 'lazy'} fetchPriority={regionIndex === 0 && index === 0 ? 'high' : 'auto'} decoding="async" />
         <div className="monastery-card-content">
           <div className="card-title-block"><h3>{monastery.name}</h3><p>{monastery.description}</p></div>

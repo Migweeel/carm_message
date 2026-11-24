@@ -1491,8 +1491,12 @@ function MonasteriesPage() {
   const content = useManagedContent('monasteries')
   useEffect(() => {
     if (!location.hash || !content.isReady) return
+    document.querySelectorAll('.monastery-reference-card.is-hash-target').forEach((card) => card.classList.remove('is-hash-target'))
     const target = document.getElementById(location.hash.slice(1))
-    if (target) window.requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    if (target) window.requestAnimationFrame(() => {
+      target.classList.add('is-hash-target')
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
   }, [location.hash, content.isReady])
   const monasteries = content.monasteries.filter((monastery) => `${monastery.name} ${monastery.city} ${monastery.description}`.toLowerCase().includes(query.toLowerCase()))
   const regions = [
