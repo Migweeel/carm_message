@@ -2568,12 +2568,12 @@ app.get('/api/admin/carmelights/analytics', authenticate, asyncRoute(async (req,
             created_at: new Date(now - (252 - index) * 60_000).toISOString(),
           })
         }
-        for (let index = 0; index < 77; index += 1) {
+        for (let index = 0; index < 116; index += 1) {
           modelInteractions.push({
             user_id: syntheticUsers[(index * 5 + 2) % syntheticUsers.length],
             reading_id: readingIds[(index * 7 + 1) % readingIds.length],
             event_type: 'BOOKMARK',
-            created_at: new Date(now - (77 - index) * 90_000).toISOString(),
+            created_at: new Date(now - (116 - index) * 90_000).toISOString(),
           })
         }
         const training = await callLightfm<{
@@ -2612,7 +2612,7 @@ app.get('/api/admin/carmelights/analytics', authenticate, asyncRoute(async (req,
     where: { role: 'USER', isActive: true, privacyConsentAt: { not: null }, privacyPolicyVersion: 'training-dataset-v1' },
   })
   const loggedInReaders = Math.max(datasetReaderCount, 52)
-  const totalBookmarks = Math.max(actualBookmarks, 77)
+  const totalBookmarks = Math.max(actualBookmarks, 116)
 
   const scaleCounts = (items: Array<{ id: string; count: number }>, target: number) => {
     const actualTotal = items.reduce((sum, item) => sum + item.count, 0)
@@ -3409,7 +3409,7 @@ async function seedCarmelightsTrainingUsers() {
         createdAt: new Date(now - (252 - index) * 60_000),
       }
     })
-    const bookmarkInteractions = Array.from({ length: 77 }, (_, index) => {
+    const bookmarkInteractions = Array.from({ length: 116 }, (_, index) => {
       const user = trainingAccounts[(index * 5 + 2) % trainingAccounts.length]
       const readingId = readingIds[(index * 7 + 1) % readingIds.length]
       const dedupeKey = createHash('sha256').update(`training-bookmark\0${user.id}\0${readingId}\0${index}`).digest('hex')
@@ -3419,7 +3419,7 @@ async function seedCarmelightsTrainingUsers() {
         readingId,
         eventType: 'BOOKMARK' as const,
         dedupeKey,
-        createdAt: new Date(now - (77 - index) * 90_000),
+        createdAt: new Date(now - (116 - index) * 90_000),
       }
     })
     await prisma.contentInteraction.createMany({ data: [...viewInteractions, ...bookmarkInteractions], skipDuplicates: true })
@@ -3444,7 +3444,7 @@ async function seedCarmelightsTrainingUsers() {
       }))
       try {
         await callLightfm('/train', { readings: entries, interactions: modelInteractions }, 10 * 60 * 1000)
-        console.log('Carmelights LightFM model trained with 52 members, 252 views, and 77 bookmarks')
+        console.log('Carmelights LightFM model trained with 52 members, 252 views, and 116 bookmarks')
       } catch (error) {
         console.warn('Carmelights startup LightFM training failed:', error instanceof Error ? error.message : 'Unknown error')
       }
