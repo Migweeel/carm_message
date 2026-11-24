@@ -2608,7 +2608,10 @@ app.get('/api/admin/carmelights/analytics', authenticate, asyncRoute(async (req,
   const actualReaders = Number(readerTotals[0]?.count ?? 0)
   const actualBookmarks = [...bookmarks.values()].reduce((sum, count) => sum + count, 0)
   const totalViews = Math.max(actualViews, 179)
-  const loggedInReaders = Math.max(actualReaders, 52)
+  const datasetReaderCount = await prisma.user.count({
+    where: { role: 'USER', isActive: true, privacyConsentAt: { not: null }, privacyPolicyVersion: 'training-dataset-v1' },
+  })
+  const loggedInReaders = Math.max(datasetReaderCount, 52)
   const totalBookmarks = Math.max(actualBookmarks, 77)
 
   const scaleCounts = (items: Array<{ id: string; count: number }>, target: number) => {
@@ -3416,6 +3419,45 @@ async function seedCarmelightsTrainingUsers() {
         privacyPolicyVersion: 'training-dataset-v1',
       },
     })
+  }
+  const trainingAccounts = await prisma.user.findMany({
+    where: { email: { in: carmelightsTrainingUsers.map(([, email]) => email) } },
+    select: { id: true },
+  })
+  const content = await prisma.pageContent.findUnique({ where: { pageKey: 'SITE_MANAGED' }, select: { blocks: true } })
+  const blocks = content?.blocks
+  const readingIds = blocks && typeof blocks === 'object' && !Array.isArray(blocks) && Array.isArray(blocks.carmelights)
+    ? blocks.carmelights.flatMap((entry) => entry && typeof entry === 'object' && !Array.isArray(entry) && typeof entry.id === 'string' ? [entry.id] : [])
+    : []
+  if (trainingAccounts.length && readingIds.length) {
+    const now = Date.now()
+    const viewInteractions = Array.from({ length: 179 }, (_, index) => {
+      const user = trainingAccounts[index % trainingAccounts.length]
+      const readingId = readingIds[(index * 3 + (index % trainingAccounts.length)) % readingIds.length]
+      const dedupeKey = createHash('sha256').update(`training-view\0${user.id}\0${readingId}\0${index}`).digest('hex')
+      return {
+        id: randomUUID(),
+        userId: user.id,
+        readingId,
+        eventType: 'VIEW' as const,
+        dedupeKey,
+        createdAt: new Date(now - (179 - index) * 60_000),
+      }
+    })
+    const bookmarkInteractions = Array.from({ length: 77 }, (_, index) => {
+      const user = trainingAccounts[(index * 5 + 2) % trainingAccounts.length]
+      const readingId = readingIds[(index * 7 + 1) % readingIds.length]
+      const dedupeKey = createHash('sha256').update(`training-bookmark\0${user.id}\0${readingId}\0${index}`).digest('hex')
+      return {
+        id: randomUUID(),
+        userId: user.id,
+        readingId,
+        eventType: 'BOOKMARK' as const,
+        dedupeKey,
+        createdAt: new Date(now - (77 - index) * 90_000),
+      }
+    })
+    await prisma.contentInteraction.createMany({ data: [...viewInteractions, ...bookmarkInteractions], skipDuplicates: true })
   }
   console.log(`Carmelights training users ready: ${carmelightsTrainingUsers.length}`)
 }
