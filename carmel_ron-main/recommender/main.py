@@ -526,18 +526,25 @@ def recommend(request: RecommendRequest) -> RecommendResponse:
                 live_scores[idx] += min(0.75, overlap * 0.08)
 
     if has_trained_user:
-        # Normalize base_scores to comparable scale and blend with live follow-up signal
+        # Normalize base_scores to comparable scale and blend strongly with live LightFM embedding follow-up
         std = float(np.std(base_scores)) if len(base_scores) > 1 else 1.0
         norm_base = (base_scores - float(np.mean(base_scores))) / (std if std > 1e-6 else 1.0)
-        final_scores = norm_base + (0.65 * live_scores if history_ids else 0.0)
+        final_scores = 0.5 * norm_base + (1.8 * live_scores if history_ids else 0.0)
     elif history_ids:
-        final_scores = live_scores + 0.15 * base_scores
+        final_scores = 2.0 * live_scores + 0.1 * base_scores
     else:
         # Cold-start user with no interactions yet: LightFM item bias + popularity
         pop = np.asarray([float(reading.popularity) for reading in candidates], dtype=float)
         max_pop = max(float(np.max(pop)), 1.0)
         final_scores = base_scores + 0.35 * (pop / max_pop)
         reason_label = "Recommended Carmelights teaching"
+
+    # Deprioritize stub/test entries (near-empty body) whenever substantial teachings exist
+    has_substantial = any(len(reading.body.strip()) >= 40 for reading in candidates)
+    if has_substantial:
+        for idx, reading in enumerate(candidates):
+            if len(reading.body.strip()) < 40:
+                final_scores[idx] -= 5.0
 
     # When include_seen=True (full Carmelights grid), keep already-read quotes visible
     # while gently prioritizing unread quotes matching the user's preferences.

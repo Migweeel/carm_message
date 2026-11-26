@@ -140,6 +140,20 @@ class RecommendationHelpersTests(unittest.TestCase):
                     [item.reading_id for item in love_user.recommendations],
                 )
 
+    def test_stub_entries_do_not_outrank_substantial_teachings(self) -> None:
+        readings = [
+            Reading(id="q-prayer", title="Contemplative Prayer in Silence", author="St. John of the Cross", body="Silence prayer contemplation faith in the quiet presence of God."),
+            Reading(id="q-prayer-2", title="Silence and Contemplation", author="St. Teresa of Avila", body="Contemplative silence and prayer draw the soul closer to God every day."),
+            Reading(id="q-stub", title="test", author="hello", body="hello"),
+        ]
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            model_path = Path(temporary_directory) / "lightfm-model.pkl"
+            with patch.object(main, "MODEL_DIR", Path(temporary_directory)), patch.object(main, "MODEL_PATH", model_path):
+                train(TrainRequest(readings=readings, interactions=[]))
+                result = recommend(RecommendRequest(user_id="new-user-c", readings=readings, history_ids=["q-prayer"], limit=3))
+                self.assertNotEqual(result.recommendations[0].reading_id, "q-stub")
+                self.assertEqual(result.recommendations[0].reading_id, "q-prayer-2")
+
 
 if __name__ == "__main__":
     unittest.main()

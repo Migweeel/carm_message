@@ -1108,6 +1108,7 @@ function Navbar() {
     <Link to="/account/security" role="menuitem" onClick={closeNavigation}><ShieldCheck size={15} />Security & privacy</Link>
     <Link to="/account/messages" role="menuitem" onClick={closeNavigation}><MessageCircle size={15} />Messages</Link>
     <Link to="/account/favorites" role="menuitem" onClick={closeNavigation}><Heart size={15} />Favorite teachings</Link>
+    <Link to="/account/recommendations" role="menuitem" onClick={closeNavigation}><BookOpen size={15} />Recommended for You</Link>
   </> : <Link to="/admin" role="menuitem" onClick={closeNavigation}><Home size={15} />Open dashboard</Link>
   const searchableItems = getSiteSearchItems(content)
   const matchingSearchItems = mobileSearchQuery.trim()
