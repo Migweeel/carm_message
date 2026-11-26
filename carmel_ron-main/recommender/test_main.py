@@ -150,7 +150,7 @@ class RecommendationHelpersTests(unittest.TestCase):
             model_path = Path(temporary_directory) / "lightfm-model.pkl"
             with patch.object(main, "MODEL_DIR", Path(temporary_directory)), patch.object(main, "MODEL_PATH", model_path):
                 train(TrainRequest(readings=readings, interactions=[]))
-                result = recommend(RecommendRequest(user_id="new-user-c", readings=readings, history_ids=["q-prayer"], limit=3))
+                result = recommend(RecommendRequest(user_id="new-user-c", readings=readings, exclude_ids=["q-prayer"], history_ids=["q-prayer"], limit=3))
                 self.assertNotEqual(result.recommendations[0].reading_id, "q-stub")
                 self.assertEqual(result.recommendations[0].reading_id, "q-prayer-2")
 
