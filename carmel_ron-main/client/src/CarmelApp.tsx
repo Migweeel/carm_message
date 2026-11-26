@@ -2740,14 +2740,24 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
   const [pending, setPending] = useState(false)
   const [googlePending, setGooglePending] = useState(false)
   const [facebookPending, setFacebookPending] = useState(false)
-  const [facebookSdkLoaded, setFacebookSdkLoaded] = useState(false)
-  const [facebookSdkLoading, setFacebookSdkLoading] = useState(() => !isStaff && Boolean(facebookAppId))
+  const [facebookSdkLoaded, setFacebookSdkLoaded] = useState(() => !isStaff && Boolean(window.FB && initializedFacebookAppId === facebookAppId))
+  const [facebookSdkLoading, setFacebookSdkLoading] = useState(() => !isStaff && Boolean(facebookAppId) && !(window.FB && initializedFacebookAppId === facebookAppId))
   const [facebookSdkError, setFacebookSdkError] = useState(false)
   const [facebookSdkLoadAttempt, setFacebookSdkLoadAttempt] = useState(0)
-  const [googleButtonWidth, setGoogleButtonWidth] = useState(400)
+  const [googleButtonWidth, setGoogleButtonWidth] = useState<number | null>(null)
   const googleButtonRef = useRef<HTMLDivElement>(null)
   const googleRequestInFlight = useRef(false)
   const facebookRequestInFlight = useRef(false)
+  const facebookLoginWatchdog = useRef<number>(0)
+  useEffect(() => {
+    setError('')
+    setPending(false)
+    setGooglePending(false)
+    setFacebookPending(false)
+    googleRequestInFlight.current = false
+    facebookRequestInFlight.current = false
+    window.clearTimeout(facebookLoginWatchdog.current)
+  }, [mode])
   const [resendingCode, setResendingCode] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [loginEmail, setLoginEmail] = useState(() => {
@@ -2793,17 +2803,17 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     const container = googleButtonRef.current
     if (!container) return
     let resizeTimer = 0
-    const updateWidth = (width: number) => {
+    const measureWidth = (width: number) => Math.min(400, Math.max(200, Math.floor(width)))
+    const initialWidth = measureWidth(container.getBoundingClientRect().width || 360)
+    setGoogleButtonWidth((currentWidth) => currentWidth ?? initialWidth)
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return
       window.clearTimeout(resizeTimer)
       resizeTimer = window.setTimeout(() => {
-        const nextWidth = Math.min(400, Math.max(1, Math.floor(width)))
-        setGoogleButtonWidth((currentWidth) => Math.abs(currentWidth - nextWidth) < 2 ? currentWidth : nextWidth)
-      }, 120)
-    }
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) updateWidth(entry.contentRect.width)
+        const nextWidth = measureWidth(entry.contentRect.width)
+        setGoogleButtonWidth((currentWidth) => currentWidth !== null && Math.abs(currentWidth - nextWidth) < 8 ? currentWidth : nextWidth)
+      }, 150)
     })
-    updateWidth(container.getBoundingClientRect().width)
     observer.observe(container)
     return () => {
       window.clearTimeout(resizeTimer)
@@ -2815,6 +2825,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     let active = true
     let initialized = false
     let timeoutId = 0
+    let pollId = 0
     let handleScriptError = () => {}
     const initializeFacebook = () => {
       if (!window.FB || initialized) return
@@ -2825,9 +2836,11 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         }
         initialized = true
         window.clearTimeout(timeoutId)
+        window.clearInterval(pollId)
         if (active) {
           setFacebookSdkLoaded(true)
           setFacebookSdkLoading(false)
+          setFacebookSdkError(false)
         }
       } catch {
         handleScriptError()
@@ -2835,6 +2848,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     }
     handleScriptError = () => {
       window.clearTimeout(timeoutId)
+      window.clearInterval(pollId)
       document.getElementById('facebook-jssdk')?.remove()
       if (active) {
         setFacebookSdkLoaded(false)
@@ -2855,16 +2869,23 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     timeoutId = window.setTimeout(handleScriptError, 15_000)
     if (window.FB) {
       initializeFacebook()
-    } else if (!existingScript) {
-      script.id = 'facebook-jssdk'
-      script.src = 'https://connect.facebook.net/en_US/sdk.js'
-      script.async = true
-      script.defer = true
-      document.body.appendChild(script)
+    } else {
+      if (!existingScript) {
+        script.id = 'facebook-jssdk'
+        script.src = 'https://connect.facebook.net/en_US/sdk.js'
+        script.async = true
+        script.defer = true
+        document.body.appendChild(script)
+      }
+      // Poll briefly in case an existing script tag already fired 'load' before this effect attached
+      pollId = window.setInterval(() => {
+        if (window.FB) initializeFacebook()
+      }, 150)
     }
     return () => {
       active = false
       window.clearTimeout(timeoutId)
+      window.clearInterval(pollId)
       script.removeEventListener('load', handleScriptLoad)
       script.removeEventListener('error', handleScriptError)
     }
@@ -3053,8 +3074,19 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
     }
     setError('')
     setFacebookPending(true)
+    let completed = false
+    window.clearTimeout(facebookLoginWatchdog.current)
+    facebookLoginWatchdog.current = window.setTimeout(() => {
+      if (completed) return
+      completed = true
+      setFacebookPending(false)
+      setError('Facebook sign-in did not respond. Please allow popups and try again.')
+    }, 45_000)
     try {
       window.FB.login((response) => {
+        if (completed) return
+        completed = true
+        window.clearTimeout(facebookLoginWatchdog.current)
         const accessToken = response.status === 'connected' ? response.authResponse?.accessToken : undefined
         if (!accessToken) {
           setFacebookPending(false)
@@ -3064,6 +3096,8 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
         void continueWithFacebook(accessToken)
       }, { scope: 'public_profile,email' })
     } catch {
+      completed = true
+      window.clearTimeout(facebookLoginWatchdog.current)
       setFacebookPending(false)
       setError('Facebook sign-in could not be started. Please try again or use your email and password.')
     }
@@ -3135,7 +3169,8 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
       {!isStaff && <div className="auth-social-login">
         {googleClientId
           ? <div ref={googleButtonRef} className={`auth-google-button${pending || googlePending || facebookPending ? ' auth-google-button-pending' : ''}`} aria-busy={pending || googlePending || facebookPending || undefined}>
-            <GoogleLogin
+            {googleButtonWidth !== null && <GoogleLogin
+              key={mode}
               onSuccess={(response) => {
                 if (!response.credential) {
                   setGooglePending(false)
@@ -3155,7 +3190,7 @@ function MemberAuthPage({ mode }: { mode: 'login' | 'signup' | 'staff' }) {
               width={String(googleButtonWidth)}
               theme="outline"
               size="large"
-            />
+            />}
             {(pending || googlePending || facebookPending) && <p className="auth-social-status" role="status">{googlePending ? 'Connecting to Google…' : facebookPending ? 'Connecting to Facebook…' : 'Please wait…'}</p>}
           </div>
           : <p className="auth-social-consent-note" role="status">Google sign-in is not configured for this website yet.</p>}
