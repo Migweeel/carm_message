@@ -3757,7 +3757,7 @@ function MemberFavoritesView({ member }: { member: MemberAccount }) {
 
 function MemberRecommendationsView() {
   const [recommendations, setRecommendations] = useState<Array<ManagedArticle & { reason: string }>>([])
-  const [source, setSource] = useState<'lightfm' | 'fallback'>('fallback')
+  const [source, setSource] = useState<'lightfm' | 'fallback' | 'needs_history'>('needs_history')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -3769,7 +3769,7 @@ function MemberRecommendationsView() {
         if (!response.ok) throw new Error(result.error || 'Recommendations could not be loaded.')
         if (active) {
           setRecommendations(Array.isArray(result.items) ? result.items : [])
-          setSource(result.source === 'lightfm' ? 'lightfm' : 'fallback')
+          setSource(result.source === 'lightfm' ? 'lightfm' : result.source === 'needs_history' ? 'needs_history' : 'fallback')
         }
       } catch (reason) {
         if (active) setError(reason instanceof Error ? reason.message : 'Recommendations could not be loaded.')
@@ -3780,7 +3780,7 @@ function MemberRecommendationsView() {
     void loadRecommendations()
     return () => { active = false }
   }, [])
-  return <section className="member-account-section member-recommendations"><div className="member-section-heading"><span className="eyebrow">CARMELITE READINGS</span><h2>Recommended for You</h2><p>{source === 'lightfm' ? 'Selected from reading patterns and teaching themes.' : 'Suggestions based on popular teachings while your reading history grows.'}</p></div>{error ? <p className="form-error" role="alert">{error}</p> : loading ? <p className="member-recommendations-status" role="status">Finding teachings for you…</p> : recommendations.length ? <div className="member-recommendations-grid">{recommendations.map((reading) => <article className="story-card" key={reading.id}><ImageWithLoader src={articleImageFor(reading.image, photo.chapel)} alt={reading.title} /><div><span className="eyebrow">{reading.author || 'CARMELITE TEACHING'}</span><h3>{reading.title}</h3><p>{reading.body.split(/\n\s*\n/)[0]}</p><small className="member-recommendation-reason">{reading.reason}</small><Link className="text-link story-read-button" to={`/carmelights?reading=${encodeURIComponent(reading.id)}`}>Read teaching <ArrowRight size={15} /></Link></div></article>)}</div> : <div className="member-empty"><Heart size={22} /><h3>No readings to recommend yet</h3><p>Explore Carmelights and save or read teachings. Your recommendations will adapt as your activity grows.</p><Link className="button button-outline" to="/carmelights">Explore Carmelights <ArrowRight size={14} /></Link></div>}</section>
+  return <section className="member-account-section member-recommendations"><div className="member-section-heading"><span className="eyebrow">CARMELITE READINGS</span><h2>Recommended for You</h2><p>{source === 'lightfm' ? 'Selected from reading patterns and teaching themes.' : source === 'needs_history' ? 'Read or save a few Carmelights teachings first so we can learn your preferences.' : 'Suggestions based on popular teachings while your reading history grows.'}</p></div>{error ? <p className="form-error" role="alert">{error}</p> : loading ? <p className="member-recommendations-status" role="status">Finding teachings for you…</p> : recommendations.length ? <div className="member-recommendations-grid">{recommendations.map((reading) => <article className="story-card" key={reading.id}><ImageWithLoader src={articleImageFor(reading.image, photo.chapel)} alt={reading.title} /><div><span className="eyebrow">{reading.author || 'CARMELITE TEACHING'}</span><h3>{reading.title}</h3><p>{reading.body.split(/\n\s*\n/)[0]}</p><small className="member-recommendation-reason">{reading.reason}</small><Link className="text-link story-read-button" to={`/carmelights?reading=${encodeURIComponent(reading.id)}`}>Read teaching <ArrowRight size={15} /></Link></div></article>)}</div> : <div className="member-empty"><Heart size={22} /><h3>Read a few teachings first</h3><p>We don&apos;t have enough reading activity from you yet to personalize recommendations. Explore Carmelights and read or save teachings so LightFM can learn your interests and recommend readings for you.</p><Link className="button button-outline" to="/carmelights">Explore Carmelights <ArrowRight size={14} /></Link></div>}</section>
 }
 
 function MemberAccountPage() {

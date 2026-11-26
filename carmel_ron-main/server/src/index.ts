@@ -2817,6 +2817,9 @@ app.get('/api/recommendations', authenticate, allowRoles('USER'), asyncRoute(asy
           : 'Popular Carmelights teaching',
       })),
   })
+  if (historyIds.size === 0) {
+    return res.json({ source: 'needs_history', modelVersion: null, items: [] })
+  }
   if (!lightfmApiToken || !user.privacyConsentAt) return res.json(fallback())
   try {
     const result = await callLightfm<{
